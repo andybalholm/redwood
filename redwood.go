@@ -4,8 +4,11 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
+	"http"
+	"os"
 )
 
 var configFile = flag.String("c", "/etc/redwood/redwood.conf", "configuration file path")
@@ -14,27 +17,17 @@ func main() {
 	flag.Parse()
 	loadConfiguration()
 
-	for _, c := range categories {
-		fmt.Println("name:", c.name)
-		fmt.Println("description:", c.description)
-		fmt.Print("action: ")
-		switch c.action {
-		case BLOCK:
-			fmt.Println("block")
-		case IGNORE:
-			fmt.Println("ignore")
-		case ALLOW:
-			fmt.Println("allow")
+	br := bufio.NewReader(os.Stdin)
+	for {
+		line, _, err := br.ReadLine()
+		if err != nil {
+			break
 		}
 
-		fmt.Println()
-
-		for rule, w := range c.weights {
-			if w.maxPoints == 0 {
-				fmt.Println(rule, w.points)
-			} else {
-				fmt.Println(rule, w.points, w.maxPoints)
-			}
+		u, err := http.ParseURL(string(line))
+		matches := URLRules.MatchingRules(u)
+		for _, s := range matches {
+			fmt.Println(s)
 		}
 	}
 }

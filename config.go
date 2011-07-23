@@ -20,6 +20,8 @@ var blockThreshold int
 // extensions for files to skip with the phrase filter
 var binaryTypes []string
 
+var URLRules = newURLMatcher()
+
 func loadConfiguration() {
 	conf, err := yaml.ReadFile(*configFile)
 	if err != nil {
@@ -47,6 +49,8 @@ func loadConfiguration() {
 		s = path.Join(configDir, "categories")
 	}
 	loadCategories(s)
+
+	collectRules()
 }
 
 func loadBinaryTypes(file string) {
@@ -106,4 +110,18 @@ func (cr *configReader) ReadLine() (line string, err os.Error) {
 		}
 	}
 	panic("unreachable")
+}
+
+// collectRules collects the rules from all the categories and adds
+// them to URLRules and phraseRules.
+func collectRules() {
+	for _, c := range categories {
+		for rule, _ := range c.weights {
+			if rule[0] == '<' {
+				// TODO: add to phraseRules
+			} else {
+				URLRules.AddRule(rule)
+			}
+		}
+	}
 }

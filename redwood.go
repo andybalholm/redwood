@@ -13,9 +13,9 @@ var testURL = flag.String("test", "", "URL to test instead of running ICAP serve
 func main() {
 	flag.Parse()
 	loadConfiguration()
-    
-    if *testURL != "" {
-        runURLTest(*testURL)
-        return
-    }
+
+	if *testURL != "" {
+		runURLTest(*testURL)
+		return
+	}
 }

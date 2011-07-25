@@ -4,30 +4,18 @@
 package main
 
 import (
-	"bufio"
 	"flag"
-	"fmt"
-	"http"
-	"os"
 )
 
 var configFile = flag.String("c", "/etc/redwood/redwood.conf", "configuration file path")
+var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
 
 func main() {
 	flag.Parse()
 	loadConfiguration()
-
-	br := bufio.NewReader(os.Stdin)
-	for {
-		line, _, err := br.ReadLine()
-		if err != nil {
-			break
-		}
-
-		u, err := http.ParseURL(string(line))
-		matches := URLRules.MatchingRules(u)
-		for _, s := range matches {
-			fmt.Println(s)
-		}
-	}
+    
+    if *testURL != "" {
+        runURLTest(*testURL)
+        return
+    }
 }

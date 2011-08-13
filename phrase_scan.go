@@ -11,7 +11,7 @@ import (
 // and returns a map of phrases and counts.
 func phrasesInResponse(res *http.Response) map[string]int {
 	defer res.Body.Close()
-	wr := newWordReader(res.Body, mahonia.NewDecoder("UTF-8"))
+	wr := newWordReader(res.Body, mahonia.NewDecoder("UTF-8")) // TODO: support other encodings, HTML entities
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
 	buf := make([]byte, 4096)
@@ -20,8 +20,8 @@ func phrasesInResponse(res *http.Response) map[string]int {
 		if err != nil {
 			break
 		}
-		for i := 0; i < n; i++ {
-			ps.scanByte(buf[i])
+		for _, c := range buf[:n] {
+			ps.scanByte(c)
 		}
 	}
 	ps.scanByte(' ')

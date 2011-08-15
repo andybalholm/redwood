@@ -43,13 +43,15 @@ func (m *URLMatcher) AddRule(rule string) {
 }
 
 // MatchingRules returns a list of the rules that u matches.
-func (m *URLMatcher) MatchingRules(u *http.URL) []string {
-	var result []string
+// For consistency with phrase matching, it is a map with rules for keys
+// and with all values equal to 1.
+func (m *URLMatcher) MatchingRules(u *http.URL) map[string]int {
+	result := make(map[string]int)
 
 	s := u.String()
 	for rule, re := range m.regexes {
 		if re.Match(s) {
-			result = append(result, rule)
+			result[rule] = 1
 		}
 	}
 
@@ -66,7 +68,7 @@ func (m *URLMatcher) MatchingRules(u *http.URL) []string {
 	s = host
 	for {
 		if m.fragments[s] {
-			result = append(result, s)
+			result[s] = 1
 		}
 		dot := strings.Index(s, ".")
 		if dot == -1 {
@@ -79,7 +81,7 @@ func (m *URLMatcher) MatchingRules(u *http.URL) []string {
 	s = host + path
 	for {
 		if m.fragments[s] {
-			result = append(result, s)
+			result[s] = 1
 		}
 		slash := strings.LastIndex(s[:len(s)-1], "/")
 		if slash == -1 {

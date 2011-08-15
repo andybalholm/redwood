@@ -168,3 +168,32 @@ func loadCategory(dirname string) (c *category, err os.Error) {
 
 	return c, nil
 }
+
+// score returns c's score for a page that matched
+// the rules in tally. The keys are the rule names, and the values
+// are the counts of how many times each rule was matched.
+func (c *category) score(tally map[string]int) int {
+	total := 0
+	weights := c.weights
+	for rule, count := range tally {
+		w := weights[rule]
+		p := w.points * count
+		if w.maxPoints != 0 && (p > 0 && p > w.maxPoints || p < 0 && p < w.maxPoints) {
+			p = w.maxPoints
+		}
+		total += p
+	}
+	return total
+}
+
+// categoryScores returns a map containing a page's score for each category.
+func categoryScores(tally map[string]int) map[string]int {
+	scores := make(map[string]int)
+	for _, c := range categories {
+		s := c.score(tally)
+		if s != 0 {
+			scores[c.name] = s
+		}
+	}
+	return scores
+}

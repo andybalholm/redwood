@@ -5,19 +5,19 @@ package main
 import (
 	"http"
 	"log"
-	"sre2.googlecode.com/hg/sre2"
+	"exp/regexp"
 	"strings"
 )
 
 type URLMatcher struct {
 	fragments map[string]bool // a set of domain or domain+path URL fragments to test against
-	regexes   map[string]sre2.Re
+	regexes   map[string]*regexp.Regexp
 }
 
 func newURLMatcher() *URLMatcher {
 	m := new(URLMatcher)
 	m.fragments = make(map[string]bool)
-	m.regexes = make(map[string]sre2.Re)
+	m.regexes = make(map[string]*regexp.Regexp)
 	return m
 }
 
@@ -31,7 +31,7 @@ func (m *URLMatcher) AddRule(rule string) {
 		}
 
 		s := rule[1 : len(rule)-1]
-		re, err := sre2.Parse("(?i)" + s)
+		re, err := regexp.Compile("(?i:" + s + ")")
 		if err != nil {
 			log.Printf("Error parsing URL regular expression %s: %v", rule, err)
 			return
@@ -50,7 +50,7 @@ func (m *URLMatcher) MatchingRules(u *http.URL) map[string]int {
 
 	s := u.String()
 	for rule, re := range m.regexes {
-		if re.Match(s) {
+		if re.MatchString(s) {
 			result[rule] = 1
 		}
 	}

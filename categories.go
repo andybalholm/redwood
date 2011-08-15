@@ -197,3 +197,38 @@ func categoryScores(tally map[string]int) map[string]int {
 	}
 	return scores
 }
+
+// blockedCategories returns a list of categories that would cause a page to be blocked.
+// The keys of scores are category names, and the values are the number of points scored.
+func blockedCategories(scores map[string]int) []string {
+	blocked := make(map[string]int)
+	maxAllowed := 0   // highest score of any category with action ALLOW
+	totalBlocked := 0 // total score of all categories with action BLOCK
+	for _, c := range categories {
+		s := scores[c.name]
+		if s > 0 {
+			switch c.action {
+			case ALLOW:
+				if s > maxAllowed {
+					maxAllowed = s
+					for bn, bs := range blocked {
+						if bs <= s {
+							blocked[bn] = 0, false
+						}
+					}
+				}
+			case BLOCK:
+				totalBlocked += s
+				if s > maxAllowed {
+					blocked[c.name] = s
+				}
+			}
+		}
+	}
+
+	if totalBlocked < blockThreshold || len(blocked) == 0 {
+		return nil
+	}
+
+	return sortedKeys(blocked)
+}

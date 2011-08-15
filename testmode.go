@@ -40,6 +40,16 @@ func runURLTest(u string) {
 		fmt.Println()
 		fmt.Println("The request has the following category scores:")
 		printSortedTally(urlScores)
+
+		blocked := blockedCategories(urlScores)
+		if len(blocked) > 0 {
+			fmt.Println()
+			fmt.Println("The request is blocked by the following categories:")
+			for _, c := range blocked {
+				fmt.Println(c)
+			}
+			return
+		}
 	}
 
 	fmt.Println()
@@ -70,6 +80,15 @@ func runURLTest(u string) {
 		fmt.Println()
 		fmt.Println("The response has the following category scores:")
 		printSortedTally(pageScores)
+
+		blocked := blockedCategories(pageScores)
+		if len(blocked) > 0 {
+			fmt.Println()
+			fmt.Println("The page is blocked by the following categories:")
+			for _, c := range blocked {
+				fmt.Println(c)
+			}
+		}
 	}
 }
 

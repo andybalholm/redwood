@@ -9,15 +9,23 @@ import (
 	"strings"
 )
 
+type regexMap map[string]*regexp.Regexp // A map from rules to compiled regexes
+
 type URLMatcher struct {
-	fragments map[string]bool // a set of domain or domain+path URL fragments to test against
-	regexes   map[string]*regexp.Regexp
+	fragments    map[string]bool // a set of domain or domain+path URL fragments to test against
+	regexes      regexMap        // to match whole URL
+	hostRegexes  regexMap        // to match hostname only
+	pathRegexes  regexMap
+	queryRegexes regexMap
 }
 
 func newURLMatcher() *URLMatcher {
 	m := new(URLMatcher)
 	m.fragments = make(map[string]bool)
-	m.regexes = make(map[string]*regexp.Regexp)
+	m.regexes = make(regexMap)
+	m.hostRegexes = make(regexMap)
+	m.pathRegexes = make(regexMap)
+	m.queryRegexes = make(regexMap)
 	return m
 }
 
@@ -30,16 +38,41 @@ func (m *URLMatcher) AddRule(rule string) {
 			return
 		}
 
-		s := rule[1 : len(rule)-1]
+		scopeChar := rule[len(rule)-1] // suffix to indicate regex scope, or '/' if no suffix
+
+		var s string
+		if scopeChar == '/' {
+			s = rule[1 : len(rule)-1]
+		} else {
+			s = rule[1 : len(rule)-2]
+		}
 		re, err := regexp.Compile("(?i:" + s + ")")
 		if err != nil {
 			log.Printf("Error parsing URL regular expression %s: %v", rule, err)
 			return
 		}
-		m.regexes[rule] = re
+
+		switch scopeChar {
+		case '/':
+			m.regexes[rule] = re
+		case 'h':
+			m.hostRegexes[rule] = re
+		case 'p':
+			m.pathRegexes[rule] = re
+		case 'q':
+			m.queryRegexes[rule] = re
+		}
 	}
 
 	m.fragments[rule] = true
+}
+
+func (rm regexMap) findMatches(s string, tally map[string]int) {
+	for rule, re := range rm {
+		if re.MatchString(s) {
+			tally[rule] = 1
+		}
+	}
 }
 
 // MatchingRules returns a list of the rules that u matches.
@@ -47,13 +80,6 @@ func (m *URLMatcher) AddRule(rule string) {
 // and with all values equal to 1.
 func (m *URLMatcher) MatchingRules(u *http.URL) map[string]int {
 	result := make(map[string]int)
-
-	s := u.String()
-	for rule, re := range m.regexes {
-		if re.MatchString(s) {
-			result[rule] = 1
-		}
-	}
 
 	host := strings.ToLower(u.Host)
 	path := strings.ToLower(u.Path)
@@ -64,8 +90,13 @@ func (m *URLMatcher) MatchingRules(u *http.URL) map[string]int {
 		host = host[:colon]
 	}
 
+	m.regexes.findMatches(u.String(), result)
+	m.hostRegexes.findMatches(host, result)
+	m.pathRegexes.findMatches(u.Path, result)
+	m.queryRegexes.findMatches(u.RawQuery, result)
+
 	// Test for matches of the host and of the domains it belongs to.
-	s = host
+	s := host
 	for {
 		if m.fragments[s] {
 			result[s] = 1

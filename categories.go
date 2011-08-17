@@ -127,6 +127,11 @@ func loadCategory(dirname string) (c *category, err os.Error) {
 					continue
 				}
 				rule = line[:slash+1]
+				if len(line) > slash+1 {
+					if c := line[slash+1]; c == 'h' || c == 'p' || c == 'q' {
+						rule = line[:slash+2]
+					}
+				}
 			case '<':
 				// content phrase
 				bracket := strings.LastIndex(line, ">")
@@ -211,12 +216,15 @@ func blockedCategories(scores map[string]int) []string {
 			case ALLOW:
 				if s > maxAllowed {
 					maxAllowed = s
+
+					// If any categories on the blocked list have lower scores, remove them.
 					for bn, bs := range blocked {
 						if bs <= s {
 							blocked[bn] = 0, false
 						}
 					}
 				}
+
 			case BLOCK:
 				totalBlocked += s
 				if s > maxAllowed {

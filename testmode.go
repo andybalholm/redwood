@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"http"
+	"path"
+	"strings"
 	"url"
 )
 
@@ -10,23 +12,23 @@ import (
 
 // runURLTest prints debugging information about how the URL and its content would be rated.
 func runURLTest(u string) {
-	url_, err := url.Parse(u)
+	URL, err := url.Parse(u)
 	if err != nil {
 		fmt.Println("Could not parse the URL.")
 		return
 	}
 
-	if url_.Scheme == "" {
+	if URL.Scheme == "" {
 		url2, err := url.Parse("http://" + u)
 		if err == nil {
-			url_ = url2
+			URL = url2
 		}
 	}
 
-	fmt.Println("URL:", url_)
+	fmt.Println("URL:", URL)
 	fmt.Println()
 
-	urlTally := URLRules.MatchingRules(url_)
+	urlTally := URLRules.MatchingRules(URL)
 	if len(urlTally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
@@ -53,9 +55,20 @@ func runURLTest(u string) {
 		}
 	}
 
+	extension := strings.ToLower(path.Ext(URL.Path))
+	if extension != "" {
+		// strip off the dot
+		extension = extension[1:]
+	}
+	if binaryTypes[extension] {
+		fmt.Println()
+		fmt.Println("The content will not be scanned because it is a binary file.")
+		return
+	}
+
 	fmt.Println()
 	fmt.Println("Downloading content...")
-	res, err := http.Get(url_.String())
+	res, err := http.Get(URL.String())
 	if err != nil {
 		fmt.Println(err)
 		return

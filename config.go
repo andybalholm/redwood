@@ -18,7 +18,7 @@ import (
 var blockThreshold int
 
 // extensions for files to skip with the phrase filter
-var binaryTypes []string
+var binaryTypes map[string]bool
 
 var URLRules = newURLMatcher()
 
@@ -61,12 +61,15 @@ func loadBinaryTypes(file string) {
 	defer r.Close()
 	cr := newConfigReader(r)
 
+	binaryTypes = make(map[string]bool)
+
 	for {
 		line, err := cr.ReadLine()
 		if err != nil {
 			break
 		}
-		binaryTypes = append(binaryTypes, strings.ToLower(line))
+		ext := strings.ToLower(line)
+		binaryTypes[ext] = true
 	}
 }
 

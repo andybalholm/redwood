@@ -3,10 +3,10 @@ package main
 // URL matching and regular expressions
 
 import (
-	"http"
 	"log"
 	"exp/regexp"
 	"strings"
+	"url"
 )
 
 // A regexMap is a map from rules to compiled regexes,
@@ -107,7 +107,7 @@ func (m *URLMatcher) AddRule(rule string) {
 // MatchingRules returns a list of the rules that u matches.
 // For consistency with phrase matching, it is a map with rules for keys
 // and with all values equal to 1.
-func (m *URLMatcher) MatchingRules(u *http.URL) map[string]int {
+func (m *URLMatcher) MatchingRules(u *url.URL) map[string]int {
 	result := make(map[string]int)
 
 	host := strings.ToLower(u.Host)

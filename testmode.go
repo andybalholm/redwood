@@ -3,29 +3,30 @@ package main
 import (
 	"fmt"
 	"http"
+	"url"
 )
 
 // support for running "redwood -test http://example.com"
 
 // runURLTest prints debugging information about how the URL and its content would be rated.
 func runURLTest(u string) {
-	url, err := http.ParseURL(u)
+	url_, err := url.Parse(u)
 	if err != nil {
 		fmt.Println("Could not parse the URL.")
 		return
 	}
 
-	if url.Scheme == "" {
-		url2, err := http.ParseURL("http://" + u)
+	if url_.Scheme == "" {
+		url2, err := url.Parse("http://" + u)
 		if err == nil {
-			url = url2
+			url_ = url2
 		}
 	}
 
-	fmt.Println("URL:", url)
+	fmt.Println("URL:", url_)
 	fmt.Println()
 
-	urlTally := URLRules.MatchingRules(url)
+	urlTally := URLRules.MatchingRules(url_)
 	if len(urlTally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
@@ -54,7 +55,7 @@ func runURLTest(u string) {
 
 	fmt.Println()
 	fmt.Println("Downloading content...")
-	res, err := http.Get(url.String())
+	res, err := http.Get(url_.String())
 	if err != nil {
 		fmt.Println(err)
 		return

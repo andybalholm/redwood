@@ -5,13 +5,17 @@ package main
 import (
 	"http"
 	"mahonia.googlecode.com/hg"
+	"strings"
 )
 
 // phrasesInResponse scans the content of an http.Response for phrases,
 // and returns a map of phrases and counts.
 func phrasesInResponse(res *http.Response) map[string]int {
 	defer res.Body.Close()
-	wr := newWordReader(res.Body, mahonia.NewDecoder("UTF-8")) // TODO: support other encodings, HTML entities
+
+	contentType := res.Header.Get("Content-Type")
+
+	wr := newWordReader(res.Body, decoderForContentType(contentType))
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
 	buf := make([]byte, 4096)
@@ -27,4 +31,29 @@ func phrasesInResponse(res *http.Response) map[string]int {
 	ps.scanByte(' ')
 
 	return ps.tally
+}
+
+func decoderForContentType(t string) mahonia.Decoder {
+	t = strings.ToLower(t)
+	var result mahonia.Decoder
+
+	i := strings.Index(t, "charset=")
+	if i != -1 {
+		charset := t[i+len("charset="):]
+		i = strings.Index(charset, ";")
+		if i != -1 {
+			charset = charset[:i]
+		}
+		result = mahonia.NewDecoder(charset)
+	}
+
+	if result == nil {
+		result = mahonia.FallbackDecoder(mahonia.NewDecoder("UTF-8"), mahonia.NewDecoder("windows-1252"))
+	}
+
+	if strings.Contains(t, "html") {
+		result = mahonia.FallbackDecoder(mahonia.EntityDecoder(), result)
+	}
+
+	return result
 }

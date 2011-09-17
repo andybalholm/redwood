@@ -19,6 +19,7 @@ var blockThreshold int
 
 // extensions for files to skip with the phrase filter
 var binaryTypes map[string]bool
+var binaryTypesString string // a comma-separated list
 
 var URLRules = newURLMatcher()
 
@@ -69,6 +70,13 @@ func loadBinaryTypes(file string) {
 			break
 		}
 		ext := strings.ToLower(line)
+		if !binaryTypes[ext] {
+			if binaryTypesString == "" {
+				binaryTypesString = ext
+			} else {
+				binaryTypesString += ", " + ext
+			}
+		}
 		binaryTypes[ext] = true
 	}
 }

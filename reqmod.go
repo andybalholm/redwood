@@ -30,14 +30,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			if len(urlScores) > 0 {
 				blocked := blockedCategories(urlScores)
 				if len(blocked) > 0 {
-					rw := icap.NewBridgedResponseWriter(w)
-					rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
-					rw.WriteHeader(http.StatusForbidden)
-					fmt.Fprint(rw, "This page is blocked by Redwood.\r\n\r\n")
-					fmt.Fprint(rw, "Catgories:\r\n")
-					for _, c := range blocked {
-						fmt.Fprint(rw, c, "\r\n")
-					}
+					showBlockPage(w, blocked)
 					log.Println("BLOCK URL:", req.Request.URL)
 					return
 				}
@@ -49,5 +42,16 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 
 	default:
 		w.WriteHeader(405, nil, false)
+	}
+}
+
+func showBlockPage(w icap.ResponseWriter, blocked []string) {
+	rw := icap.NewBridgedResponseWriter(w)
+	rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	rw.WriteHeader(http.StatusForbidden)
+	fmt.Fprint(rw, "This page is blocked by Redwood.\r\n\r\n")
+	fmt.Fprint(rw, "Catgories:\r\n")
+	for _, c := range blocked {
+		fmt.Fprint(rw, c, "\r\n")
 	}
 }

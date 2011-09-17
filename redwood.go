@@ -21,5 +21,6 @@ func main() {
 	}
 
 	icap.HandleFunc("/reqmod", handleRequest)
+	icap.HandleFunc("/respmod", handleResponse)
 	icap.ListenAndServe(":1344", nil)
 }

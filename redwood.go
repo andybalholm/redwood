@@ -5,6 +5,7 @@ package main
 
 import (
 	"flag"
+	"go-icap.googlecode.com/hg"
 )
 
 var configFile = flag.String("c", "/etc/redwood/redwood.conf", "configuration file path")
@@ -18,4 +19,7 @@ func main() {
 		runURLTest(*testURL)
 		return
 	}
+
+	icap.HandleFunc("/reqmod", handleRequest)
+	icap.ListenAndServe(":1344", nil)
 }

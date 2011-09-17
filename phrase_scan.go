@@ -4,6 +4,7 @@ package main
 
 import (
 	"http"
+	"log"
 	"mahonia.googlecode.com/hg"
 	"strings"
 )
@@ -45,6 +46,9 @@ func decoderForContentType(t string) mahonia.Decoder {
 			charset = charset[:i]
 		}
 		result = mahonia.NewDecoder(charset)
+		if result == nil {
+			log.Println("Unknown charset:", charset)
+		}
 	}
 
 	if result == nil {

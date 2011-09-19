@@ -3,7 +3,10 @@ package main
 // scanning an HTTP response for phrases
 
 import (
+	"compress/gzip"
+	"fmt"
 	"http"
+	"io"
 	"log"
 	"mahonia.googlecode.com/hg"
 	"strings"
@@ -16,7 +19,19 @@ func phrasesInResponse(res *http.Response) map[string]int {
 
 	contentType := res.Header.Get("Content-Type")
 
-	wr := newWordReader(res.Body, decoderForContentType(contentType))
+	var r io.Reader = res.Body
+
+	if res.Header.Get("Content-Encoding") == "gzip" {
+		log.Println("Using gzip decoder.")
+		gz, err := gzip.NewReader(r)
+		if err != nil {
+			panic(fmt.Errorf("could not create gzip decoder: %s", err))
+		}
+		defer gz.Close()
+		r = gz
+	}
+
+	wr := newWordReader(r, decoderForContentType(contentType))
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
 	buf := make([]byte, 4096)

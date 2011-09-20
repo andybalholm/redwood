@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"runtime/pprof"
 	"syscall"
 )
@@ -16,6 +17,7 @@ import (
 var configFile = flag.String("c", "/etc/redwood/redwood.conf", "configuration file path")
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
 var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
+var cores = flag.Int("cores", 1, "number of CPU cores to use")
 
 func main() {
 	flag.Parse()
@@ -28,6 +30,8 @@ func main() {
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
 	}
+
+	runtime.GOMAXPROCS(*cores)
 
 	loadConfiguration()
 

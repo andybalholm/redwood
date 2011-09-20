@@ -123,6 +123,9 @@ func (b *wordReader) Read(p []byte) (n int, err os.Error) {
 			if b.err != nil {
 				rune = 0xfffd
 				size = b.w - b.r
+				if size == 0 {
+					break
+				}
 				status = mahonia.INVALID_CHAR
 			} else if filled {
 				break

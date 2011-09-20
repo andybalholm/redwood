@@ -8,7 +8,9 @@ import (
 	"go-icap.googlecode.com/hg"
 	"log"
 	"os"
+	"os/signal"
 	"runtime/pprof"
+	"syscall"
 )
 
 var configFile = flag.String("c", "/etc/redwood/redwood.conf", "configuration file path")
@@ -33,6 +35,22 @@ func main() {
 		runURLTest(*testURL)
 		return
 	}
+
+	go func() {
+		for {
+			select {
+			case sig := <-signal.Incoming:
+				switch sig.(os.UnixSignal) {
+				case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
+					log.Println("Terminating on signal", sig)
+					if *cpuProfile != "" {
+						pprof.StopCPUProfile()
+					}
+					os.Exit(0)
+				}
+			}
+		}
+	}()
 
 	icap.HandleFunc("/reqmod", handleRequest)
 	icap.HandleFunc("/respmod", handleResponse)

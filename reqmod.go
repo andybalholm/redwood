@@ -38,7 +38,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		w.WriteHeader(204, nil, false)
-		log.Println("ALLOW URL:", req.Request.URL)
+		log.Println("Allow URL:", req.Request.URL)
 
 	default:
 		w.WriteHeader(405, nil, false)

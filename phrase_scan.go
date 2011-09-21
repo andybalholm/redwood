@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"http"
-	"io"
 	"io/ioutil"
 	"log"
 	"mahonia.googlecode.com/hg"
@@ -16,26 +15,8 @@ import (
 // phrasesInResponse scans the content of an http.Response for phrases,
 // and returns a map of phrases and counts.
 func phrasesInResponse(res *http.Response) map[string]int {
-	defer res.Body.Close()
-
+	content := responseContent(res)
 	contentType := res.Header.Get("Content-Type")
-
-	var r io.Reader = res.Body
-
-	if res.Header.Get("Content-Encoding") == "gzip" {
-		log.Println("Using gzip decoder.")
-		gz, err := gzip.NewReader(r)
-		if err != nil {
-			panic(fmt.Errorf("could not create gzip decoder: %s", err))
-		}
-		defer gz.Close()
-		r = gz
-	}
-
-	content, err := ioutil.ReadAll(r)
-	if err != nil {
-		panic(fmt.Errorf("could not read HTTP response body: %s", err))
-	}
 
 	wr := newWordReader(content, decoderForContentType(contentType))
 	ps := newPhraseScanner()
@@ -53,6 +34,30 @@ func phrasesInResponse(res *http.Response) map[string]int {
 	ps.scanByte(' ')
 
 	return ps.tally
+}
+
+// responseContent reads the body of an HTTP response into a slice of bytes.
+// It decompresses gzip-encoded responses.
+func responseContent(res *http.Response) []byte {
+	r := res.Body
+	defer r.Close()
+
+	if res.Header.Get("Content-Encoding") == "gzip" {
+		log.Println("Using gzip decoder.")
+		gz, err := gzip.NewReader(r)
+		if err != nil {
+			panic(fmt.Errorf("could not create gzip decoder: %s", err))
+		}
+		defer gz.Close()
+		r = gz
+	}
+
+	content, err := ioutil.ReadAll(r)
+	if err != nil {
+		panic(fmt.Errorf("could not read HTTP response body: %s", err))
+	}
+
+	return content
 }
 
 func decoderForContentType(t string) mahonia.Decoder {

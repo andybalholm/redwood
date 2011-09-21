@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"mahonia.googlecode.com/hg"
 	"os"
 	"unicode"
@@ -45,117 +44,77 @@ func wordString(s string) string {
 	return string(runes)
 }
 
-// A wordReader applies two filters to the data from another os.Reader:
+// A wordReader applies two filters to the data from a slice of bytes:
 // first it decodes the character set; then it applies wordRune to each character
 // and removes extra spaces.
 type wordReader struct {
-	buf      []byte
-	rd       io.Reader
-	decode   mahonia.Decoder
-	r, w     int
-	err      os.Error
-	prevRune int
+	buf          []byte
+	decode       mahonia.Decoder
+	pos          int
+	prevRune     int
+	leftover     int // a rune that was decoded, but wouldn't fit in the output buffer
+	leftoverSize int // the number of bytes occupied by the leftover rune
 }
 
-func newWordReader(rd io.Reader, d mahonia.Decoder) *wordReader {
-	b := new(wordReader)
-	b.buf = make([]byte, 4096)
-	b.rd = rd
-	b.decode = d
-	return b
-}
-
-// fill reads a new chunk into the buffer.
-func (b *wordReader) fill() {
-	// Slide existing data to beginning.
-	if b.r > 0 {
-		copy(b.buf, b.buf[b.r:b.w])
-		b.w -= b.r
-		b.r = 0
-	}
-
-	// Read new data.
-	n, e := b.rd.Read(b.buf[b.w:])
-	b.w += n
-	if e != nil {
-		b.err = e
+func newWordReader(data []byte, d mahonia.Decoder) *wordReader {
+	return &wordReader{
+		buf:    data,
+		decode: d,
 	}
 }
 
 // Read reads data into p.
 // It returns the number of bytes read into p.
-// It calls Read at most once on the underlying Reader,
-// hence n may be less than len(p).
 // At EOF, the count will be zero and err will be os.EOF.
 func (b *wordReader) Read(p []byte) (n int, err os.Error) {
-	n = len(p)
-	filled := false
-	if n == 0 {
-		return 0, b.err
-	}
-	if b.w == b.r {
-		if b.err != nil {
-			return 0, b.err
+	var rune, size int
+	var status mahonia.Status
+	for b.pos < len(b.buf) && n < len(p) {
+		if b.leftoverSize == 0 {
+			rune, size, status = b.decode(b.buf[b.pos:])
+		} else {
+			rune = b.leftover
+			size = b.leftoverSize
+			status = mahonia.SUCCESS
+			b.leftover = 0
+			b.leftoverSize = 0
 		}
-		if n > len(b.buf) {
-			// Large read, empty buffer.
-			// Allocate a larger buffer for efficiency.
-			b.buf = make([]byte, n)
-		}
-		b.fill()
-		filled = true
-		if b.w == b.r {
-			return 0, b.err
-		}
-	}
-
-	i := 0
-	prev := b.prevRune
-	for i < n {
-		rune, size, status := b.decode(b.buf[b.r:b.w])
 
 		if status == mahonia.STATE_ONLY {
-			b.r += size
+			b.pos += size
 			continue
 		}
 
 		if status == mahonia.NO_ROOM {
-			if b.err != nil {
-				rune = 0xfffd
-				size = b.w - b.r
-				if size == 0 {
-					break
-				}
-				status = mahonia.INVALID_CHAR
-			} else if filled {
-				break
-			} else {
-				b.fill()
-				filled = true
-				continue
-			}
+			rune = 0xfffd
+			size = len(b.buf) - b.pos
+			status = mahonia.INVALID_CHAR
 		}
 
 		rune = wordRune(rune)
-		if rune == ' ' && prev == ' ' {
-			b.r += size
+		if rune == ' ' && b.prevRune == ' ' {
+			b.pos += size
 			continue
 		}
 
-		if i+utf8.RuneLen(rune) > n {
+		if rune < 128 {
+			p[n] = byte(rune)
+			n++
+		} else if n+utf8.RuneLen(rune) > len(p) {
+			b.leftover = rune
+			b.leftoverSize = size
 			break
+		} else {
+			n += utf8.EncodeRune(p[n:], rune)
 		}
 
-		b.r += size
-		if rune < 128 {
-			p[i] = byte(rune)
-			i++
-		} else {
-			i += utf8.EncodeRune(p[i:], rune)
-		}
-		prev = rune
+		b.pos += size
+		b.prevRune = rune
 	}
 
-	b.prevRune = prev
-	return i, nil
+	if n == 0 && b.pos == len(b.buf) {
+		return 0, os.EOF
+	}
+
+	return
 }

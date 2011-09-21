@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"http"
 	"io"
+	"io/ioutil"
 	"log"
 	"mahonia.googlecode.com/hg"
 	"strings"
@@ -31,7 +32,12 @@ func phrasesInResponse(res *http.Response) map[string]int {
 		r = gz
 	}
 
-	wr := newWordReader(r, decoderForContentType(contentType))
+	content, err := ioutil.ReadAll(r)
+	if err != nil {
+		panic(fmt.Errorf("could not read HTTP response body: %s", err))
+	}
+
+	wr := newWordReader(content, decoderForContentType(contentType))
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
 	buf := make([]byte, 4096)

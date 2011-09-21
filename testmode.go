@@ -74,7 +74,7 @@ func runURLTest(u string) {
 		return
 	}
 
-	phraseTally := phrasesInResponse(res)
+	phraseTally := phrasesInResponse(responseContent(res), res.Header.Get("Content-Type"))
 
 	fmt.Println()
 

@@ -12,12 +12,9 @@ import (
 	"strings"
 )
 
-// phrasesInResponse scans the content of an http.Response for phrases,
+// phrasesInResponse scans the content of a document for phrases,
 // and returns a map of phrases and counts.
-func phrasesInResponse(res *http.Response) map[string]int {
-	content := responseContent(res)
-	contentType := res.Header.Get("Content-Type")
-
+func phrasesInResponse(content []byte, contentType string) map[string]int {
 	wr := newWordReader(content, decoderForContentType(contentType))
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
@@ -50,6 +47,7 @@ func responseContent(res *http.Response) []byte {
 		}
 		defer gz.Close()
 		r = gz
+		res.Header.Del("Content-Encoding")
 	}
 
 	content, err := ioutil.ReadAll(r)

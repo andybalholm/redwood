@@ -24,7 +24,11 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 	case "RESPMOD":
 		urlTally := URLRules.MatchingRules(req.Request.URL)
-		pageTally := phrasesInResponse(req.Response)
+
+		content := responseContent(req.Response)
+		contentType := req.Response.Header.Get("Content-Type")
+		pageTally := phrasesInResponse(content, contentType)
+
 		for rule, n := range urlTally {
 			pageTally[rule] += n
 		}
@@ -40,7 +44,14 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 			}
 		}
 
-		w.WriteHeader(204, nil, false)
+		rw := icap.NewBridgedResponseWriter(w)
+		oldHeaders := req.Response.Header
+		newHeaders := rw.Header()
+		for key, val := range oldHeaders {
+			newHeaders[key] = val
+		}
+		rw.WriteHeader(req.Response.StatusCode)
+		rw.Write(content)
 		log.Println("Allow content:", req.Request.URL)
 
 	default:

@@ -4,7 +4,7 @@ package main
 
 import (
 	"log"
-	"exp/regexp"
+	"regexp"
 	"strings"
 	"url"
 )

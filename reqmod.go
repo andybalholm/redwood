@@ -25,6 +25,11 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 		w.WriteHeader(200, nil, false)
 
 	case "REQMOD":
+		if req.Request.Host == "gateway" {
+			icap.ServeLocally(w, req)
+			return
+		}
+
 		urlTally := URLRules.MatchingRules(req.Request.URL)
 		if len(urlTally) > 0 {
 			urlScores := categoryScores(urlTally)

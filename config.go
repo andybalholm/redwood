@@ -21,6 +21,9 @@ var blockThreshold int
 var binaryTypes map[string]bool
 var binaryTypesString string // a comma-separated list
 
+// locations for files for built-in web server
+var staticFilesDir, cgiBin string
+
 var URLRules = newURLMatcher()
 
 func loadConfiguration() {
@@ -44,6 +47,18 @@ func loadConfiguration() {
 	if s != "" {
 		loadBinaryTypes(s)
 	}
+
+	s, _ = conf.Get("staticfilesdir")
+	if s == "" {
+		s = path.Join(configDir, "static/")
+	}
+	staticFilesDir = s
+
+	s, _ = conf.Get("cgibin")
+	if s == "" {
+		s = path.Join(configDir, "cgi")
+	}
+	cgiBin = s
 
 	s, _ = conf.Get("categories")
 	if s == "" {

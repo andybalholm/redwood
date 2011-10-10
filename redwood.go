@@ -6,9 +6,12 @@ package main
 import (
 	"flag"
 	"go-icap.googlecode.com/hg"
+	"http"
+	"http/cgi"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"syscall"
@@ -56,7 +59,37 @@ func main() {
 		}
 	}()
 
+	http.Handle("/", http.FileServer(http.Dir(staticFilesDir)))
+	loadCGIHandlers()
+
 	icap.HandleFunc("/reqmod", handleRequest)
 	icap.HandleFunc("/respmod", handleResponse)
 	icap.ListenAndServe(":1344", nil)
 }
+
+func loadCGIHandlers() {
+	dir, err := os.Open(cgiBin)
+	if err != nil {
+		log.Println("Could not open CGI directory:", err)
+		return
+	}
+	defer dir.Close()
+
+	info, err := dir.Readdir(0)
+	if err != nil {
+		log.Println("Could not read CGI directory:", err)
+		return
+	}
+
+	for _, fi := range info {
+		if fi.IsRegular() && (fi.Permission() & 0100 != 0) {
+			// It's an executable file.
+			name := "/" + fi.Name
+			scriptPath := filepath.Join(cgiBin, fi.Name)
+			http.Handle(name, &cgi.Handler{
+				Path: scriptPath,
+			})
+		}
+	}
+}
+

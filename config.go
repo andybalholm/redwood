@@ -48,6 +48,12 @@ func loadConfiguration() {
 		loadBinaryTypes(s)
 	}
 
+	blockPage, _ := conf.Get("blockpage")
+	if blockPage == "" {
+		blockPage = path.Join(configDir, "block.html")
+	}
+	loadBlockPageTemplate(blockPage)
+
 	s, _ = conf.Get("staticfilesdir")
 	if s == "" {
 		s = path.Join(configDir, "static/")

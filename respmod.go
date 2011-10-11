@@ -37,7 +37,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 			if len(scores) > 0 {
 				blocked := blockedCategories(scores)
 				if len(blocked) > 0 {
-					showBlockPage(w, blocked, req.Request.URL)
+					showBlockPage(w, blocked, req.Request.URL, req.Header.Get("X-Client-IP"))
 					log.Println("BLOCK content:", req.Request.URL)
 					return
 				}

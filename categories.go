@@ -35,6 +35,7 @@ type category struct {
 }
 
 var categories []*category
+var categoryDescriptions = make(map[string]string) // Maps names to descriptions.
 
 // loadCategories loads the category configuration files
 func loadCategories(dirname string) {
@@ -57,6 +58,7 @@ func loadCategories(dirname string) {
 			c, err := loadCategory(categoryPath)
 			if err == nil {
 				categories = append(categories, c)
+				categoryDescriptions[c.name] = c.description
 			} else {
 				log.Printf("Error loading category %s: %v", fi.Name, err)
 			}

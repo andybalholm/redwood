@@ -67,7 +67,7 @@ func loadCategories(dirname string) {
 }
 
 // loadCategory loads the configuration for one category
-func loadCategory(dirname string) (c *category, err os.Error) {
+func loadCategory(dirname string) (c *category, err error) {
 	c = new(category)
 	c.weights = make(map[string]weight)
 	c.name = filepath.Base(dirname)
@@ -222,7 +222,7 @@ func blockedCategories(scores map[string]int) []string {
 					// If any categories on the blocked list have lower scores, remove them.
 					for bn, bs := range blocked {
 						if bs <= s {
-							blocked[bn] = 0, false
+							delete(blocked, bn)
 						}
 					}
 				}

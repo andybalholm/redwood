@@ -5,7 +5,6 @@ import (
 	"go-icap.googlecode.com/hg"
 	"http"
 	"log"
-	"os"
 	"strings"
 	"template"
 	"url"
@@ -16,7 +15,7 @@ import (
 var blockTemplate *template.Template
 
 func loadBlockPageTemplate(path string) {
-	var err os.Error
+	var err error
 	blockTemplate, err = template.ParseFile(path)
 	if err != nil {
 		log.Println("Could not load block page template:", err)

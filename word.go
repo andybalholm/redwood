@@ -1,8 +1,8 @@
 package main
 
 import (
+	"io"
 	"mahonia.googlecode.com/hg"
-	"os"
 	"unicode"
 	"utf8"
 )
@@ -66,7 +66,7 @@ func newWordReader(data []byte, d mahonia.Decoder) *wordReader {
 // Read reads data into p.
 // It returns the number of bytes read into p.
 // At EOF, the count will be zero and err will be os.EOF.
-func (b *wordReader) Read(p []byte) (n int, err os.Error) {
+func (b *wordReader) Read(p []byte) (n int, err error) {
 	var rune, size int
 	var status mahonia.Status
 	for b.pos < len(b.buf) && n < len(p) {
@@ -113,7 +113,7 @@ func (b *wordReader) Read(p []byte) (n int, err os.Error) {
 	}
 
 	if n == 0 && b.pos == len(b.buf) {
-		return 0, os.EOF
+		return 0, io.EOF
 	}
 
 	return

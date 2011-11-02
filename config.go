@@ -113,7 +113,7 @@ func newConfigReader(r io.Reader) *configReader {
 	return &configReader{r: bufio.NewReader(r)}
 }
 
-func (cr *configReader) ReadLine() (line string, err os.Error) {
+func (cr *configReader) ReadLine() (line string, err error) {
 	for {
 		b, isPrefix, err := cr.r.ReadLine()
 		if err != nil {

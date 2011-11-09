@@ -5,10 +5,10 @@ package main
 import (
 	"compress/gzip"
 	"fmt"
-	"http"
 	"io/ioutil"
 	"log"
 	"mahonia.googlecode.com/hg"
+	"net/http"
 	"strings"
 )
 

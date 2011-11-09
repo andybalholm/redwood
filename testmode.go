@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"http"
+	"net/http"
+	"net/url"
 	"path"
 	"strings"
-	"url"
 )
 
 // support for running "redwood -test http://example.com"

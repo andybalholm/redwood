@@ -4,9 +4,9 @@ package main
 
 import (
 	"log"
+	"net/url"
 	"regexp"
 	"strings"
-	"url"
 )
 
 // A regexMap is a map from rules to compiled regexes,

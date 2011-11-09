@@ -1,13 +1,12 @@
 package main
 
 import (
-	templateHTML "exp/template/html"
 	"go-icap.googlecode.com/hg"
-	"http"
+	"html/template"
 	"log"
+	"net/http"
+	"net/url"
 	"strings"
-	"template"
-	"url"
 )
 
 // Functions for displaying block pages.
@@ -19,10 +18,6 @@ func loadBlockPageTemplate(path string) {
 	blockTemplate, err = template.ParseFile(path)
 	if err != nil {
 		log.Println("Could not load block page template:", err)
-	}
-	blockTemplate, err = templateHTML.Escape(blockTemplate)
-	if err != nil {
-		log.Println("Could not escape block page template:", err)
 	}
 }
 

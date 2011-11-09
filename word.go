@@ -4,7 +4,7 @@ import (
 	"io"
 	"mahonia.googlecode.com/hg"
 	"unicode"
-	"utf8"
+	"unicode/utf8"
 )
 
 // wordRune maps c into a reduced set of "word" characters.

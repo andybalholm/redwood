@@ -19,7 +19,8 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 	switch req.Method {
 	case "OPTIONS":
 		h.Set("Methods", "REQMOD")
-		h.Set("Allow", "204")
+		h.Set("Transfer-Preview", "*")
+		h.Set("Preview", "0")
 		w.WriteHeader(200, nil, false)
 
 	case "REQMOD":

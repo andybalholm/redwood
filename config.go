@@ -8,18 +8,12 @@ import (
 	"github.com/kylelemons/go-gypsy/yaml"
 	"io"
 	"log"
-	"os"
 	"path"
-	"strings"
 	"strconv"
 )
 
 // minimum total bad points to block a page
 var blockThreshold int
-
-// extensions for files to skip with the phrase filter
-var binaryTypes map[string]bool
-var binaryTypesString string // a comma-separated list
 
 // locations for files for built-in web server
 var staticFilesDir, cgiBin string
@@ -41,11 +35,6 @@ func loadConfiguration() {
 		if err != nil {
 			log.Print("Invalid value for threshold: ", s)
 		}
-	}
-
-	s, _ = conf.Get("binarytypes")
-	if s != "" {
-		loadBinaryTypes(s)
 	}
 
 	blockPage, _ := conf.Get("blockpage")
@@ -73,33 +62,6 @@ func loadConfiguration() {
 	loadCategories(s)
 
 	collectRules()
-}
-
-func loadBinaryTypes(file string) {
-	r, err := os.Open(file)
-	if err != nil {
-		log.Printf("Could not open %s: %v", file, err)
-	}
-	defer r.Close()
-	cr := newConfigReader(r)
-
-	binaryTypes = make(map[string]bool)
-
-	for {
-		line, err := cr.ReadLine()
-		if err != nil {
-			break
-		}
-		ext := strings.ToLower(line)
-		if !binaryTypes[ext] {
-			if binaryTypesString == "" {
-				binaryTypesString = ext
-			} else {
-				binaryTypesString += ", " + ext
-			}
-		}
-		binaryTypes[ext] = true
-	}
 }
 
 // configReader is a wrapper for reading a configuration file a line at a time,

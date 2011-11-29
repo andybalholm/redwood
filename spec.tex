@@ -1,0 +1,204 @@
+\documentclass{article}
+\usepackage{geometry} 
+\usepackage{verbatim}
+\geometry{letterpaper} 
+
+\title{Specification for Redwood}
+\author{Andy Balholm}
+\date{November 28, 2011}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+Redwood is an internet content-filtering program. 
+It is designed to replace and improve on DansGuardian 
+as the core of the Security Appliance internet filter. 
+It adds flexibility and granularity to the filtering by classifying sites 
+into multiple categories instead of just ``Allow'' and ``Block.'' 
+
+\end{abstract}
+
+\section{Basic Architecture}
+
+Redwood runs as an ICAP server. This means that it runs in connection 
+with a proxy server such as Squid, filtering HTTP requests and responses 
+passed to it by the proxy.
+
+Redwood examines each HTTP message to determine if it should be allowed to proceed. 
+If so, it passes the message back to the proxy so that it can be forwarded 
+to its final destination. If not, it replaces the message with a customizable page 
+stating that the request is not allowed (optionally giving the reason 
+and providing a link for filing an overblock request).
+
+Redwood's filtering is based on URLs and also, where applicable, on page content. 
+Content filtering is applied to all files except those whose extensions are 
+on a list of types that are configured to be skipped.
+
+Content modification will not be supported in the initial release of Redwood, 
+but it may be added at some future time.
+
+\section{Configuration File}
+
+By default, the main configuration file is located at \verb"/etc/redwood/redwood.conf". 
+This path can be changed by using the \verb"-c" command line switch. 
+The configuration file format is a simplified form of YAML.
+
+An example configuration file:
+
+\begin{verbatim}
+# the template for the block page
+blockpage: /etc/redwood/block.html
+
+# directory of static files to be served under http://gateway/
+staticfilesdir: /etc/redwood/static
+
+# directory of CGI scripts to run under http://gateway/
+cgibin: /etc/redwood/cgi
+
+# the directory containing the category information
+categories: /etc/redwood/categories
+
+# the minimum total score from all blocked categories needed 
+# to block a page
+threshold: 275
+
+# filter groups allow different people to have different filtering settings
+filtergroups:
+  mechanics:
+    ip:
+      - 10.1.10.108
+      - 10.1.10.155
+    allow:
+      - mechanical
+      - autobody
+    ignore:
+      - racing
+  designers:
+    users:
+      - andy
+      - dave
+    allow:
+      - stockphoto
+      - camera
+\end{verbatim}
+
+\section{Categories}
+
+The configuration files for Redwood allow the user to establish any number of categories 
+corresponding to the types of content that he wishes to block or to allow. 
+As each HTTP message is processed, it is assigned a score in each category, 
+based on the filter lists that are set up for that category. 
+These scores are then used to determine whether the page should be blocked.
+
+Each category is a assigned an action: allow, block, or ignore. 
+A page will be blocked if the score for any category listed as \verb"block" 
+is higher than the highest score for any category listed as \verb"allow". 
+If a category is listed as \verb"ignore", its score does not affect whether a page 
+is blocked or not. (This is the default for a category that is not listed.) 
+However, a page is not blocked unless the total score for all \verb"block" categories 
+is greater than a certain configurable threshold. This prevents overblocks 
+of pages with almost no textual content.
+
+The categories are stored in a directory whose location is specified in the configuration file. 
+Each subdirectory of that directory defines a category (with the same name as the directory). 
+
+Each category's directory contains a file named \verb"category.conf" and any number of rule-list files. 
+A category named ``mechanical'' might have a \verb"category.conf" file like the following:
+
+\begin{verbatim}
+description: Auto Repair
+action: allow
+\end{verbatim}
+
+This configuration would mean that the category's user-visible description would be 
+``Auto Repair'' rather than ``mechanical,'' and that pages that fall into the category would be allowed. 
+The description defaults to the category name, and the action 
+defaults to \verb"ignore". Actions can be overriden for specific users by the use of filter groups.
+
+The rule-list files define the rules used to calculate the category's score. 
+Each rule-list file must have an extension of \verb".list". 
+(This rule ensures that files ending in \verb".bak", \verb".orig", etc. are ignored.) 
+It is a plain-text file encoded in UTF-8. Comments are delimited with \verb"#". 
+Here is an example of a rule-list file that might be in the directory for the 
+``mechanical'' category mentioned earlier:
+
+\begin{verbatim}
+napaonline.com 200 # Give napaonline.com 200 points for this category.
+www.napaonline.com/catalog/ 50 # bonus points for NAPA's catalog
+
+default 150 # The following domains will each get 150 points.
+carquest.com
+autozone.com
+
+/t[iy]re/ 75 # Any page with tire or tyre in the URL will get 75 points.
+/parts/h 50 # A page with parts in the hostname will get 50 points
+
+<grease gun> 25 # 25 points for each occurrence of "grease gun" in the content
+<oil filter> 25 100 # 25 points for each occurrence, but no more than 100 total
+\end{verbatim}
+
+There are three kinds of filter rules:
+
+\begin{description}
+
+\item[URL matching] A URL matching rule consists of a domain name, optionally followed by a path. 
+After it, separated by a space, is the weight---the number of points that get added to this category's score 
+for sites that match the rule. 
+
+If the rule consists of only a domain name (without a path),
+it will also match subdomains: \verb"napaonline.com" also matches \verb"www.napaonline.com".
+If there is a path, the domain must match exactly, but if the path ends with a slash,
+it will also match longer paths: \verb"www.napaonline.com/catalog/" also matches 
+\verb"www.napaonline.com/catalog/result.aspx".
+
+If a domain and a subdomain (or a path and a subdirectory) 
+are both listed, the subdomain will effectively get the sum of the two weights. For example, if \verb"xerox.com"
+were listed with 100 points, and \verb"support.xerox.com" were listed with 50 points, \verb"support.xerox.com" 
+would actually get a score of 150 points.
+
+\item[URL regular expressions] A regular expression to match the URL is listed between slashes. 
+The points are added to the category score for each page whose URL matches the regular expression. 
+Regular expression matching is case-insensitive. The regular expression syntax is that supported by the RE2 library.
+
+A regular expression can be restricted to matching a certain part of the URL by adding a one-character suffix
+immediately after the final slash. A suffix of \verb"h" matches the hostname, \verb"p" matches the path,
+and \verb"q" matches the query.
+
+\item[Content phrases] Unlike the other two kinds of rules, these apply to the content of the page, not the URL. 
+Phrases are enclosed between angle brackets. Before testing to see if a phrase matches, 
+both the phrase and the page are simplified: capital letters are converted to lowercase, 
+all characters that are not letters or digits are replaced by spaces,
+and multiple spaces are replaced by single spaces. Then the phrase weight is added to the page's score for the category 
+for each time the phrase is found on the page. But if the phrase has a second weight listed, 
+no more than that amount will be added no matter how many times the phrase occurs. 
+(In the example, if ``oil filter'' occurred more than four times, the additional occurrences wouldn't count.)
+
+\end{description}
+
+There is also a \verb"default" rule. It specifies what weight will be assigned to rules that don't specify a weight. 
+It applies to all rules without a specified weight between it and the next \verb"default" rule or the end of the file. 
+If there is no \verb"default" rule, the default weight is zero.
+
+Weights must be integers, but they may be negative. Negative weights can be used to offset short, general matches 
+with long, more-specific ones, e.g.:
+
+\begin{verbatim}
+<grease> 10
+<grease paint> -10
+\end{verbatim}
+
+If a page is blocked based on its URL (i.e. by URL matching and/or URL regular expressions), 
+its content will not be evaluated because the page will not be downloaded.
+
+\section{Test Mode}
+
+If Redwood is run with the \verb"-test" switch, it does not run as an ICAP server. 
+Instead, it evaluates the URL given as an argument after the switch.
+It prints detailed debugging information about how the URL and its content would be rated
+if that page were requested in normal operation: how many times each rule matches, 
+what the score is in each category, which categories would block the page, etc.
+
+\end{document}

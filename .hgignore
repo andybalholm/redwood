@@ -5,3 +5,6 @@
 ^redwood$
 ~$
 \.orig$
+\.log$
+\.aux$
+spec\.pdf

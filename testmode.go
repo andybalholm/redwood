@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
-	"strings"
 )
 
 // support for running "redwood -test http://example.com"
@@ -55,17 +53,6 @@ func runURLTest(u string) {
 		}
 	}
 
-	extension := strings.ToLower(path.Ext(URL.Path))
-	if extension != "" {
-		// strip off the dot
-		extension = extension[1:]
-	}
-	if binaryTypes[extension] {
-		fmt.Println()
-		fmt.Println("The content will not be scanned because it is a binary file.")
-		return
-	}
-
 	fmt.Println()
 	fmt.Println("Downloading content...")
 	res, err := http.Get(URL.String())
@@ -74,9 +61,18 @@ func runURLTest(u string) {
 		return
 	}
 
-	phraseTally := phrasesInResponse(responseContent(res), res.Header.Get("Content-Type"))
-
 	fmt.Println()
+	contentType := res.Header.Get("Content-Type")
+	switch actionForContentType(contentType) {
+	case ALLOW:
+		fmt.Println("The content type is always allowed:", contentType)
+		return
+	case BLOCK:
+		fmt.Println("The content type is banned:", contentType)
+		return
+	}
+
+	phraseTally := phrasesInResponse(responseContent(res), contentType)
 
 	if len(phraseTally) == 0 {
 		fmt.Println("No content phrases match.")

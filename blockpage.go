@@ -15,14 +15,14 @@ var blockTemplate *template.Template
 
 func loadBlockPageTemplate(path string) {
 	var err error
-	blockTemplate, err = template.ParseFile(path)
+	blockTemplate, err = template.ParseFiles(path)
 	if err != nil {
 		log.Println("Could not load block page template:", err)
 	}
 }
 
 type blockData struct {
-	URL        *url.URL
+	URL        string
 	Categories string
 	IP         string
 }
@@ -33,7 +33,7 @@ func showBlockPage(w icap.ResponseWriter, blocked []string, URL *url.URL, client
 		blockDesc[i] = categoryDescriptions[name]
 	}
 	data := blockData{
-		URL:        URL,
+		URL:        URL.String(),
 		Categories: strings.Join(blockDesc, ", "),
 		IP:         clientIP,
 	}

@@ -62,17 +62,14 @@ func runURLTest(u string) {
 	}
 
 	fmt.Println()
+	content := responseContent(res)
 	contentType := res.Header.Get("Content-Type")
-	switch actionForContentType(contentType) {
-	case ALLOW:
-		fmt.Println("The content type is always allowed:", contentType)
-		return
-	case BLOCK:
-		fmt.Println("The content type is banned:", contentType)
+	if !shouldScanPhrases(res, content) {
+		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
 		return
 	}
 
-	phraseTally := phrasesInResponse(responseContent(res), contentType)
+	phraseTally := phrasesInResponse(content, contentType)
 
 	if len(phraseTally) == 0 {
 		fmt.Println("No content phrases match.")

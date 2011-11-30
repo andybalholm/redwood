@@ -12,6 +12,38 @@ import (
 	"strings"
 )
 
+// shouldScanPhrases returns true if Redwood should run a phrase 
+// scan on an HTTP response. preview should be the first bytes of 
+// content.
+func shouldScanPhrases(r *http.Response, preview []byte) bool {
+	contentType := strings.ToLower(r.Header.Get("Content-Type"))
+	semicolon := strings.Index(contentType, ";")
+	if semicolon != -1 {
+		contentType = contentType[:semicolon]
+	}
+	contentType = strings.TrimSpace(contentType)
+	if !strings.Contains(contentType, "/") {
+		contentType = ""
+	}
+
+	switch contentType {
+	case "text/css":
+		return false
+	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
+		// These types tend to be used for content whose type is unknown,
+		// so we should try to second-guess them.
+		if e := r.Header.Get("Content-Encoding"); e == "" || e == "identity" {
+			contentType = http.DetectContentType(preview)
+		}
+	case "application/json", "application/javascript", "application/x-javascript":
+		// Some sites put their content in JavaScript or JSON, so we need to scan those,
+		// however much we would like not to.
+		return true
+	}
+
+	return strings.Contains(contentType, "text")
+}
+
 // phrasesInResponse scans the content of a document for phrases,
 // and returns a map of phrases and counts.
 func phrasesInResponse(content []byte, contentType string) map[string]int {
@@ -50,10 +82,8 @@ func responseContent(res *http.Response) []byte {
 		res.Header.Del("Content-Encoding")
 	}
 
-	content, err := ioutil.ReadAll(r)
-	if err != nil {
-		panic(fmt.Errorf("could not read HTTP response body: %s", err))
-	}
+	content, _ := ioutil.ReadAll(r)
+	// Deliberately ignore the error. ebay.com searches produce errors, but work.
 
 	return content
 }

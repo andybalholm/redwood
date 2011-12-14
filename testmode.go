@@ -70,6 +70,12 @@ func runURLTest(u string) {
 	}
 
 	phraseTally := phrasesInResponse(content, contentType)
+	if *cpuProfile != "" {
+		fmt.Println("Running phrase scan 100 times for better CPU profile data.")
+		for i := 0; i < 100; i++ {
+			phrasesInResponse(content, contentType)
+		}
+	}
 
 	if len(phraseTally) == 0 {
 		fmt.Println("No content phrases match.")

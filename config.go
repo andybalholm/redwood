@@ -118,4 +118,5 @@ func collectRules() {
 			}
 		}
 	}
+	findFallbackNodes(0, nil)
 }

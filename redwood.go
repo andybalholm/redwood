@@ -4,8 +4,8 @@
 package main
 
 import (
+	"code.google.com/p/go-icap"
 	"flag"
-	"go-icap.googlecode.com/hg"
 	"log"
 	"net/http"
 	"net/http/cgi"
@@ -82,10 +82,10 @@ func loadCGIHandlers() {
 	}
 
 	for _, fi := range info {
-		if fi.IsRegular() && (fi.Permission()&0100 != 0) {
+		if mode := fi.Mode(); (mode&os.ModeType == 0) && (mode.Perm()&0100 != 0) {
 			// It's an executable file.
-			name := "/" + fi.Name
-			scriptPath := filepath.Join(cgiBin, fi.Name)
+			name := "/" + fi.Name()
+			scriptPath := filepath.Join(cgiBin, fi.Name())
 			http.Handle(name, &cgi.Handler{
 				Path: scriptPath,
 			})

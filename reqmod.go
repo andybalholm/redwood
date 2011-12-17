@@ -1,15 +1,15 @@
 package main
 
 import (
+	"code.google.com/p/go-icap"
 	"fmt"
-	"go-icap.googlecode.com/hg"
 	"log"
 	"time"
 )
 
 // Request-modification functions.
 
-var ISTag = fmt.Sprintf("Redwood%d", time.Nanoseconds())
+var ISTag = fmt.Sprintf("Redwood%d", time.Now())
 
 func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 	h := w.Header()

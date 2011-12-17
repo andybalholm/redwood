@@ -3,11 +3,11 @@ package main
 // scanning an HTTP response for phrases
 
 import (
+	"code.google.com/p/mahonia"
 	"compress/gzip"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"mahonia.googlecode.com/hg"
 	"net/http"
 	"strings"
 )

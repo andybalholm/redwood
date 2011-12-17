@@ -53,14 +53,14 @@ func loadCategories(dirname string) {
 	}
 
 	for _, fi := range info {
-		if fi.IsDirectory() && fi.Name[0] != '.' {
-			categoryPath := filepath.Join(dirname, fi.Name)
+		if name := fi.Name(); fi.IsDir() && name[0] != '.' {
+			categoryPath := filepath.Join(dirname, name)
 			c, err := loadCategory(categoryPath)
 			if err == nil {
 				categories = append(categories, c)
 				categoryDescriptions[c.name] = c.description
 			} else {
-				log.Printf("Error loading category %s: %v", fi.Name, err)
+				log.Printf("Error loading category %s: %v", name, err)
 			}
 		}
 	}

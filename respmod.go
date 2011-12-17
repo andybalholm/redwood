@@ -1,7 +1,7 @@
 package main
 
 import (
-	"go-icap.googlecode.com/hg"
+	"code.google.com/p/go-icap"
 	"log"
 )
 

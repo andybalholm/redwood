@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 )
 
 // shouldScanPhrases returns true if Redwood should run a phrase 
@@ -47,21 +48,43 @@ func shouldScanPhrases(r *http.Response, preview []byte) bool {
 // phrasesInResponse scans the content of a document for phrases,
 // and returns a map of phrases and counts.
 func phrasesInResponse(content []byte, contentType string) map[string]int {
-	wr := newWordReader(content, decoderForContentType(contentType))
+	decode := decoderForContentType(contentType)
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
-	buf := make([]byte, 4096)
-	for {
-		n, err := wr.Read(buf)
-		if err != nil {
-			break
+	prevRune := ' '
+	var buf [4]byte // buffer for UTF-8 encoding of runes
+
+loop:
+	for len(content) > 0 {
+		// Read one Unicode character from content.
+		c, size, status := decode(content)
+		content = content[size:]
+		switch status {
+		case mahonia.STATE_ONLY:
+			continue
+		case mahonia.NO_ROOM:
+			break loop
 		}
-		for _, c := range buf[:n] {
-			ps.scanByte(c)
+
+		// Simplify it to lower-case words separated by single spaces.
+		c = wordRune(c)
+		if c == ' ' && prevRune == ' ' {
+			continue
+		}
+		prevRune = c
+
+		// Convert it to UTF-8 and scan the bytes.
+		if c < 128 {
+			ps.scanByte(byte(c))
+			continue
+		}
+		n := utf8.EncodeRune(buf[:], c)
+		for _, b := range buf[:n] {
+			ps.scanByte(b)
 		}
 	}
-	ps.scanByte(' ')
 
+	ps.scanByte(' ')
 	return ps.tally
 }
 

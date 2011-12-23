@@ -29,23 +29,29 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
-		urlTally := URLRules.MatchingRules(req.Request.URL)
-		if len(urlTally) > 0 {
-			urlScores := categoryScores(urlTally)
-			if len(urlScores) > 0 {
-				blocked := blockedCategories(urlScores)
-				if len(blocked) > 0 {
-					showBlockPage(w, blocked, req.Request.URL, req.Header.Get("X-Client-IP"))
-					log.Println("BLOCK URL:", req.Request.URL)
-					return
-				}
-			}
+		c := context{
+			URL:  req.Request.URL,
+			user: req.Header.Get("X-Client-IP"),
+		}
+
+		c.scanURL()
+
+		if c.action == BLOCK {
+			showBlockPage(w, c.blocked, c.URL, c.user)
+			log.Println("BLOCK URL:", c.URL)
+			return
 		}
 
 		w.WriteHeader(204, nil, false)
-		log.Println("Allow URL:", req.Request.URL)
+		log.Println("Allow URL:", c.URL)
 
 	default:
 		w.WriteHeader(405, nil, false)
 	}
+}
+
+// scanURL calculates scores and an action based on the request's URL.
+func (c *context) scanURL() {
+	c.tally = URLRules.MatchingRules(c.URL)
+	c.calculateScores()
 }

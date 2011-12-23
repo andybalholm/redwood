@@ -10,6 +10,8 @@ import (
 
 // runURLTest prints debugging information about how the URL and its content would be rated.
 func runURLTest(u string) {
+	var c context
+
 	URL, err := url.Parse(u)
 	if err != nil {
 		fmt.Println("Could not parse the URL.")
@@ -23,34 +25,34 @@ func runURLTest(u string) {
 		}
 	}
 
+	c.URL = URL
 	fmt.Println("URL:", URL)
 	fmt.Println()
 
-	urlTally := URLRules.MatchingRules(URL)
-	if len(urlTally) == 0 {
+	c.scanURL()
+
+	if len(c.tally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
 		fmt.Println("The following URL rules match:")
-		for s, _ := range urlTally {
+		for s, _ := range c.tally {
 			fmt.Println(s)
 		}
 	}
 
-	urlScores := categoryScores(urlTally)
-	if len(urlScores) > 0 {
+	if len(c.scores) > 0 {
 		fmt.Println()
 		fmt.Println("The request has the following category scores:")
-		printSortedTally(urlScores)
+		printSortedTally(c.scores)
+	}
 
-		blocked := blockedCategories(urlScores)
-		if len(blocked) > 0 {
-			fmt.Println()
-			fmt.Println("The request is blocked by the following categories:")
-			for _, c := range blocked {
-				fmt.Println(c)
-			}
-			return
+	if len(c.blocked) > 0 {
+		fmt.Println()
+		fmt.Println("The request is blocked by the following categories:")
+		for _, c := range c.blocked {
+			fmt.Println(c)
 		}
+		return
 	}
 
 	fmt.Println()
@@ -62,45 +64,33 @@ func runURLTest(u string) {
 	}
 
 	fmt.Println()
-	content := responseContent(res)
-	contentType := res.Header.Get("Content-Type")
-	if !shouldScanPhrases(res, content) {
+	c.resp = res
+	c.content = responseContent(res)
+	if !shouldScanPhrases(c.resp, c.content) {
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
 		return
 	}
 
-	phraseTally := phrasesInResponse(content, contentType)
-	if *cpuProfile != "" {
-		fmt.Println("Running phrase scan 100 times for better CPU profile data.")
-		for i := 0; i < 100; i++ {
-			phrasesInResponse(content, contentType)
-		}
-	}
+	c.scanContent()
 
-	if len(phraseTally) == 0 {
+	if len(c.tally) == 0 {
 		fmt.Println("No content phrases match.")
 	} else {
-		fmt.Println("The following content phrases match:")
-		printSortedTally(phraseTally)
+		fmt.Println("The following rules match:")
+		printSortedTally(c.tally)
 	}
 
-	pageScores := categoryScores(phraseTally)
-	if len(pageScores) > 0 {
-		// Add the URL scores to the page scores.
-		for c, s := range urlScores {
-			pageScores[c] += s
-		}
+	if len(c.scores) > 0 {
 		fmt.Println()
 		fmt.Println("The response has the following category scores:")
-		printSortedTally(pageScores)
+		printSortedTally(c.scores)
+	}
 
-		blocked := blockedCategories(pageScores)
-		if len(blocked) > 0 {
-			fmt.Println()
-			fmt.Println("The page is blocked by the following categories:")
-			for _, c := range blocked {
-				fmt.Println(c)
-			}
+	if len(c.blocked) > 0 {
+		fmt.Println()
+		fmt.Println("The page is blocked by the following categories:")
+		for _, c := range c.blocked {
+			fmt.Println(c)
 		}
 	}
 }

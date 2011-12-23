@@ -20,30 +20,28 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		w.WriteHeader(200, nil, false)
 
 	case "RESPMOD":
+		c := context{
+			URL:         req.Request.URL,
+			resp:        req.Response,
+			user:        req.Header.Get("X-Client-IP"),
+			contentType: req.Response.Header.Get("Content-Type"),
+		}
+
 		if !shouldScanPhrases(req.Response, req.Preview) {
+			c.action = IGNORE
 			w.WriteHeader(204, nil, false)
 			log.Println("Don't scan content:", req.Request.URL)
 			return
 		}
 
-		urlTally := URLRules.MatchingRules(req.Request.URL)
-		content := responseContent(req.Response)
-		contentType := req.Response.Header.Get("Content-Type")
-		pageTally := phrasesInResponse(content, contentType)
+		c.scanURL()
+		c.content = responseContent(c.resp)
+		c.scanContent()
 
-		for rule, n := range urlTally {
-			pageTally[rule] += n
-		}
-		if len(pageTally) > 0 {
-			scores := categoryScores(pageTally)
-			if len(scores) > 0 {
-				blocked := blockedCategories(scores)
-				if len(blocked) > 0 {
-					showBlockPage(w, blocked, req.Request.URL, req.Header.Get("X-Client-IP"))
-					log.Println("BLOCK content:", req.Request.URL)
-					return
-				}
-			}
+		if c.action == BLOCK {
+			showBlockPage(w, c.blocked, c.URL, c.user)
+			log.Println("BLOCK content:", c.URL)
+			return
 		}
 
 		rw := icap.NewBridgedResponseWriter(w)
@@ -53,10 +51,18 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 			newHeaders[key] = val
 		}
 		rw.WriteHeader(req.Response.StatusCode)
-		rw.Write(content)
-		log.Println("Allow content:", req.Request.URL)
+		rw.Write(c.content)
+		log.Println("Allow content:", c.URL)
 
 	default:
 		w.WriteHeader(405, nil, false)
 	}
+}
+
+func (c *context) scanContent() {
+	pageTally := phrasesInResponse(c.content, c.contentType)
+	for rule, n := range pageTally {
+		c.tally[rule] += n
+	}
+	c.calculateScores()
 }

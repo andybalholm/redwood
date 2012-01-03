@@ -47,7 +47,7 @@ func shouldScanPhrases(r *http.Response, preview []byte) bool {
 
 // phrasesInResponse scans the content of a document for phrases,
 // and returns a map of phrases and counts.
-func phrasesInResponse(content []byte, contentType string) map[string]int {
+func phrasesInResponse(content []byte, contentType string) map[rule]int {
 	decode := decoderForContentType(contentType)
 	ps := newPhraseScanner()
 	ps.scanByte(' ')

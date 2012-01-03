@@ -111,7 +111,7 @@ func (cr *configReader) ReadLine() (line string, err error) {
 func collectRules() {
 	for _, c := range categories {
 		for rule, _ := range c.weights {
-			if rule[0] == '<' {
+			if rule.t == contentPhrase {
 				addPhrase(rule)
 			} else {
 				URLRules.AddRule(rule)

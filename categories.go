@@ -28,10 +28,10 @@ const (
 
 // A category represents one of the categories of filtering rules.
 type category struct {
-	name        string            // the directory name
-	description string            // the name presented to users
-	action      action            // the action to be taken with a page in this category
-	weights     map[string]weight // the weight for each rule; the key is the canonical form of the rule
+	name        string          // the directory name
+	description string          // the name presented to users
+	action      action          // the action to be taken with a page in this category
+	weights     map[rule]weight // the weight for each rule
 }
 
 var categories []*category
@@ -69,7 +69,7 @@ func loadCategories(dirname string) {
 // loadCategory loads the configuration for one category
 func loadCategory(dirname string) (c *category, err error) {
 	c = new(category)
-	c.weights = make(map[string]weight)
+	c.weights = make(map[rule]weight)
 	c.name = filepath.Base(dirname)
 	c.description = c.name
 
@@ -133,7 +133,7 @@ func loadCategory(dirname string) (c *category, err error) {
 			if r.t == defaultRule {
 				defaultWeight = w.points
 			} else {
-				c.weights[r.String()] = w
+				c.weights[r] = w
 			}
 		}
 	}
@@ -144,11 +144,11 @@ func loadCategory(dirname string) (c *category, err error) {
 // score returns c's score for a page that matched
 // the rules in tally. The keys are the rule names, and the values
 // are the counts of how many times each rule was matched.
-func (c *category) score(tally map[string]int) int {
+func (c *category) score(tally map[rule]int) int {
 	total := 0
 	weights := c.weights
-	for rule, count := range tally {
-		w := weights[rule]
+	for r, count := range tally {
+		w := weights[r]
 		p := w.points * count
 		if w.maxPoints != 0 && (p > 0 && p > w.maxPoints || p < 0 && p < w.maxPoints) {
 			p = w.maxPoints
@@ -159,7 +159,7 @@ func (c *category) score(tally map[string]int) int {
 }
 
 // categoryScores returns a map containing a page's score for each category.
-func categoryScores(tally map[string]int) map[string]int {
+func categoryScores(tally map[rule]int) map[string]int {
 	if len(tally) == 0 {
 		return nil
 	}

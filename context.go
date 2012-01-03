@@ -13,7 +13,7 @@ type context struct {
 	user        string         // the IP address or user name of the client
 	content     []byte         // the content of the page
 	contentType string         // the page's MIME type as declared
-	tally       map[string]int // count of matches for each rule
+	tally       map[rule]int   // count of matches for each rule
 	scores      map[string]int // score for each category
 	blocked     []string       // categories that cause the page to be blocked
 	action      action         // action to take for the page

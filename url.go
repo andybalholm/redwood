@@ -12,15 +12,15 @@ import (
 // A regexMap is a map from rules to compiled regexes,
 // except that some are stored as plain strings to search for instead.
 type regexMap struct {
-	regexes map[string]*regexp.Regexp
-	strings map[string]string
+	regexes map[rule]*regexp.Regexp
+	strings map[rule]string
 }
 
 func newRegexMap() *regexMap {
-	return &regexMap{make(map[string]*regexp.Regexp), make(map[string]string)}
+	return &regexMap{make(map[rule]*regexp.Regexp), make(map[rule]string)}
 }
 
-func (rm *regexMap) findMatches(s string, tally map[string]int) {
+func (rm *regexMap) findMatches(s string, tally map[rule]int) {
 	for rule, re := range rm.regexes {
 		if re.MatchString(s) {
 			tally[rule] = 1
@@ -33,31 +33,31 @@ func (rm *regexMap) findMatches(s string, tally map[string]int) {
 	}
 }
 
-// addRule adds a rule to the map, where rule is the rule name,
-// and s is the actual regex text.
-func (rm *regexMap) addRule(rule, s string) {
-	if _, alreadyHave := rm.regexes[rule]; alreadyHave {
+// addRule adds a rule to the map.
+func (rm *regexMap) addRule(r rule) {
+	if _, alreadyHave := rm.regexes[r]; alreadyHave {
 		return
 	}
-	if _, alreadyHave := rm.strings[rule]; alreadyHave {
+	if _, alreadyHave := rm.strings[r]; alreadyHave {
 		return
 	}
 
+	s := r.content
 	if s == regexp.QuoteMeta(s) {
-		rm.strings[rule] = s
+		rm.strings[r] = s
 		return
 	}
 
 	re, err := regexp.Compile(s)
 	if err != nil {
-		log.Printf("Error parsing URL regular expression %s: %v", rule, err)
+		log.Printf("Error parsing URL regular expression %s: %v", r, err)
 		return
 	}
-	rm.regexes[rule] = re
+	rm.regexes[r] = re
 }
 
 type URLMatcher struct {
-	fragments    map[string]bool // a set of domain or domain+path URL fragments to test against
+	fragments    map[string]rule // a set of domain or domain+path URL fragments to test against
 	regexes      *regexMap       // to match whole URL
 	hostRegexes  *regexMap       // to match hostname only
 	pathRegexes  *regexMap
@@ -66,7 +66,7 @@ type URLMatcher struct {
 
 func newURLMatcher() *URLMatcher {
 	m := new(URLMatcher)
-	m.fragments = make(map[string]bool)
+	m.fragments = make(map[string]rule)
 	m.regexes = newRegexMap()
 	m.hostRegexes = newRegexMap()
 	m.pathRegexes = newRegexMap()
@@ -75,40 +75,26 @@ func newURLMatcher() *URLMatcher {
 }
 
 // AddRule adds a rule to the matcher (unless it's already there).
-func (m *URLMatcher) AddRule(rule string) {
-	if rule[0] == '/' {
-		// regular expression
-		scopeChar := rule[len(rule)-1] // suffix to indicate regex scope, or '/' if no suffix
-
-		var s string
-		if scopeChar == '/' {
-			s = rule[1 : len(rule)-1]
-		} else {
-			s = rule[1 : len(rule)-2]
-		}
-
-		switch scopeChar {
-		case '/':
-			m.regexes.addRule(rule, s)
-		case 'h':
-			m.hostRegexes.addRule(rule, s)
-		case 'p':
-			m.pathRegexes.addRule(rule, s)
-		case 'q':
-			m.queryRegexes.addRule(rule, s)
-		}
-
-		return
+func (m *URLMatcher) AddRule(r rule) {
+	switch r.t {
+	case urlMatch:
+		m.fragments[r.content] = r
+	case urlRegex:
+		m.regexes.addRule(r)
+	case hostRegex:
+		m.hostRegexes.addRule(r)
+	case pathRegex:
+		m.pathRegexes.addRule(r)
+	case queryRegex:
+		m.queryRegexes.addRule(r)
 	}
-
-	m.fragments[rule] = true
 }
 
 // MatchingRules returns a list of the rules that u matches.
 // For consistency with phrase matching, it is a map with rules for keys
 // and with all values equal to 1.
-func (m *URLMatcher) MatchingRules(u *url.URL) map[string]int {
-	result := make(map[string]int)
+func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
+	result := make(map[rule]int)
 
 	host := strings.ToLower(u.Host)
 	path := strings.ToLower(u.Path)
@@ -127,8 +113,8 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[string]int {
 	// Test for matches of the host and of the domains it belongs to.
 	s := host
 	for {
-		if m.fragments[s] {
-			result[s] = 1
+		if r, ok := m.fragments[s]; ok {
+			result[r] = 1
 		}
 		dot := strings.Index(s, ".")
 		if dot == -1 {
@@ -140,8 +126,8 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[string]int {
 	// Test for matches with the path.
 	s = host + path
 	for {
-		if m.fragments[s] {
-			result[s] = 1
+		if r, ok := m.fragments[s]; ok {
+			result[r] = 1
 		}
 		slash := strings.LastIndex(s[:len(s)-1], "/")
 		if slash == -1 {

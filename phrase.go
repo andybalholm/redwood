@@ -2,18 +2,14 @@ package main
 
 // content phrase matching, using the Aho-Corasick algorithm
 
-import (
-	"fmt"
-)
-
 func init() {
 	phraseTrie[0].children = make([]int, 256)
 }
 
 // A phraseNode is a node in the trie for scanning for phrases.
 type phraseNode struct {
-	match    string // the phrase rule (still in angle brackets) matched at this point, if any
-	children []int  // array indexes to continue searching at (256 elements, one for each possible next byte)
+	match    rule  // the phrase rule matched at this point, if any
+	children []int // array indexes to continue searching at (256 elements, one for each possible next byte)
 
 	// fallback is the index of the phraseNode that has the longest suffix in common with this node.
 	// It is set by findFallbackNodes.
@@ -26,13 +22,8 @@ type phraseNode struct {
 var phraseTrie = make([]phraseNode, 1, 1000)
 
 // addPhrase adds a phrase to the phraseTrie.
-// It should still have the angle brackets around it from the config file.
-func addPhrase(p string) {
-	if len(p) < 2 || p[0] != '<' || p[len(p)-1] != '>' {
-		panic(fmt.Errorf(`The phrase "%s" is not in angle brackets.`, p))
-	}
-
-	s := p[1 : len(p)-1]
+func addPhrase(p rule) {
+	s := p.content
 	n := 0 // index into phraseTrie
 	for i := 0; i < len(s); i++ {
 		if phraseTrie[n].children == nil {
@@ -85,12 +76,12 @@ func findFallbackNodes(node int, text []byte) {
 // A phraseScanner scans input one byte at a time
 // and counts occurrences of phrases.
 type phraseScanner struct {
-	state int            // the current node in the phraseTrie
-	tally map[string]int // the counts of the phrases
+	state int          // the current node in the phraseTrie
+	tally map[rule]int // the counts of the phrases
 }
 
 func newPhraseScanner() *phraseScanner {
-	return &phraseScanner{tally: make(map[string]int)}
+	return &phraseScanner{tally: make(map[rule]int)}
 }
 
 // scanByte updates ps for one byte of input.
@@ -112,7 +103,7 @@ func (ps *phraseScanner) scanByte(c byte) {
 
 	// See if any phrases have been matched.
 	for n := newState; n != 0; n = phraseTrie[n].fallback {
-		if m := phraseTrie[n].match; m != "" {
+		if m := phraseTrie[n].match; m.t != defaultRule {
 			ps.tally[m]++
 		}
 	}

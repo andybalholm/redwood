@@ -3,6 +3,7 @@
 \.out$
 \.6$
 ^redwood$
+^redwood-filter$
 ~$
 \.orig$
 \.log$

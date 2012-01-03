@@ -118,45 +118,10 @@ func loadCategory(dirname string) (c *category, err error) {
 				break
 			}
 
-			var rule string
-
-			switch line[0] {
-			case '/':
-				// regular expression
-				slash := strings.LastIndex(line, "/")
-				if slash == 0 {
-					log.Printf("Unmatched slash in line %d of %s", cr.LineNo, list)
-					continue
-				}
-				rule = line[:slash+1]
-				if len(line) > slash+1 {
-					if c := line[slash+1]; c == 'h' || c == 'p' || c == 'q' {
-						rule = line[:slash+2]
-					}
-				}
-			case '<':
-				// content phrase
-				bracket := strings.LastIndex(line, ">")
-				if bracket == -1 {
-					log.Printf("Unmatched '<' in line %d of %s", cr.LineNo, list)
-					continue
-				}
-				rule = line[:bracket+1]
-			default:
-				// URL match
-				space := strings.Index(line, " ")
-				if space == -1 {
-					rule = line
-				} else {
-					rule = line[:space]
-				}
-			}
-
-			line = line[len(rule):]
-			if rule[0] == '<' {
-				rule = "<" + wordString(rule[1:len(rule)-1]) + ">"
-			} else {
-				rule = strings.ToLower(rule)
+			r, line, err := parseRule(line)
+			if err != nil {
+				log.Printf("Error in line %d of %s: %s", cr.LineNo, list, err)
+				continue
 			}
 
 			var w weight
@@ -165,10 +130,10 @@ func loadCategory(dirname string) (c *category, err error) {
 				w.points = defaultWeight
 			}
 
-			if rule == "default" {
+			if r.t == defaultRule {
 				defaultWeight = w.points
 			} else {
-				c.weights[rule] = w
+				c.weights[r.String()] = w
 			}
 		}
 	}

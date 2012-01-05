@@ -59,7 +59,7 @@ func main() {
 		}
 	}()
 
-	http.Handle("/", http.FileServer(http.Dir(staticFilesDir)))
+	http.Handle("/", http.FileServer(http.Dir(*staticFilesDir)))
 	loadCGIHandlers()
 
 	icap.HandleFunc("/reqmod", handleRequest)
@@ -68,7 +68,7 @@ func main() {
 }
 
 func loadCGIHandlers() {
-	dir, err := os.Open(cgiBin)
+	dir, err := os.Open(*cgiBin)
 	if err != nil {
 		log.Println("Could not open CGI directory:", err)
 		return
@@ -85,7 +85,7 @@ func loadCGIHandlers() {
 		if mode := fi.Mode(); (mode&os.ModeType == 0) && (mode.Perm()&0100 != 0) {
 			// It's an executable file.
 			name := "/" + fi.Name()
-			scriptPath := filepath.Join(cgiBin, fi.Name())
+			scriptPath := filepath.Join(*cgiBin, fi.Name())
 			http.Handle(name, &cgi.Handler{
 				Path: scriptPath,
 			})

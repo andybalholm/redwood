@@ -209,7 +209,7 @@ func blockedCategories(scores map[string]int) []string {
 		}
 	}
 
-	if totalBlocked < blockThreshold || len(blocked) == 0 {
+	if totalBlocked < *blockThreshold || len(blocked) == 0 {
 		return nil
 	}
 

@@ -5,7 +5,7 @@
 
 \title{Specification for Redwood}
 \author{Andy Balholm}
-\date{November 28, 2011}
+\date{January 5, 2012}
 
 \begin{document}
 
@@ -37,52 +37,36 @@ Redwood's filtering is based on URLs and also, where applicable, on page content
 Content filtering is applied to all files except those whose extensions are 
 on a list of types that are configured to be skipped.
 
-Content modification will not be supported in the initial release of Redwood, 
-but it may be added at some future time.
-
 \section{Configuration File}
 
 By default, the main configuration file is located at \verb"/etc/redwood/redwood.conf". 
 This path can be changed by using the \verb"-c" command line switch. 
-The configuration file format is a simplified form of YAML.
+Configuration options may be specified either in the configuration file or as command-line
+switches. In the configuration file, they may be specified either as
+\verb"key = value" or as \verb"key value". Comments are delimited with \verb"#". 
+Values may be enclosed in double quotes, with the usual backslash escapes.
 
 An example configuration file:
 
 \begin{verbatim}
 # the template for the block page
-blockpage: /etc/redwood/block.html
+blockpage "/etc/redwood/block.html"
 
 # directory of static files to be served under http://gateway/
-staticfilesdir: /etc/redwood/static
+static-files-dir /etc/redwood/static
 
 # directory of CGI scripts to run under http://gateway/
-cgibin: /etc/redwood/cgi
+cgi-bin /etc/redwood/cgi
 
 # the directory containing the category information
-categories: /etc/redwood/categories
+categories /etc/redwood/categories
 
 # the minimum total score from all blocked categories needed 
 # to block a page
-threshold: 275
+threshold 275
 
-# filter groups allow different people to have different filtering settings
-filtergroups:
-  mechanics:
-    ip:
-      - 10.1.10.108
-      - 10.1.10.155
-    allow:
-      - mechanical
-      - autobody
-    ignore:
-      - racing
-  designers:
-    users:
-      - andy
-      - dave
-    allow:
-      - stockphoto
-      - camera
+# how many threads to run as on a multicore system
+cores=4
 \end{verbatim}
 
 \section{Categories}

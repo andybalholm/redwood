@@ -36,6 +36,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 		c.scanURL()
 		c.content = responseContent(c.resp)
+		c.pruneContent()
 		c.scanContent()
 
 		if c.action == BLOCK {

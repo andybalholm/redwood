@@ -115,13 +115,8 @@ func decoderForContentType(t string) mahonia.Decoder {
 	t = strings.ToLower(t)
 	var result mahonia.Decoder
 
-	i := strings.Index(t, "charset=")
-	if i != -1 {
-		charset := t[i+len("charset="):]
-		i = strings.Index(charset, ";")
-		if i != -1 {
-			charset = charset[:i]
-		}
+	charset := charsetFromContentType(t)
+	if charset != "" {
 		result = mahonia.NewDecoder(charset)
 		if result == nil {
 			log.Println("Unknown charset:", charset)
@@ -137,4 +132,18 @@ func decoderForContentType(t string) mahonia.Decoder {
 	}
 
 	return result
+}
+
+func charsetFromContentType(t string) string {
+	i := strings.Index(t, "charset=")
+	if i == -1 {
+		return ""
+	}
+
+	charset := t[i+len("charset="):]
+	i = strings.Index(charset, ";")
+	if i != -1 {
+		charset = charset[:i]
+	}
+	return strings.TrimSpace(charset)
 }

@@ -66,9 +66,16 @@ func runURLTest(u string) {
 	fmt.Println()
 	c.resp = res
 	c.content = responseContent(res)
+	c.contentType = c.resp.Header.Get("Content-Type")
 	if !shouldScanPhrases(c.resp, c.content) {
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
 		return
+	}
+
+	c.pruneContent()
+	if c.modified {
+		fmt.Println("Performed phrase pruning.")
+		fmt.Println()
 	}
 
 	c.scanContent()

@@ -5,7 +5,7 @@
 
 \title{Specification for Redwood}
 \author{Andy Balholm}
-\date{January 5, 2012}
+\date{January 6, 2012}
 
 \begin{document}
 
@@ -34,8 +34,7 @@ stating that the request is not allowed (optionally giving the reason
 and providing a link for filing an overblock request).
 
 Redwood's filtering is based on URLs and also, where applicable, on page content. 
-Content filtering is applied to all files except those whose extensions are 
-on a list of types that are configured to be skipped.
+Content filtering is applied to all files except binary files and CSS files.
 
 \section{Configuration File}
 
@@ -67,6 +66,9 @@ threshold 275
 
 # how many threads to run as on a multicore system
 cores=4
+
+# file configuring the content pruning
+content-pruning /etc/redwood/pruning.conf
 \end{verbatim}
 
 \section{Categories}
@@ -176,6 +178,26 @@ with long, more-specific ones, e.g.:
 
 If a page is blocked based on its URL (i.e. by URL matching and/or URL regular expressions), 
 its content will not be evaluated because the page will not be downloaded.
+
+\section{Content Pruning}
+
+Between downloading a page and scanning its content for phrases, 
+Redwood can perform ``content pruning.'' 
+This is scanning the parsed HTML tree for elements matching certain criteria,
+and deleting those elements and their children.
+
+Content pruning is controlled by a configuration file.
+Each line of the file contains a URL-matching or URL-regular-expression rule
+to specify what site or page the pruning applies to, 
+and a CSS selector to specify what elements to delete.
+
+\begin{verbatim}
+# Craigslist personals and discussion forums
+craigslist.org div#ppp, div#forums, option[value=ppp]
+
+# Bing ad sidebar
+bing.com div.sb_adsNv2
+\end{verbatim}
 
 \section{Test Mode}
 

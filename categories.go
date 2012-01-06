@@ -3,6 +3,7 @@ package main
 // storage and loading of categories
 
 import (
+	"flag"
 	"fmt"
 	"github.com/kylelemons/go-gypsy/yaml"
 	"log"
@@ -10,6 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+var categoriesDir = flag.String("categories", "/etc/redwood/categories", "path to configuration files for categories")
+
+// minimum total bad points to block a page
+var blockThreshold = flag.Int("threshold", 0, "minimum score from blocked categories to block a page")
 
 // A weight contains the point values assigned to a rule+category combination.
 type weight struct {
@@ -38,8 +44,8 @@ var categories []*category
 var categoryDescriptions = make(map[string]string) // Maps names to descriptions.
 
 // loadCategories loads the category configuration files
-func loadCategories(dirname string) {
-	dir, err := os.Open(dirname)
+func loadCategories() {
+	dir, err := os.Open(*categoriesDir)
 	if err != nil {
 		log.Print("Could not open category directory: ", err)
 		return
@@ -54,7 +60,7 @@ func loadCategories(dirname string) {
 
 	for _, fi := range info {
 		if name := fi.Name(); fi.IsDir() && name[0] != '.' {
-			categoryPath := filepath.Join(dirname, name)
+			categoryPath := filepath.Join(*categoriesDir, name)
 			c, err := loadCategory(categoryPath)
 			if err == nil {
 				categories = append(categories, c)
@@ -64,6 +70,8 @@ func loadCategories(dirname string) {
 			}
 		}
 	}
+
+	collectRules()
 }
 
 // loadCategory loads the configuration for one category
@@ -139,6 +147,21 @@ func loadCategory(dirname string) (c *category, err error) {
 	}
 
 	return c, nil
+}
+
+// collectRules collects the rules from all the categories and adds
+// them to URLRules and phraseRules.
+func collectRules() {
+	for _, c := range categories {
+		for rule, _ := range c.weights {
+			if rule.t == contentPhrase {
+				addPhrase(rule)
+			} else {
+				URLRules.AddRule(rule)
+			}
+		}
+	}
+	findFallbackNodes(0, nil)
 }
 
 // score returns c's score for a page that matched

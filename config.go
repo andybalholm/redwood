@@ -10,30 +10,20 @@ import (
 	"io"
 	"log"
 	"os"
-	"path"
 	"strings"
 )
 
-// minimum total bad points to block a page
-var blockThreshold = flag.Int("threshold", 0, "minimum score from blocked categories to block a page")
-
-var categoriesDir = flag.String("categories", "", "path to configuration files for categories")
-
-// locations for files for built-in web server
-var staticFilesDir = flag.String("static-files-dir", "", "path to static files for built-in web server")
-var cgiBin = flag.String("cgi-bin", "", "path to CGI files for built-in web server")
-var blockPage = flag.String("blockpage", "", "path to template for block page")
+var configFile = newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", readConfigFile)
 
 var URLRules = newURLMatcher()
 
 // readConfigFile reads the specified configuration file.
 // For each line of the form "key value" or "key = value", it sets the flag
 // variable named key to a value of value.
-func readConfigFile(filename string) {
+func readConfigFile(filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
-		log.Println("Error reading config file:", err)
-		return
+		return fmt.Errorf("could not open %s: %s", filename, err)
 	}
 	defer f.Close()
 	r := bufio.NewReader(f)
@@ -87,32 +77,30 @@ func readConfigFile(filename string) {
 			log.Println("Could not set", key, "to", value, ":", err)
 		}
 	}
+
+	return nil
 }
 
 func loadConfiguration() {
-	readConfigFile(*configFile)
-
-	configDir, _ := path.Split(*configFile)
-
-	if *blockPage == "" {
-		*blockPage = path.Join(configDir, "block.html")
+	// Read the default configuration file if none is specified with -c
+	specified := false
+	for _, arg := range os.Args {
+		if arg == "-c" || arg == "--c" {
+			specified = true
+			break
+		}
 	}
-	loadBlockPageTemplate(*blockPage)
-
-	if *staticFilesDir == "" {
-		*staticFilesDir = path.Join(configDir, "static/")
-	}
-
-	if *cgiBin == "" {
-		*cgiBin = path.Join(configDir, "cgi")
+	if !specified {
+		err := readConfigFile("/etc/redwood/redwood.conf")
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
-	if *categoriesDir == "" {
-		*categoriesDir = path.Join(configDir, "categories")
-	}
-	loadCategories(*categoriesDir)
+	flag.Parse()
 
-	collectRules()
+	loadBlockPage()
+	loadCategories()
 }
 
 // configReader is a wrapper for reading a configuration file a line at a time,
@@ -157,17 +145,29 @@ func (cr *configReader) ReadLine() (line string, err error) {
 	panic("unreachable")
 }
 
-// collectRules collects the rules from all the categories and adds
-// them to URLRules and phraseRules.
-func collectRules() {
-	for _, c := range categories {
-		for rule, _ := range c.weights {
-			if rule.t == contentPhrase {
-				addPhrase(rule)
-			} else {
-				URLRules.AddRule(rule)
-			}
-		}
+// an activeFlag runs a function when the flag's value is set.
+type activeFlag struct {
+	f     func(string) error
+	value string
+}
+
+func (af *activeFlag) String() string {
+	return af.value
+}
+
+func (af *activeFlag) Set(s string) error {
+	err := af.f(s)
+	if err == nil {
+		af.value = s
 	}
-	findFallbackNodes(0, nil)
+	return err
+}
+
+func newActiveFlag(name, value, usage string, f func(string) error) flag.Value {
+	af := &activeFlag{
+		f:     f,
+		value: value,
+	}
+	flag.Var(af, name, usage)
+	return af
 }

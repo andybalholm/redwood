@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.google.com/p/go-icap"
+	"flag"
 	"html/template"
 	"log"
 	"net/http"
@@ -11,11 +12,13 @@ import (
 
 // Functions for displaying block pages.
 
+var blockPage = flag.String("blockpage", "/etc/redwood/block.html", "path to template for block page")
+
 var blockTemplate *template.Template
 
-func loadBlockPageTemplate(path string) {
+func loadBlockPage() {
 	var err error
-	blockTemplate, err = template.ParseFiles(path)
+	blockTemplate, err = template.ParseFiles(*blockPage)
 	if err != nil {
 		log.Println("Could not load block page template:", err)
 	}

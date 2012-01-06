@@ -83,7 +83,7 @@ func parseRule(s string) (r rule, leftover string, err error) {
 			return rule{}, s, errors.New("unmatched '<'")
 		}
 		r.content = wordString(s[1:bracket])
-		s = s[:bracket+1]
+		s = s[bracket+1:]
 	default:
 		r.t = urlMatch
 		space := strings.Index(s, " ")

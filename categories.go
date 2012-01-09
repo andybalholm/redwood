@@ -32,6 +32,18 @@ const (
 	ALLOW  action = 1
 )
 
+func (a action) String() string {
+	switch a {
+	case BLOCK:
+		return "block"
+	case IGNORE:
+		return "ignore"
+	case ALLOW:
+		return "allow"
+	}
+	return "<invalid action>"
+}
+
 // A category represents one of the categories of filtering rules.
 type category struct {
 	name        string          // the directory name

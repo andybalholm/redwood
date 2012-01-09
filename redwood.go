@@ -48,10 +48,15 @@ func main() {
 						pprof.StopCPUProfile()
 					}
 					os.Exit(0)
+				case syscall.SIGHUP:
+					// Close and reopen the log file.
+					logResetChan <- true
 				}
 			}
 		}
 	}()
+
+	go accessLog()
 
 	startWebServer()
 

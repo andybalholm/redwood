@@ -3,7 +3,6 @@ package main
 import (
 	"code.google.com/p/go-icap"
 	"fmt"
-	"log"
 	"time"
 )
 
@@ -38,12 +37,12 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 
 		if c.action == BLOCK {
 			showBlockPage(w, c.blocked, c.URL, c.user)
-			log.Println("BLOCK URL:", c.URL)
+			logChan <- &c
 			return
 		}
 
 		w.WriteHeader(204, nil, false)
-		log.Println("Allow URL:", c.URL)
+		logChan <- &c
 
 	default:
 		w.WriteHeader(405, nil, false)

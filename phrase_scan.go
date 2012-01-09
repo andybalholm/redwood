@@ -112,7 +112,6 @@ func responseContent(res *http.Response) []byte {
 	defer r.Close()
 
 	if res.Header.Get("Content-Encoding") == "gzip" {
-		log.Println("Using gzip decoder.")
 		gz, err := gzip.NewReader(r)
 		if err != nil {
 			panic(fmt.Errorf("could not create gzip decoder: %s", err))

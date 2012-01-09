@@ -2,7 +2,6 @@ package main
 
 import (
 	"code.google.com/p/go-icap"
-	"log"
 )
 
 // Response-modification functions.
@@ -30,7 +29,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		if !shouldScanPhrases(req.Response, req.Preview) {
 			c.action = IGNORE
 			w.WriteHeader(204, nil, false)
-			log.Println("Don't scan content:", req.Request.URL)
+			logChan <- &c
 			return
 		}
 
@@ -41,7 +40,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 		if c.action == BLOCK {
 			showBlockPage(w, c.blocked, c.URL, c.user)
-			log.Println("BLOCK content:", c.URL)
+			logChan <- &c
 			return
 		}
 
@@ -53,7 +52,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		}
 		rw.WriteHeader(req.Response.StatusCode)
 		rw.Write(c.content)
-		log.Println("Allow content:", c.URL)
+		logChan <- &c
 
 	default:
 		w.WriteHeader(405, nil, false)

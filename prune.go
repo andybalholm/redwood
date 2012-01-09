@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"code.google.com/p/cascadia"
+	"code.google.com/p/mahonia"
 	"fmt"
 	"html"
 	"io"
@@ -19,7 +20,7 @@ var pruneActions = make(map[rule]cascadia.Selector)
 
 var pruneConfig = newActiveFlag("content-pruning", "", "path to config file for content pruning", loadPruningConfig)
 
-var httpEquivContentType = cascadia.MustCompile(`meta[http-equiv="Content-Type"]`)
+var metaCharsetSelector = cascadia.MustCompile(`meta[charset], meta[http-equiv="Content-Type"]`)
 
 func loadPruningConfig(filename string) error {
 	f, err := os.Open(filename)
@@ -75,17 +76,18 @@ func (c *context) pruneContent() {
 	}
 
 	var r io.Reader = bytes.NewBuffer(c.content)
-	// TODO: encoding detection
-	/*charset := charsetFromContentType(c.contentType)
-	if charset == "" {
-		charset = "windows-1252"
+	if c.charset == "" {
+		c.findCharset()
 	}
-	if !strings.EqualFold(charset, "utf-8") {
-		d := mahonia.NewDecoder(charset)
-		if d != nil {
+
+	if c.charset != "utf-8" {
+		d := mahonia.NewDecoder(c.charset)
+		if d == nil {
+			log.Printf("Unsupported charset (%s) on %s", c.charset, c.URL)
+		} else {
 			r = d.NewReader(r)
 		}
-	}*/
+	}
 
 	tree, err := html.Parse(r)
 	if err != nil {
@@ -105,7 +107,7 @@ func (c *context) pruneContent() {
 	}
 
 	// Mark the new content as having a charset of UTF-8.
-	prune(tree, httpEquivContentType)
+	prune(tree, metaCharsetSelector)
 	c.contentType = "text/html; charset=utf-8"
 	c.resp.Header.Set("Content-Type", c.contentType)
 

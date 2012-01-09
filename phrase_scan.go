@@ -45,10 +45,23 @@ func shouldScanPhrases(r *http.Response, preview []byte) bool {
 	return strings.Contains(contentType, "text")
 }
 
-// phrasesInResponse scans the content of a document for phrases,
-// and returns a map of phrases and counts.
-func phrasesInResponse(content []byte, contentType string) map[rule]int {
-	decode := decoderForContentType(contentType)
+// scanContent scans the content of a document for phrases,
+// and updates its counts and scores.
+func (c *context) scanContent() {
+	if c.charset == "" {
+		c.findCharset()
+	}
+	decode := mahonia.NewDecoder(c.charset)
+	if decode == nil {
+		log.Printf("Unsupported charset (%s) on %s", c.charset, c.URL)
+		decode = mahonia.NewDecoder("utf-8")
+	}
+	if strings.Contains(c.contentType, "html") {
+		decode = mahonia.FallbackDecoder(mahonia.EntityDecoder(), decode)
+	}
+
+	content := c.content
+
 	ps := newPhraseScanner()
 	ps.scanByte(' ')
 	prevRune := ' '
@@ -85,7 +98,11 @@ loop:
 	}
 
 	ps.scanByte(' ')
-	return ps.tally
+
+	for rule, n := range ps.tally {
+		c.tally[rule] += n
+	}
+	c.calculateScores()
 }
 
 // responseContent reads the body of an HTTP response into a slice of bytes.
@@ -109,41 +126,4 @@ func responseContent(res *http.Response) []byte {
 	// Deliberately ignore the error. ebay.com searches produce errors, but work.
 
 	return content
-}
-
-func decoderForContentType(t string) mahonia.Decoder {
-	t = strings.ToLower(t)
-	var result mahonia.Decoder
-
-	charset := charsetFromContentType(t)
-	if charset != "" {
-		result = mahonia.NewDecoder(charset)
-		if result == nil {
-			log.Println("Unknown charset:", charset)
-		}
-	}
-
-	if result == nil {
-		result = mahonia.FallbackDecoder(mahonia.NewDecoder("UTF-8"), mahonia.NewDecoder("windows-1252"))
-	}
-
-	if strings.Contains(t, "html") {
-		result = mahonia.FallbackDecoder(mahonia.EntityDecoder(), result)
-	}
-
-	return result
-}
-
-func charsetFromContentType(t string) string {
-	i := strings.Index(t, "charset=")
-	if i == -1 {
-		return ""
-	}
-
-	charset := t[i+len("charset="):]
-	i = strings.Index(charset, ";")
-	if i != -1 {
-		charset = charset[:i]
-	}
-	return strings.TrimSpace(charset)
 }

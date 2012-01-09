@@ -59,11 +59,3 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		w.WriteHeader(405, nil, false)
 	}
 }
-
-func (c *context) scanContent() {
-	pageTally := phrasesInResponse(c.content, c.contentType)
-	for rule, n := range pageTally {
-		c.tally[rule] += n
-	}
-	c.calculateScores()
-}

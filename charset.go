@@ -90,7 +90,7 @@ func charsetFromContentType(t string) string {
 		if i == -1 {
 			return ""
 		}
-		t = t[len("charset"):]
+		t = t[i+len("charset"):]
 		t = strings.TrimLeft(t, " \t\r\n\f")
 		if !strings.HasPrefix(t, "=") {
 			continue
@@ -125,8 +125,8 @@ func charsetFromContentType(t string) string {
 var compatibilityEncodings = map[string]string{
 	//	"euc-kr":         "windows-949",
 	//	"euc-jp":         "cp51932",
-	//	"gb2312":         "gbk",
-	//	"gb_2312-80":     "gbk",
+	"gb2312":     "gbk",
+	"gb_2312-80": "gbk",
 	//	"iso-2022-jp":    "cp50220",
 	"iso-8859-1":  "windows-1252",
 	"iso-8859-9":  "windows-1254",

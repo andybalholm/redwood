@@ -22,7 +22,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		c := context{
 			URL:         req.Request.URL,
 			resp:        req.Response,
-			user:        req.Header.Get("X-Client-IP"),
+			user:        icapUser(req),
 			contentType: req.Response.Header.Get("Content-Type"),
 		}
 

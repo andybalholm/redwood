@@ -30,7 +30,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 
 		c := context{
 			URL:  req.Request.URL,
-			user: req.Header.Get("X-Client-IP"),
+			user: icapUser(req),
 		}
 
 		c.scanURL()
@@ -53,4 +53,14 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 func (c *context) scanURL() {
 	c.tally = URLRules.MatchingRules(c.URL)
 	c.calculateScores()
+}
+
+// icapUser returns the username from the X-Client-Username header,
+// or if that is blank, the IP address from X-Client-IP.
+func icapUser(r *icap.Request) string {
+	u := r.Header.Get("X-Client-Username")
+	if u != "" {
+		return u
+	}
+	return r.Header.Get("X-Client-IP")
 }

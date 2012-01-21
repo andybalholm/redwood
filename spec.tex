@@ -69,6 +69,9 @@ cores=4
 
 # file configuring the content pruning
 content-pruning /etc/redwood/pruning.conf
+
+# path to the access log
+access-log /var/log/redwood/access.log
 \end{verbatim}
 
 \section{Categories}
@@ -206,5 +209,20 @@ Instead, it evaluates the URL given as an argument after the switch.
 It prints detailed debugging information about how the URL and its content would be rated
 if that page were requested in normal operation: how many times each rule matches, 
 what the score is in each category, which categories would block the page, etc.
+
+\section{Log Files}
+
+Redwood has two categories of messages that can be logged:
+general diagnostic messages, and a record of ICAP requests processed (called the access log).
+The general diagnostic messages are sent to standard error by default,
+and may be redirected to a file using normal shell redirection.
+The access log is in CSV format, 
+and goes to standard output by default.
+It can be sent to a file by including the \verb"access-log" directive in Redwood's configuration file.
+
+The access log has the following fields: time, username or IP address, 
+action (allow, block, or ignore), URL, ICAP mode (REQMOD [request] or RESPMOD [response]), 
+content type, whether the content was modified by Redwood, which rules matched (and how many times), 
+the score for each category, and the list of categories that caused the page to be blocked (if it was).
 
 \end{document}

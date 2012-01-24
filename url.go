@@ -138,3 +138,12 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 
 	return result
 }
+
+// fixConnectURL takes a "URL" that is just a host and port, such as from a
+// CONNECT request, and makes it useable.
+func fixConnectURL(u *url.URL) *url.URL {
+	if u.Host == "" {
+		return &url.URL{Host: u.String()}
+	}
+	return u
+}

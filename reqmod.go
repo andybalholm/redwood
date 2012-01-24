@@ -29,7 +29,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		c := context{
-			URL:  req.Request.URL,
+			URL:  fixConnectURL(req.Request.URL),
 			user: icapUser(req),
 		}
 

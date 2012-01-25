@@ -28,15 +28,12 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
-		c := context{
-			URL:  fixConnectURL(req.Request.URL),
-			user: icapUser(req),
-		}
+		c := context{req: req}
 
 		c.scanURL()
 
 		if c.action == BLOCK {
-			showBlockPage(w, c.blocked, c.URL, c.user)
+			showBlockPage(w, c.blocked, c.URL(), c.user())
 			logChan <- &c
 			return
 		}
@@ -51,16 +48,6 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 
 // scanURL calculates scores and an action based on the request's URL.
 func (c *context) scanURL() {
-	c.tally = URLRules.MatchingRules(c.URL)
+	c.tally = URLRules.MatchingRules(c.URL())
 	c.calculateScores()
-}
-
-// icapUser returns the username from the X-Client-Username header,
-// or if that is blank, the IP address from X-Client-IP.
-func icapUser(r *icap.Request) string {
-	u := r.Header.Get("X-Client-Username")
-	if u != "" {
-		return u
-	}
-	return r.Header.Get("X-Client-IP")
 }

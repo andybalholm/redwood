@@ -13,11 +13,9 @@ import (
 	"unicode/utf8"
 )
 
-// shouldScanPhrases returns true if Redwood should run a phrase 
-// scan on an HTTP response. preview should be the first bytes of 
-// content.
-func shouldScanPhrases(r *http.Response, preview []byte) bool {
-	contentType := strings.ToLower(r.Header.Get("Content-Type"))
+// shouldScanPhrases returns true if Redwood should run a phrase scan.
+func (c *context) shouldScanPhrases() bool {
+	contentType := strings.ToLower(c.contentType())
 	semicolon := strings.Index(contentType, ";")
 	if semicolon != -1 {
 		contentType = contentType[:semicolon]
@@ -33,7 +31,11 @@ func shouldScanPhrases(r *http.Response, preview []byte) bool {
 	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
 		// These types tend to be used for content whose type is unknown,
 		// so we should try to second-guess them.
-		if e := r.Header.Get("Content-Encoding"); e == "" || e == "identity" {
+		if e := c.httpResponse().Header.Get("Content-Encoding"); e == "" || e == "identity" {
+			preview := c.content
+			if preview == nil {
+				preview = c.req.Preview
+			}
 			contentType = http.DetectContentType(preview)
 		}
 	case "application/json", "application/javascript", "application/x-javascript":
@@ -53,10 +55,10 @@ func (c *context) scanContent() {
 	}
 	decode := mahonia.NewDecoder(c.charset)
 	if decode == nil {
-		log.Printf("Unsupported charset (%s) on %s", c.charset, c.URL)
+		log.Printf("Unsupported charset (%s) on %s", c.charset, c.URL())
 		decode = mahonia.NewDecoder("utf-8")
 	}
-	if strings.Contains(c.contentType, "html") {
+	if strings.Contains(c.contentType(), "html") {
 		decode = mahonia.FallbackDecoder(mahonia.EntityDecoder(), decode)
 	}
 

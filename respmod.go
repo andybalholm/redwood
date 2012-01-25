@@ -19,14 +19,9 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		w.WriteHeader(200, nil, false)
 
 	case "RESPMOD":
-		c := context{
-			URL:         req.Request.URL,
-			resp:        req.Response,
-			user:        icapUser(req),
-			contentType: req.Response.Header.Get("Content-Type"),
-		}
+		c := context{req: req}
 
-		if !shouldScanPhrases(req.Response, req.Preview) {
+		if !c.shouldScanPhrases() {
 			c.action = IGNORE
 			w.WriteHeader(204, nil, false)
 			logChan <- &c
@@ -34,12 +29,12 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		c.scanURL()
-		c.content = responseContent(c.resp)
+		c.content = responseContent(c.httpResponse())
 		c.pruneContent()
 		c.scanContent()
 
 		if c.action == BLOCK {
-			showBlockPage(w, c.blocked, c.URL, c.user)
+			showBlockPage(w, c.blocked, c.URL(), c.user())
 			logChan <- &c
 			return
 		}

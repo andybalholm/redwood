@@ -1,6 +1,7 @@
 package main
 
 import (
+	"code.google.com/p/go-icap"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,8 +11,6 @@ import (
 
 // runURLTest prints debugging information about how the URL and its content would be rated.
 func runURLTest(u string) {
-	var c context
-
 	URL, err := url.Parse(u)
 	if err != nil {
 		fmt.Println("Could not parse the URL.")
@@ -25,7 +24,14 @@ func runURLTest(u string) {
 		}
 	}
 
-	c.URL = URL
+	c := context {
+		req: &icap.Request{
+			Request: &http.Request {
+				URL: URL,
+			},
+		},
+	}
+
 	fmt.Println("URL:", URL)
 	fmt.Println()
 
@@ -64,10 +70,9 @@ func runURLTest(u string) {
 	}
 
 	fmt.Println()
-	c.resp = res
+	c.req.Response = res
 	c.content = responseContent(res)
-	c.contentType = c.resp.Header.Get("Content-Type")
-	if !shouldScanPhrases(c.resp, c.content) {
+	if !c.shouldScanPhrases() {
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
 		return
 	}

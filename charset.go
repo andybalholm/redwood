@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"html"
+	"exp/html"
 	"strings"
 	"unicode/utf8"
 )
@@ -12,7 +12,8 @@ import (
 // findCharset determines the character encoding to be used to interpret the
 // page's content, and stores it in c.charset.
 func (c *context) findCharset() {
-	cs := charsetFromContentType(c.contentType)
+	ct := c.contentType()
+	cs := charsetFromContentType(ct)
 	content := c.content
 	if len(content) > 1024 {
 		content = content[:1024]
@@ -30,7 +31,7 @@ func (c *context) findCharset() {
 		cs = "utf-8"
 	}
 
-	if cs == "" && (strings.Contains(c.contentType, "html") || c.contentType == "") {
+	if cs == "" && (strings.Contains(ct, "html") || ct == "") {
 		// Look for a <meta> tag giving the encoding.
 		tree, err := html.Parse(bytes.NewBuffer(content))
 		if err == nil {

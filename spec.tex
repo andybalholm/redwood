@@ -5,7 +5,6 @@
 
 \title{Specification for Redwood}
 \author{Andy Balholm}
-\date{January 6, 2012}
 
 \begin{document}
 
@@ -34,7 +33,7 @@ stating that the request is not allowed (optionally giving the reason
 and providing a link for filing an overblock request).
 
 Redwood's filtering is based on URLs and also, where applicable, on page content. 
-Content filtering is applied to all files except binary files and CSS files.
+(By default, content filtering is applied to files whose MIME type starts with \verb"text".)
 
 \section{Configuration File}
 
@@ -72,6 +71,13 @@ content-pruning /etc/redwood/pruning.conf
 
 # path to the access log
 access-log /var/log/redwood/access.log
+
+# Customize which MIME types get filtered.
+mime-allow text/css # Don't filter CSS files.
+mime-filter application/javascript # Filter JS
+mime-filter application/x-javascript
+mime-filter application/json
+mime-block video/x-ms-wmv # Block Windows Media Player video.
 \end{verbatim}
 
 \section{Categories}

@@ -11,13 +11,14 @@ import (
 type context struct {
 	req *icap.Request // the ICAP request that we're dealing with
 
-	content     []byte         // the content of the page
-	charset     string         // the page's character encoding
-	modified    bool           // whether the content was modified
-	tally       map[rule]int   // count of matches for each rule
-	scores      map[string]int // score for each category
-	blocked     []string       // categories that cause the page to be blocked
-	action      action         // action to take for the page
+	content  []byte         // the content of the page
+	mime     string         // the MIME type of the content, after sniffing
+	charset  string         // the page's character encoding
+	modified bool           // whether the content was modified
+	tally    map[rule]int   // count of matches for each rule
+	scores   map[string]int // score for each category
+	blocked  []string       // categories that cause the page to be blocked
+	action   action         // action to take for the page
 }
 
 func (c *context) URL() *url.URL {

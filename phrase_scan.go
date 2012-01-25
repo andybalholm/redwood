@@ -13,40 +13,6 @@ import (
 	"unicode/utf8"
 )
 
-// shouldScanPhrases returns true if Redwood should run a phrase scan.
-func (c *context) shouldScanPhrases() bool {
-	contentType := strings.ToLower(c.contentType())
-	semicolon := strings.Index(contentType, ";")
-	if semicolon != -1 {
-		contentType = contentType[:semicolon]
-	}
-	contentType = strings.TrimSpace(contentType)
-	if !strings.Contains(contentType, "/") {
-		contentType = ""
-	}
-
-	switch contentType {
-	case "text/css":
-		return false
-	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
-		// These types tend to be used for content whose type is unknown,
-		// so we should try to second-guess them.
-		if e := c.httpResponse().Header.Get("Content-Encoding"); e == "" || e == "identity" {
-			preview := c.content
-			if preview == nil {
-				preview = c.req.Preview
-			}
-			contentType = http.DetectContentType(preview)
-		}
-	case "application/json", "application/javascript", "application/x-javascript":
-		// Some sites put their content in JavaScript or JSON, so we need to scan those,
-		// however much we would like not to.
-		return true
-	}
-
-	return strings.Contains(contentType, "text")
-}
-
 // scanContent scans the content of a document for phrases,
 // and updates its counts and scores.
 func (c *context) scanContent() {

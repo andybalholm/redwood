@@ -24,9 +24,9 @@ func runURLTest(u string) {
 		}
 	}
 
-	c := context {
+	c := context{
 		req: &icap.Request{
-			Request: &http.Request {
+			Request: &http.Request{
 				URL: URL,
 			},
 		},
@@ -72,8 +72,14 @@ func runURLTest(u string) {
 	fmt.Println()
 	c.req.Response = res
 	c.content = responseContent(res)
-	if !c.shouldScanPhrases() {
+
+	c.checkContentType()
+	switch c.action {
+	case ALLOW:
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
+		return
+	case BLOCK:
+		fmt.Println("The content has a banned MIME type:", c.mime)
 		return
 	}
 

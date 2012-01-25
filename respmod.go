@@ -21,17 +21,25 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 	case "RESPMOD":
 		c := context{req: req}
 
-		if !c.shouldScanPhrases() {
+		c.checkContentType()
+
+		if c.action == ALLOW {
 			c.action = IGNORE
 			w.WriteHeader(204, nil, false)
 			logChan <- &c
 			return
 		}
 
-		c.scanURL()
-		c.content = responseContent(c.httpResponse())
-		c.pruneContent()
-		c.scanContent()
+		if c.action == BLOCK {
+			c.blocked = []string{"Blocked MIME Type"}
+		}
+
+		if c.action == FILTER {
+			c.scanURL()
+			c.content = responseContent(c.httpResponse())
+			c.pruneContent()
+			c.scanContent()
+		}
 
 		if c.action == BLOCK {
 			showBlockPage(w, c.blocked, c.URL(), c.user())

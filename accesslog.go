@@ -66,7 +66,7 @@ func (c *context) log(w io.Writer) {
 		modified = "pruned"
 	}
 
-	fmt.Fprintf(w, "%q,%q,%q,%q,%q,%q,%d,%q,%q,%q,%q\n", time.Now().Format("2006-01-02 15:04:05"), c.user(), c.action, c.URL(), mode, c.contentType(), len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", "))
+	fmt.Fprintf(w, "%q,%q,%q,%q,%q,%q,%d,%q,%q,%q,%q\n", time.Now().Format("2006-01-02 15:04:05"), c.user(), c.action, c.URL(), mode, c.mime, len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", "))
 }
 
 // stringTally returns a copy of c.tally with strings instead of rules as keys.

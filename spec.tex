@@ -231,4 +231,24 @@ action (allow, block, or ignore), URL, ICAP mode (REQMOD [request] or RESPMOD [r
 content type, whether the content was modified by Redwood, which rules matched (and how many times), 
 the score for each category, and the list of categories that caused the page to be blocked (if it was).
 
+\section{Filter Groups}
+
+Users may be divided into groups, with each group having access to different categories of sites.
+A user is assigned to a group with the \verb"group" directive in the configuration file.
+For example, \verb"group admin 10.1.10.203" would assign the user at IP address 10.1.10.203
+to the group named ``admin.'' 
+If a user authenticates with the proxy using a username and password, 
+his username would be used instead of his IP address.
+
+The filtering for a filter group is configured with the \verb"block", \verb"allow", and \verb"ignore"
+directives. These directives override the \verb"action" line in the \verb"category.conf" file,
+but only for users that belong to a specific filter group.
+For example, \verb"allow proxies admin" would allow users in the ``admin'' group
+to access sites in the ``proxies'' category even if they were normally blocked.
+
+If a user does not belong to any other group, he belongs to the default group,
+whose name is the empty string.
+When the \verb"block", \verb"allow", and \verb"ignore" directives are used without a group name,
+they apply to the default group.
+
 \end{document}

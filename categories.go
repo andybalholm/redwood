@@ -211,7 +211,7 @@ func categoryScores(tally map[rule]int) map[string]int {
 
 // blockedCategories returns a list of categories that would cause a page to be blocked.
 // The keys of scores are category names, and the values are the number of points scored.
-func blockedCategories(scores map[string]int) []string {
+func blockedCategories(scores map[string]int, filterGroup string) []string {
 	if len(scores) == 0 {
 		return nil
 	}
@@ -222,7 +222,11 @@ func blockedCategories(scores map[string]int) []string {
 	for _, c := range categories {
 		s := scores[c.name]
 		if s > 0 {
-			switch c.action {
+			a := c.action
+			if a1, ok := groupActions[filterGroup][c.name]; ok {
+				a = a1
+			}
+			switch a {
 			case ALLOW:
 				if s > maxAllowed {
 					maxAllowed = s
@@ -255,7 +259,7 @@ func blockedCategories(scores map[string]int) []string {
 // needs to be blocked, based on c.tally.
 func (c *context) calculateScores() {
 	c.scores = categoryScores(c.tally)
-	c.blocked = blockedCategories(c.scores)
+	c.blocked = blockedCategories(c.scores, whichGroup[c.user()])
 	if len(c.blocked) > 0 {
 		c.action = BLOCK
 	} else {

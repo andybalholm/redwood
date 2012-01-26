@@ -27,6 +27,8 @@ type blockData struct {
 	URL        string
 	Categories string
 	IP         string
+	Tally      string
+	Scores     string
 }
 
 func (c *context) showBlockPage(w icap.ResponseWriter) {
@@ -38,6 +40,8 @@ func (c *context) showBlockPage(w icap.ResponseWriter) {
 		URL:        c.URL().String(),
 		Categories: strings.Join(blockDesc, ", "),
 		IP:         c.user(),
+		Tally:      listTally(c.stringTally()),
+		Scores:     listTally(c.scores),
 	}
 	rw := icap.NewBridgedResponseWriter(w)
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")

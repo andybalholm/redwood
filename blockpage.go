@@ -34,7 +34,7 @@ type blockData struct {
 func (c *context) showBlockPage(w icap.ResponseWriter) {
 	blockDesc := make([]string, len(c.blocked))
 	for i, name := range c.blocked {
-		blockDesc[i] = categoryDescriptions[name]
+		blockDesc[i] = categories[name].description
 	}
 	data := blockData{
 		URL:        c.URL().String(),

@@ -52,11 +52,12 @@ type category struct {
 	weights     map[rule]weight // the weight for each rule
 }
 
-var categories []*category
-
-// categoryDescriptions maps names to descriptions.
-var categoryDescriptions = map[string]string{
-	"blocked-mime": "Blocked MIME Type", // fake category
+var categories = map[string]*category{
+	"blocked-mime": &category{ // a fake category for pages blocked by MIME type
+		name:        "blocked-mime",
+		description: "Blocked MIME Type",
+		action:      BLOCK,
+	},
 }
 
 // loadCategories loads the category configuration files
@@ -79,8 +80,7 @@ func loadCategories() {
 			categoryPath := filepath.Join(*categoriesDir, name)
 			c, err := loadCategory(categoryPath)
 			if err == nil {
-				categories = append(categories, c)
-				categoryDescriptions[c.name] = c.description
+				categories[c.name] = c
 			} else {
 				log.Printf("Error loading category %s: %v", name, err)
 			}
@@ -223,11 +223,11 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 	blocked := make(map[string]int)
 	maxAllowed := 0   // highest score of any category with action ALLOW
 	totalBlocked := 0 // total score of all categories with action BLOCK
-	for _, c := range categories {
-		s := scores[c.name]
+	for name, s := range scores {
+		c := categories[name]
 		if s > 0 {
 			a := c.action
-			if a1, ok := groupActions[filterGroup][c.name]; ok {
+			if a1, ok := groupActions[filterGroup][name]; ok {
 				a = a1
 			}
 			switch a {
@@ -246,7 +246,7 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 			case BLOCK:
 				totalBlocked += s
 				if s > maxAllowed {
-					blocked[c.name] = s
+					blocked[name] = s
 				}
 			}
 		}

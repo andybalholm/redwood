@@ -50,6 +50,7 @@ type category struct {
 	description string          // the name presented to users
 	action      action          // the action to be taken with a page in this category
 	weights     map[rule]weight // the weight for each rule
+	invisible   bool            // use invisible GIF instead of block page
 }
 
 var categories = map[string]*category{
@@ -120,6 +121,11 @@ func loadCategory(dirname string) (c *category, err error) {
 		// No-op.
 	default:
 		return nil, fmt.Errorf("unrecognized action %s in %s", s, confFile)
+	}
+
+	s, _ = conf.Get("invisible")
+	if s != "" {
+		c.invisible = true
 	}
 
 	ruleFiles, err := filepath.Glob(filepath.Join(dirname, "*.list"))

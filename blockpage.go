@@ -3,6 +3,7 @@ package main
 import (
 	"code.google.com/p/go-icap"
 	"flag"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -14,6 +15,9 @@ import (
 var blockPage = flag.String("blockpage", "/etc/redwood/block.html", "path to template for block page")
 
 var blockTemplate *template.Template
+
+// transparent1x1 is a single-pixel transparent GIF file.
+const transparent1x1 = "GIF89a\x10\x00\x10\x00\x80\xff\x00\xc0\xc0\xc0\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x10\x00\x10\x00\x00\x02\x0e\x84\x8f\xa9\xcb\xed\x0f\xa3\x9c\xb4\u068b\xb3>\x05\x00;"
 
 func loadBlockPage() {
 	var err error
@@ -32,6 +36,16 @@ type blockData struct {
 }
 
 func (c *context) showBlockPage(w icap.ResponseWriter) {
+	rw := icap.NewBridgedResponseWriter(w)
+
+	if categories[c.blocked[0]].invisible {
+		// Serve an invisible image instead of the usual block page.
+		rw.Header().Set("Content-Type", "image/gif")
+		rw.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(rw, transparent1x1)
+		return
+	}
+
 	blockDesc := make([]string, len(c.blocked))
 	for i, name := range c.blocked {
 		blockDesc[i] = categories[name].description
@@ -43,7 +57,6 @@ func (c *context) showBlockPage(w icap.ResponseWriter) {
 		Tally:      listTally(c.stringTally()),
 		Scores:     listTally(c.scores),
 	}
-	rw := icap.NewBridgedResponseWriter(w)
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 	rw.WriteHeader(http.StatusForbidden)
 

@@ -112,6 +112,9 @@ This configuration would mean that the category's user-visible description would
 ``Auto Repair'' rather than ``mechanical,'' and that pages that fall into the category would be allowed. 
 The description defaults to the category name, and the action 
 defaults to \verb"ignore". Actions can be overriden for specific users by the use of filter groups.
+A \verb"category.conf" file may also have the entry \verb"invisible: true"; 
+this indicates that when a page is blocked because it belongs to that category,
+the response will be an invisible image instead of the usual block page.
 
 The rule-list files define the rules used to calculate the category's score. 
 Each rule-list file must have an extension of \verb".list". 

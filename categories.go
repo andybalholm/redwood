@@ -53,7 +53,11 @@ type category struct {
 }
 
 var categories []*category
-var categoryDescriptions = make(map[string]string) // Maps names to descriptions.
+
+// categoryDescriptions maps names to descriptions.
+var categoryDescriptions = map[string]string{
+	"blocked-mime": "Blocked MIME Type", // fake category
+}
 
 // loadCategories loads the category configuration files
 func loadCategories() {

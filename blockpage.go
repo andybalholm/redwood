@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -30,15 +29,15 @@ type blockData struct {
 	IP         string
 }
 
-func showBlockPage(w icap.ResponseWriter, blocked []string, URL *url.URL, clientIP string) {
-	blockDesc := make([]string, len(blocked))
-	for i, name := range blocked {
+func (c *context) showBlockPage(w icap.ResponseWriter) {
+	blockDesc := make([]string, len(c.blocked))
+	for i, name := range c.blocked {
 		blockDesc[i] = categoryDescriptions[name]
 	}
 	data := blockData{
-		URL:        URL.String(),
+		URL:        c.URL().String(),
 		Categories: strings.Join(blockDesc, ", "),
-		IP:         clientIP,
+		IP:         c.user(),
 	}
 	rw := icap.NewBridgedResponseWriter(w)
 	rw.Header().Set("Content-Type", "text/html; charset=utf-8")

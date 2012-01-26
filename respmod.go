@@ -31,7 +31,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		if c.action == BLOCK {
-			c.blocked = []string{"Blocked MIME Type"}
+			c.blocked = []string{"blocked-mime"}
 		}
 
 		if c.action == FILTER {
@@ -42,7 +42,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		if c.action == BLOCK {
-			showBlockPage(w, c.blocked, c.URL(), c.user())
+			c.showBlockPage(w)
 			logChan <- &c
 			return
 		}

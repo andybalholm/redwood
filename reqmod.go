@@ -33,7 +33,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 		c.scanURL()
 
 		if c.action == BLOCK {
-			showBlockPage(w, c.blocked, c.URL(), c.user())
+			c.showBlockPage(w)
 			logChan <- &c
 			return
 		}

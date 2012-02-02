@@ -3,6 +3,7 @@ package main
 // scanning an HTTP response for phrases
 
 import (
+	"bytes"
 	"code.google.com/p/mahonia"
 	"compress/gzip"
 	"fmt"
@@ -80,7 +81,15 @@ func responseContent(res *http.Response) []byte {
 	defer r.Close()
 
 	if res.Header.Get("Content-Encoding") == "gzip" {
-		gz, err := gzip.NewReader(r)
+		gzContent, err := ioutil.ReadAll(r)
+		if err != nil {
+			panic(fmt.Errorf("error reading gzipped content for %s: %s", res.Request.URL, err))
+		}
+		if len(gzContent) == 0 {
+			// If the compressed content is empty, decompress it to empty content.
+			return nil
+		}
+		gz, err := gzip.NewReader(bytes.NewBuffer(gzContent))
 		if err != nil {
 			panic(fmt.Errorf("could not create gzip decoder for %s: %s", res.Request.URL, err))
 		}

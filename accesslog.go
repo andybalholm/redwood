@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -39,10 +40,16 @@ func accessLog() {
 		}
 	}
 
+	i := 0 // a count of transactions logged
+
 	for {
 		select {
 		case c := <-logChan:
 			c.log(logfile)
+			i++
+			if i%10 == 0 {
+				runtime.GC()
+			}
 		case <-logResetChan:
 			if actualFile {
 				logfile.Close()

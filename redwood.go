@@ -5,10 +5,10 @@ package main
 
 import (
 	"code.google.com/p/go-icap"
+	"exp/signal"
 	"flag"
 	"log"
 	"os"
-	"os/signal"
 	"runtime"
 	"runtime/pprof"
 	"syscall"

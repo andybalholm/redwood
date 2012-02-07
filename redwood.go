@@ -16,7 +16,7 @@ import (
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
 var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
-var cores = flag.Int("cores", 1, "number of CPU cores to use")
+var cores = flag.Int("cores", runtime.NumCPU(), "number of CPU cores to use")
 
 func main() {
 	loadConfiguration()

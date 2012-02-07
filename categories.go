@@ -14,8 +14,8 @@ import (
 
 var categoriesDir = flag.String("categories", "/etc/redwood/categories", "path to configuration files for categories")
 
-// minimum total bad points to block a page
-var blockThreshold = flag.Int("threshold", 0, "minimum score from blocked categories to block a page")
+// minimum bad points to block a page
+var blockThreshold = flag.Int("threshold", 0, "minimum score for a blocked category to block a page")
 
 // A weight contains the point values assigned to a rule+category combination.
 type weight struct {
@@ -228,7 +228,6 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 
 	blocked := make(map[string]int)
 	maxAllowed := 0   // highest score of any category with action ALLOW
-	totalBlocked := 0 // total score of all categories with action BLOCK
 	for name, s := range scores {
 		c := categories[name]
 		if s > 0 {
@@ -250,15 +249,14 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 				}
 
 			case BLOCK:
-				totalBlocked += s
-				if s > maxAllowed {
+				if s > maxAllowed && s > *blockThreshold {
 					blocked[name] = s
 				}
 			}
 		}
 	}
 
-	if totalBlocked < *blockThreshold || len(blocked) == 0 {
+	if len(blocked) == 0 {
 		return nil
 	}
 

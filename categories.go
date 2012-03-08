@@ -17,6 +17,8 @@ var categoriesDir = flag.String("categories", "/etc/redwood/categories", "path t
 // minimum bad points to block a page
 var blockThreshold = flag.Int("threshold", 0, "minimum score for a blocked category to block a page")
 
+var countOnce = flag.Bool("count-once", false, "count each phrase only once per page")
+
 // A weight contains the point values assigned to a rule+category combination.
 type weight struct {
 	points    int // points per occurrence
@@ -194,6 +196,10 @@ func (c *category) score(tally map[rule]int) int {
 	weights := c.weights
 	for r, count := range tally {
 		w := weights[r]
+		if *countOnce {
+			total += w.points
+			continue
+		}
 		p := w.points * count
 		if w.maxPoints != 0 && (p > 0 && p > w.maxPoints || p < 0 && p < w.maxPoints) {
 			p = w.maxPoints
@@ -227,7 +233,7 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 	}
 
 	blocked := make(map[string]int)
-	maxAllowed := 0   // highest score of any category with action ALLOW
+	maxAllowed := 0 // highest score of any category with action ALLOW
 	for name, s := range scores {
 		c := categories[name]
 		if s > 0 {

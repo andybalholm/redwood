@@ -69,6 +69,9 @@ cores=4
 # file configuring the content pruning
 content-pruning /etc/redwood/pruning.conf
 
+# file configuring URL query modification
+query-changes /etc/redwood/safesearch.conf
+
 # path to the access log
 access-log /var/log/redwood/access.log
 
@@ -190,6 +193,24 @@ with long, more-specific ones, e.g.:
 
 If a page is blocked based on its URL (i.e. by URL matching and/or URL regular expressions), 
 its content will not be evaluated because the page will not be downloaded.
+
+\section{URL Query Modification}
+
+When processing an HTTP request, Redwood can modify the query parameters in the URL.
+The configuration file for these changes is specified with the \verb"query-changes" keyword.
+Each line contains a URL-matching or URL-regular-expression rule, 
+followed by a query expression.
+If the query in the URL already contains parameters with the same names as those specified in the file,
+they will be replaced with the new values. Otherwise the new values will be added.
+
+\begin{verbatim}
+# Force safe search on several search engines.
+/www\.google\.[^/]+/search/ safe=vss
+search.lycos.com adv=1&adf=on
+search.yahoo.com vm=r
+/hotbot/h adf=on
+www.metacrawler.com familyfilter=1
+\end{verbatim}
 
 \section{Content Pruning}
 

@@ -3,6 +3,8 @@ package main
 import (
 	"code.google.com/p/go-icap"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"time"
 )
 
@@ -38,7 +40,19 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
-		w.WriteHeader(204, nil, false)
+		if c.changeQuery() {
+			content, err := ioutil.ReadAll(req.Request.Body)
+			if err != nil {
+				log.Println(err)
+			}
+			w.WriteHeader(200, req.Request, len(content) > 0)
+			if len(content) > 0 {
+				w.Write(content)
+			}
+		} else {
+			w.WriteHeader(204, nil, false)
+		}
+
 		logChan <- &c
 
 	default:

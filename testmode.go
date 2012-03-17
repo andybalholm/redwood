@@ -58,7 +58,8 @@ func runURLTest(u string) {
 		for _, c := range c.blocked {
 			fmt.Println(c)
 		}
-		return
+		fmt.Println()
+		fmt.Println("But we'll check the content too anyway.")
 	}
 
 	fmt.Println()

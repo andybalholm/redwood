@@ -17,6 +17,12 @@ import (
 // scanContent scans the content of a document for phrases,
 // and updates its counts and scores.
 func (c *context) scanContent() {
+	mime := c.contentType()
+	if strings.Contains(mime, "javascript") || strings.Contains(mime, "json") {
+		c.scanJSContent()
+		return
+	}
+
 	if c.charset == "" {
 		c.findCharset()
 	}
@@ -67,6 +73,27 @@ loop:
 	}
 
 	ps.scanByte(' ')
+
+	for rule, n := range ps.tally {
+		c.tally[rule] += n
+	}
+	c.calculateScores()
+}
+
+// scanJSContent scans only the contents of quoted JavaScript strings
+// in the document.
+func (c *context) scanJSContent() {
+	_, items := lex(string(c.content))
+	ps := newPhraseScanner()
+
+	for s := range items {
+		s = wordString(s)
+		ps.scanByte(' ')
+		for i := 0; i < len(s); i++ {
+			ps.scanByte(s[i])
+		}
+		ps.scanByte(' ')
+	}
 
 	for rule, n := range ps.tally {
 		c.tally[rule] += n

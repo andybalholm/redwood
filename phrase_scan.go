@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"code.google.com/p/mahonia"
 	"compress/gzip"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -110,7 +109,8 @@ func responseContent(res *http.Response) []byte {
 	if res.Header.Get("Content-Encoding") == "gzip" {
 		gzContent, err := ioutil.ReadAll(r)
 		if err != nil {
-			panic(fmt.Errorf("error reading gzipped content for %s: %s", res.Request.URL, err))
+			log.Printf("error reading gzipped content for %s: %s", res.Request.URL, err)
+			return nil
 		}
 		if len(gzContent) == 0 {
 			// If the compressed content is empty, decompress it to empty content.
@@ -118,7 +118,8 @@ func responseContent(res *http.Response) []byte {
 		}
 		gz, err := gzip.NewReader(bytes.NewBuffer(gzContent))
 		if err != nil {
-			panic(fmt.Errorf("could not create gzip decoder for %s: %s", res.Request.URL, err))
+			log.Printf("could not create gzip decoder for %s: %s", res.Request.URL, err)
+			return nil
 		}
 		defer gz.Close()
 		r = gz

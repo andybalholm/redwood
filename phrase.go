@@ -76,8 +76,8 @@ func findFallbackNodes(node int, text []byte) {
 // A phraseScanner scans input one byte at a time
 // and counts occurrences of phrases.
 type phraseScanner struct {
-	state int          // the current node in the phraseTrie
-	tally map[rule]int // the counts of the phrases
+	currentNode int          // the current node in the phraseTrie
+	tally       map[rule]int // the counts of the phrases
 }
 
 func newPhraseScanner() *phraseScanner {
@@ -86,20 +86,20 @@ func newPhraseScanner() *phraseScanner {
 
 // scanByte updates ps for one byte of input.
 func (ps *phraseScanner) scanByte(c byte) {
-	// Find the new state.
-	state := ps.state
+	// Find the new current node.
+	currentNode := ps.currentNode
 	newState := 0
 
-	if ch := phraseTrie[state].children; ch != nil {
+	if ch := phraseTrie[currentNode].children; ch != nil {
 		newState = ch[c]
 	}
-	for newState == 0 && state != 0 {
-		state = phraseTrie[state].fallback
-		if ch := phraseTrie[state].children; ch != nil {
+	for newState == 0 && currentNode != 0 {
+		currentNode = phraseTrie[currentNode].fallback
+		if ch := phraseTrie[currentNode].children; ch != nil {
 			newState = ch[c]
 		}
 	}
-	ps.state = newState
+	ps.currentNode = newState
 
 	// See if any phrases have been matched.
 	for n := newState; n != 0; n = phraseTrie[n].fallback {

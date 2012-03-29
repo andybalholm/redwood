@@ -5,13 +5,11 @@ package main
 
 import (
 	"code.google.com/p/go-icap"
-	"exp/signal"
 	"flag"
 	"log"
 	"os"
 	"runtime"
 	"runtime/pprof"
-	"syscall"
 )
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
@@ -36,25 +34,6 @@ func main() {
 		runURLTest(*testURL)
 		return
 	}
-
-	go func() {
-		for {
-			select {
-			case sig := <-signal.Incoming:
-				switch sig.(os.UnixSignal) {
-				case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
-					log.Println("Terminating on signal", sig)
-					if *cpuProfile != "" {
-						pprof.StopCPUProfile()
-					}
-					os.Exit(0)
-				case syscall.SIGHUP:
-					// Close and reopen the log file.
-					logResetChan <- true
-				}
-			}
-		}
-	}()
 
 	go accessLog()
 

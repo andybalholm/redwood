@@ -149,9 +149,8 @@ There are three kinds of filter rules:
 After it, separated by a space, is the weight---the number of points that get added to this category's score 
 for sites that match the rule. 
 
-If the rule consists of only a domain name (without a path),
-it will also match subdomains: \verb"napaonline.com" also matches \verb"www.napaonline.com".
-If there is a path, the domain must match exactly, but if the path ends with a slash,
+A rule for a domain will also match subdomains: \verb"napaonline.com" also matches \verb"www.napaonline.com".
+If there is a path that ends with a slash,
 it will also match longer paths: \verb"www.napaonline.com/catalog/" also matches 
 \verb"www.napaonline.com/catalog/result.aspx".
 

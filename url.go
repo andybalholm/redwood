@@ -121,19 +121,19 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 			break
 		}
 		s = s[dot+1:]
-	}
 
-	// Test for matches with the path.
-	s = host + path
-	for {
-		if r, ok := m.fragments[s]; ok {
-			result[r] = 1
+		// Test for matches with the path.
+		s2 := s + path
+		for {
+			if r, ok := m.fragments[s2]; ok {
+				result[r] = 1
+			}
+			slash := strings.LastIndex(s2[:len(s2)-1], "/")
+			if slash == -1 {
+				break
+			}
+			s2 = s2[:slash+1]
 		}
-		slash := strings.LastIndex(s[:len(s)-1], "/")
-		if slash == -1 {
-			break
-		}
-		s = s[:slash+1]
 	}
 
 	return result

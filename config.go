@@ -30,7 +30,7 @@ func readConfigFile(filename string) error {
 
 	for {
 		line, err := r.ReadString('\n')
-		if err != nil {
+		if line == "" {
 			if err != io.EOF {
 				log.Println("Error reading config file:", err)
 			}

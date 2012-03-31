@@ -32,7 +32,7 @@ func loadPruningConfig(filename string) error {
 
 	for {
 		line, err := r.ReadString('\n')
-		if err != nil {
+		if line == "" {
 			if err != io.EOF {
 				log.Printf("Error reading %s: %s", filename, err)
 			}

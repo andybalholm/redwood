@@ -45,6 +45,11 @@ func loadQueryConfig(filename string) error {
 			continue
 		}
 
+		if r.t == defaultRule || r.t == contentPhrase {
+			log.Printf("Wrong rule type in %s: %s", filename, r)
+			continue
+		}
+
 		line = strings.TrimSpace(line)
 		values, err := url.ParseQuery(line)
 		if err != nil {

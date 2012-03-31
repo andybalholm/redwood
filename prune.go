@@ -62,7 +62,13 @@ func loadPruningConfig(filename string) error {
 		}
 
 		pruneMatcher.AddRule(r)
-		pruneActions[r] = sel
+		if oldAction, ok := pruneActions[r]; ok {
+			pruneActions[r] = func(n *html.Node) bool {
+				return oldAction(n) || sel(n)
+			}
+		} else {
+			pruneActions[r] = sel
+		}
 	}
 
 	return nil

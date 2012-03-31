@@ -58,7 +58,15 @@ func loadQueryConfig(filename string) error {
 		}
 
 		queryMatcher.AddRule(r)
-		queryChanges[r] = values
+		if changes, ok := queryChanges[r]; ok {
+			// Merge the new values into the old ones.
+			for k, v := range values {
+				changes[k] = v
+			}
+			queryChanges[r] = changes
+		} else {
+			queryChanges[r] = values
+		}
 	}
 
 	return nil

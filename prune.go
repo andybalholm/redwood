@@ -50,6 +50,11 @@ func loadPruningConfig(filename string) error {
 			continue
 		}
 
+		if r.t == defaultRule || r.t == contentPhrase {
+			log.Printf("Wrong rule type in %s: %s", filename, r)
+			continue
+		}
+
 		sel, err := cascadia.Compile(line)
 		if err != nil {
 			log.Printf("Invalid CSS selector %q in %s: %s", line, filename, err)

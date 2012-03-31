@@ -7,6 +7,7 @@ import (
 	"code.google.com/p/go-icap"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -38,6 +39,7 @@ func main() {
 	go accessLog()
 
 	startWebServer()
+	go http.ListenAndServe(":1345", nil)
 
 	icap.HandleFunc("/reqmod", handleRequest)
 	icap.HandleFunc("/respmod", handleResponse)

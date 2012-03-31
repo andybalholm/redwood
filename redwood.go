@@ -43,5 +43,8 @@ func main() {
 
 	icap.HandleFunc("/reqmod", handleRequest)
 	icap.HandleFunc("/respmod", handleResponse)
-	icap.ListenAndServe(":1344", nil)
+	err := icap.ListenAndServe(":1344", nil)
+	if err != nil {
+		log.Println("Error listening on port 1344:", err)
+	}
 }

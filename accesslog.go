@@ -47,7 +47,7 @@ func accessLog() {
 		case c := <-logChan:
 			c.log(logfile)
 			i++
-			if i%10 == 0 {
+			if i%100 == 0 {
 				runtime.GC()
 			}
 		case <-logResetChan:

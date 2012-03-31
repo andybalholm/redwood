@@ -86,7 +86,7 @@ func runURLTest(u string) {
 
 	c.pruneContent()
 	if c.modified {
-		fmt.Println("Performed phrase pruning.")
+		fmt.Println("Performed content pruning.")
 		fmt.Println()
 	}
 

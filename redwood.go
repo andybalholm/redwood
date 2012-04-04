@@ -6,6 +6,7 @@ package main
 import (
 	"code.google.com/p/go-icap"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,8 +17,18 @@ import (
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
 var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
 var cores = flag.Int("cores", runtime.NumCPU(), "number of CPU cores to use")
+var pidfile = flag.String("pidfile", "/var/run/redwood.pid", "path of file to store process ID")
 
 func main() {
+	if (*pidfile != "") {
+		pid := os.Getpid()
+		f, err := os.Create(*pidfile)
+		if err == nil {
+			fmt.Fprintln(f, pid)
+			f.Close()
+		}
+	}
+
 	loadConfiguration()
 
 	runtime.GOMAXPROCS(*cores)

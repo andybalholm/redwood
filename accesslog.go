@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -19,10 +21,6 @@ var accessLogName = flag.String("access-log", "", "path to access-log file")
 // logChan is a channel for sending context objects, once processing is
 // completed, to be logged in the access log.
 var logChan = make(chan *context, 10)
-
-// When a value is sent on logResetChan, the log file will be closed and
-// reopened (for compatibility with logrotate).
-var logResetChan = make(chan bool, 1)
 
 // accessLog opens the log file and writes entries to it from logChan.
 // It should be run in its own goroutine.
@@ -42,6 +40,9 @@ func accessLog() {
 
 	i := 0 // a count of transactions logged
 
+	hupChan := make(chan os.Signal, 1)
+	signal.Notify(hupChan, syscall.SIGHUP)
+
 	for {
 		select {
 		case c := <-logChan:
@@ -50,7 +51,8 @@ func accessLog() {
 			if i%100 == 0 {
 				runtime.GC()
 			}
-		case <-logResetChan:
+		case <-hupChan:
+			// When signaled with SIGHUP, close and reopen the log file.
 			if actualFile {
 				logfile.Close()
 				logfile, err = os.OpenFile(*accessLogName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)

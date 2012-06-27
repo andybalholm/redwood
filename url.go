@@ -113,15 +113,6 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 	// Test for matches of the host and of the domains it belongs to.
 	s := host
 	for {
-		if r, ok := m.fragments[s]; ok {
-			result[r] = 1
-		}
-		dot := strings.Index(s, ".")
-		if dot == -1 {
-			break
-		}
-		s = s[dot+1:]
-
 		// Test for matches with the path.
 		s2 := s + path
 		for {
@@ -134,6 +125,15 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 			}
 			s2 = s2[:slash+1]
 		}
+
+		if r, ok := m.fragments[s]; ok {
+			result[r] = 1
+		}
+		dot := strings.Index(s, ".")
+		if dot == -1 {
+			break
+		}
+		s = s[dot+1:]
 	}
 
 	return result

@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -37,6 +37,7 @@ func accessLog() {
 			actualFile = true
 		}
 	}
+	csvWriter := csv.NewWriter(logfile)
 
 	i := 0 // a count of transactions logged
 
@@ -46,7 +47,7 @@ func accessLog() {
 	for {
 		select {
 		case c := <-logChan:
-			c.log(logfile)
+			c.log(csvWriter)
 			i++
 			if i%100 == 0 {
 				runtime.GC()
@@ -62,12 +63,13 @@ func accessLog() {
 					actualFile = false
 				}
 			}
+			csvWriter = csv.NewWriter(logfile)
 		}
 	}
 }
 
 // log writes a log entry (in CSV format) to w.
-func (c *context) log(w io.Writer) {
+func (c *context) log(w *csv.Writer) {
 	mode := c.req.Method
 
 	modified := ""
@@ -80,7 +82,17 @@ func (c *context) log(w io.Writer) {
 		user = fmt.Sprintf("%s(%s)", user, group)
 	}
 
-	fmt.Fprintf(w, "%q,%q,%q,%q,%q,%q,%d,%q,%q,%q,%q\n", time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), mode, c.mime, len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", "))
+	w.Write(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), mode, c.mime, len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", ")))
+	w.Flush()
+}
+
+// toStrings converts its arguments into a slice of strings.
+func toStrings(a ...interface{}) []string {
+	result := make([]string, len(a))
+	for i, x := range a {
+		result[i] = fmt.Sprint(x)
+	}
+	return result
 }
 
 // stringTally returns a copy of c.tally with strings instead of rules as keys.

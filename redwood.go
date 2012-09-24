@@ -20,7 +20,7 @@ var cores = flag.Int("cores", runtime.NumCPU(), "number of CPU cores to use")
 var pidfile = flag.String("pidfile", "/var/run/redwood.pid", "path of file to store process ID")
 
 func main() {
-	if (*pidfile != "") {
+	if *pidfile != "" {
 		pid := os.Getpid()
 		f, err := os.Create(*pidfile)
 		if err == nil {

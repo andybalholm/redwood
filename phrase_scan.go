@@ -17,7 +17,7 @@ import (
 // and updates its counts and scores.
 func (c *context) scanContent() {
 	mime := c.contentType()
-	if strings.Contains(mime, "javascript") || strings.Contains(mime, "json") {
+	if strings.Contains(mime, "javascript") {
 		c.scanJSContent()
 		return
 	}

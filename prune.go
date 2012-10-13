@@ -135,10 +135,9 @@ func (c *context) pruneContent() {
 // deleted.
 func prune(n *html.Node, sel cascadia.Selector) int {
 	count := 0
-	for i := len(n.Child) - 1; i >= 0; i-- {
-		child := n.Child[i]
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
 		if sel(child) {
-			n.Remove(child)
+			n.RemoveChild(child)
 			count++
 		} else {
 			count += prune(child, sel)

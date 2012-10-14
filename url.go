@@ -9,25 +9,18 @@ import (
 	"strings"
 )
 
-// A regexMap is a map from rules to compiled regexes,
-// except that some are stored as plain strings to search for instead.
+// A regexMap is a map from rules to compiled regexes.
 type regexMap struct {
 	regexes map[rule]*regexp.Regexp
-	strings map[rule]string
 }
 
 func newRegexMap() *regexMap {
-	return &regexMap{make(map[rule]*regexp.Regexp), make(map[rule]string)}
+	return &regexMap{make(map[rule]*regexp.Regexp)}
 }
 
 func (rm *regexMap) findMatches(s string, tally map[rule]int) {
 	for rule, re := range rm.regexes {
 		if re.MatchString(s) {
-			tally[rule] = 1
-		}
-	}
-	for rule, str := range rm.strings {
-		if strings.Contains(s, str) {
 			tally[rule] = 1
 		}
 	}
@@ -38,15 +31,8 @@ func (rm *regexMap) addRule(r rule) {
 	if _, alreadyHave := rm.regexes[r]; alreadyHave {
 		return
 	}
-	if _, alreadyHave := rm.strings[r]; alreadyHave {
-		return
-	}
 
 	s := r.content
-	if s == regexp.QuoteMeta(s) {
-		rm.strings[r] = s
-		return
-	}
 
 	re, err := regexp.Compile(s)
 	if err != nil {

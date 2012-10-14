@@ -9,13 +9,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
-	"runtime/pprof"
 )
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
-var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
 var cores = flag.Int("cores", runtime.NumCPU(), "number of CPU cores to use")
 var pidfile = flag.String("pidfile", "/var/run/redwood.pid", "path of file to store process ID")
 
@@ -32,15 +31,6 @@ func main() {
 	loadConfiguration()
 
 	runtime.GOMAXPROCS(*cores)
-
-	if *cpuProfile != "" {
-		f, err := os.Create(*cpuProfile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
 
 	if *testURL != "" {
 		runURLTest(*testURL)

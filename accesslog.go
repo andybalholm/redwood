@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -39,8 +38,6 @@ func accessLog() {
 	}
 	csvWriter := csv.NewWriter(logfile)
 
-	i := 0 // a count of transactions logged
-
 	hupChan := make(chan os.Signal, 1)
 	signal.Notify(hupChan, syscall.SIGHUP)
 
@@ -48,10 +45,6 @@ func accessLog() {
 		select {
 		case c := <-logChan:
 			c.log(csvWriter)
-			i++
-			if i%100 == 0 {
-				runtime.GC()
-			}
 		case <-hupChan:
 			// When signaled with SIGHUP, close and reopen the log file.
 			if actualFile {

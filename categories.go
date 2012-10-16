@@ -179,13 +179,13 @@ func collectRules() {
 	for _, c := range categories {
 		for rule, _ := range c.weights {
 			if rule.t == contentPhrase {
-				addPhrase(rule)
+				contentPhraseList.addPhrase(rule.content)
 			} else {
 				URLRules.AddRule(rule)
 			}
 		}
 	}
-	findFallbackNodes(0, nil)
+	contentPhraseList.findFallbackNodes(0, nil)
 }
 
 // score returns c's score for a page that matched

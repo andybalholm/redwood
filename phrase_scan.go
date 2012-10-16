@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 )
 
+var contentPhraseList = newPhraseList()
+
 // scanContent scans the content of a document for phrases,
 // and updates its counts and scores.
 func (c *context) scanContent() {
@@ -36,7 +38,9 @@ func (c *context) scanContent() {
 
 	content := c.content
 
-	ps := newPhraseScanner()
+	ps := newPhraseScanner(contentPhraseList, func(s string) {
+		c.tally[rule{t: contentPhrase, content: s}]++
+	})
 	ps.scanByte(' ')
 	prevRune := ' '
 	var buf [4]byte // buffer for UTF-8 encoding of runes
@@ -73,9 +77,6 @@ loop:
 
 	ps.scanByte(' ')
 
-	for rule, n := range ps.tally {
-		c.tally[rule] += n
-	}
 	c.calculateScores()
 }
 
@@ -83,7 +84,9 @@ loop:
 // in the document.
 func (c *context) scanJSContent() {
 	_, items := lex(string(c.content))
-	ps := newPhraseScanner()
+	ps := newPhraseScanner(contentPhraseList, func(s string) {
+		c.tally[rule{t: contentPhrase, content: s}]++
+	})
 
 	for s := range items {
 		s = wordString(s)
@@ -94,9 +97,6 @@ func (c *context) scanJSContent() {
 		ps.scanByte(' ')
 	}
 
-	for rule, n := range ps.tally {
-		c.tally[rule] += n
-	}
 	c.calculateScores()
 }
 

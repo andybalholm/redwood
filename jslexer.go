@@ -194,15 +194,15 @@ func lexNumber(l *lexer) stateFn {
 
 func lexText(l *lexer) stateFn {
 	for {
-		switch r := l.next(); {
-		case r == eof:
+		switch r := l.next(); r {
+		case eof:
 			return nil
-		case unicode.IsSpace(r):
+		case ' ', '\t', '\n':
 			l.ignore()
-		case '0' <= r && r <= '9':
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			l.backup()
 			return lexNumber
-		case r == '.':
+		case '.':
 			r2 := l.peek()
 			if '0' <= r2 && r2 <= '9' {
 				l.pos--
@@ -210,25 +210,82 @@ func lexText(l *lexer) stateFn {
 			}
 			l.ignore()
 			l.divOK = false
-		case r == '/':
+		case '/':
 			return lexAfterSlash
-		case r == '_' || r == '$' || unicode.IsLetter(r):
+		case '_', '$', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z':
 			l.backup()
 			return lexIdentifier
-		case r == '\'' || r == '"':
+		case '\'', '"':
 			l.backup()
 			return lexString
-		default:
-			l.backup()
-			for _, op := range operators {
-				if strings.HasPrefix(l.input[l.pos:], op.symbol) {
-					l.pos += len(op.symbol)
-					l.divOK = op.divOK
-					l.ignore()
-					return lexText
+		case '(', ':', ';', '?', '[', '{', '}', '~':
+			l.divOK = false
+			l.ignore()
+		case ')', ']':
+			l.divOK = true
+			l.ignore()
+		case '!', '=':
+			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+				l.pos++
+				if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+					l.pos++
 				}
 			}
-			l.next()
+			l.divOK = false
+			l.ignore()
+		case '%', '*', '^':
+			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+				l.pos++
+			}
+			l.divOK = false
+			l.ignore()
+		case '&', '|':
+			if len(l.input) >= l.pos {
+				if r2 := l.input[l.pos]; r2 == byte(r) || r2 == '=' {
+					l.pos++
+				}
+			}
+			l.divOK = false
+			l.ignore()
+		case '+', '-':
+			l.divOK = false
+			if len(l.input) >= l.pos {
+				switch r2 := l.input[l.pos]; r2 {
+				case byte(r):
+					l.divOK = true
+					l.pos++
+				case '=':
+					l.pos++
+				}
+			}
+			l.ignore()
+		case '<':
+			if len(l.input) >= l.pos && l.input[l.pos] == '<' {
+				l.pos++
+			}
+			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+				l.pos++
+			}
+			l.divOK = false
+			l.ignore()
+		case '>':
+			if len(l.input) >= l.pos && l.input[l.pos] == '>' {
+				l.pos++
+				if len(l.input) >= l.pos && l.input[l.pos] == '>' {
+					l.pos++
+				}
+			}
+			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+				l.pos++
+			}
+			l.divOK = false
+			l.ignore()
+
+		default:
+			if unicode.IsLetter(r) {
+				l.backup()
+				return lexIdentifier
+			}
 			l.ignore()
 		}
 	}
@@ -368,58 +425,4 @@ var keywordDivOK = map[string]bool{
 	"null":       true,
 	"true":       true,
 	"false":      true,
-}
-
-type operator struct {
-	symbol string // the text of the operator
-	divOK  bool   // whether the operator can be followed by a division operator
-}
-
-var operators = []operator{
-	{">>>=", false},
-	{"===", false},
-	{"!==", false},
-	{">>>", false},
-	{"<<=", false},
-	{">>=", false},
-	{"<=", false},
-	{">=", false},
-	{"==", false},
-	{"!=", false},
-	{"<<", false},
-	{">>", false},
-	{"&&", false},
-	{"||", false},
-	{"+=", false},
-	{"-=", false},
-	{"*=", false},
-	{"%=", false},
-	{"&=", false},
-	{"|=", false},
-	{"^=", false},
-	{"++", true},
-	{"--", true},
-	{")", true},
-	{"]", true},
-	{"{", false},
-	{"}", false},
-	{"(", false},
-	{"[", false},
-	{".", false},
-	{";", false},
-	{",", false},
-	{"<", false},
-	{">", false},
-	{"+", false},
-	{"-", false},
-	{"*", false},
-	{"%", false},
-	{"&", false},
-	{"|", false},
-	{"^", false},
-	{"!", false},
-	{"~", false},
-	{"?", false},
-	{":", false},
-	{"=", false},
 }

@@ -186,6 +186,7 @@ func collectRules() {
 		}
 	}
 	contentPhraseList.findFallbackNodes(0, nil)
+	URLRules.finalize()
 }
 
 // score returns c's score for a page that matched

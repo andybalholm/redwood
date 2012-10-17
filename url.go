@@ -9,29 +9,54 @@ import (
 	"strings"
 )
 
-// A regexMap is a map from rules to compiled regexes.
+type regexRule struct {
+	rule
+	*regexp.Regexp
+}
+
+// A regexMap is a set of regular-expression rules.
+// As an optimization, it uses Aho-Corasick string matching find which regular
+// expressions might match—instead of trying them all.
 type regexMap struct {
-	regexes map[rule]*regexp.Regexp
+	prefixList phraseList
+	rules      map[string][]regexRule
 }
 
 func newRegexMap() *regexMap {
-	return &regexMap{make(map[rule]*regexp.Regexp)}
+	return &regexMap{
+		prefixList: newPhraseList(),
+		rules:      make(map[string][]regexRule),
+	}
 }
 
 func (rm *regexMap) findMatches(s string, tally map[rule]int) {
-	for rule, re := range rm.regexes {
-		if re.MatchString(s) {
-			tally[rule] = 1
+	tried := map[string]bool{}
+	scanner := newPhraseScanner(rm.prefixList, func(prefix string) {
+		if tried[prefix] {
+			return
+		}
+		for _, r := range rm.rules[prefix] {
+			if r.MatchString(s) {
+				tally[r.rule] = 1
+			}
+		}
+		tried[prefix] = true
+	})
+
+	for i := 0; i < len(s); i++ {
+		scanner.scanByte(s[i])
+	}
+
+	// Now try the regexes that have no literal string prefix.
+	for _, r := range rm.rules[""] {
+		if r.MatchString(s) {
+			tally[r.rule] = 1
 		}
 	}
 }
 
 // addRule adds a rule to the map.
 func (rm *regexMap) addRule(r rule) {
-	if _, alreadyHave := rm.regexes[r]; alreadyHave {
-		return
-	}
-
 	s := r.content
 
 	re, err := regexp.Compile(s)
@@ -39,7 +64,12 @@ func (rm *regexMap) addRule(r rule) {
 		log.Printf("Error parsing URL regular expression %s: %v", r, err)
 		return
 	}
-	rm.regexes[r] = re
+
+	prefix, _ := re.LiteralPrefix()
+	if prefix != "" {
+		rm.prefixList.addPhrase(prefix)
+	}
+	rm.rules[prefix] = append(rm.rules[prefix], regexRule{r, re})
 }
 
 type URLMatcher struct {
@@ -48,6 +78,15 @@ type URLMatcher struct {
 	hostRegexes  *regexMap       // to match hostname only
 	pathRegexes  *regexMap
 	queryRegexes *regexMap
+}
+
+// finalize should be called after all rules have been added, but before 
+// using the URLMatcher.
+func (m *URLMatcher) finalize() {
+	m.regexes.prefixList.findFallbackNodes(0, nil)
+	m.hostRegexes.prefixList.findFallbackNodes(0, nil)
+	m.pathRegexes.prefixList.findFallbackNodes(0, nil)
+	m.queryRegexes.prefixList.findFallbackNodes(0, nil)
 }
 
 func newURLMatcher() *URLMatcher {

@@ -164,7 +164,9 @@ The points are added to the category score for each page whose URL matches the r
 Regular expression matching is case-insensitive. The regular expression syntax is that supported by the RE2 library.
 
 A regular expression can be restricted to matching a certain part of the URL by adding a one-character suffix
-immediately after the final slash. A suffix of \verb"h" matches the hostname, \verb"p" matches the path,
+immediately after the final slash.
+A suffix of \verb"h" matches the scheme+hostname (e.g. \verb"http://www.google.com"), 
+\verb"p" matches the path,
 and \verb"q" matches the query.
 
 \item[Content phrases] Unlike the other two kinds of rules, these apply to the content of the page, not the URL. 

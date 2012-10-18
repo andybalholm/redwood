@@ -225,22 +225,22 @@ func lexText(l *lexer) stateFn {
 			l.divOK = true
 			l.ignore()
 		case '!', '=':
-			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+			if len(l.input) > l.pos && l.input[l.pos] == '=' {
 				l.pos++
-				if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+				if len(l.input) > l.pos && l.input[l.pos] == '=' {
 					l.pos++
 				}
 			}
 			l.divOK = false
 			l.ignore()
 		case '%', '*', '^':
-			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+			if len(l.input) > l.pos && l.input[l.pos] == '=' {
 				l.pos++
 			}
 			l.divOK = false
 			l.ignore()
 		case '&', '|':
-			if len(l.input) >= l.pos {
+			if len(l.input) > l.pos {
 				if r2 := l.input[l.pos]; r2 == byte(r) || r2 == '=' {
 					l.pos++
 				}
@@ -249,7 +249,7 @@ func lexText(l *lexer) stateFn {
 			l.ignore()
 		case '+', '-':
 			l.divOK = false
-			if len(l.input) >= l.pos {
+			if len(l.input) > l.pos {
 				switch r2 := l.input[l.pos]; r2 {
 				case byte(r):
 					l.divOK = true
@@ -260,22 +260,22 @@ func lexText(l *lexer) stateFn {
 			}
 			l.ignore()
 		case '<':
-			if len(l.input) >= l.pos && l.input[l.pos] == '<' {
+			if len(l.input) > l.pos && l.input[l.pos] == '<' {
 				l.pos++
 			}
-			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+			if len(l.input) > l.pos && l.input[l.pos] == '=' {
 				l.pos++
 			}
 			l.divOK = false
 			l.ignore()
 		case '>':
-			if len(l.input) >= l.pos && l.input[l.pos] == '>' {
+			if len(l.input) > l.pos && l.input[l.pos] == '>' {
 				l.pos++
-				if len(l.input) >= l.pos && l.input[l.pos] == '>' {
+				if len(l.input) > l.pos && l.input[l.pos] == '>' {
 					l.pos++
 				}
 			}
-			if len(l.input) >= l.pos && l.input[l.pos] == '=' {
+			if len(l.input) > l.pos && l.input[l.pos] == '=' {
 				l.pos++
 			}
 			l.divOK = false

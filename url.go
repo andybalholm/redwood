@@ -121,7 +121,7 @@ func (m *URLMatcher) AddRule(r rule) {
 func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 	result := make(map[rule]int)
 
-	host := u.Host
+	host := strings.ToLower(u.Host)
 	path := strings.ToLower(u.Path)
 
 	// strip off the port number, if present
@@ -129,10 +129,9 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 	if colon != -1 {
 		host = host[:colon]
 	}
-	host = strings.ToLower(u.Scheme + "://" + host)
 
 	m.regexes.findMatches(strings.ToLower(u.String()), result)
-	m.hostRegexes.findMatches(host, result)
+	m.hostRegexes.findMatches(strings.ToLower(u.Scheme) + "://" + host, result)
 	m.pathRegexes.findMatches(path, result)
 	m.queryRegexes.findMatches(strings.ToLower(u.RawQuery), result)
 

@@ -123,11 +123,11 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 	result := make(map[rule]int)
 
 	host := strings.ToLower(u.Host)
-	path := strings.ToLower(u.Path)
 
 	// strip off the port number, if present
 	colon := strings.LastIndex(host, ":")
-	if colon != -1 {
+	// IPv6 addresses contain colons inside brackets, so be careful.
+	if colon != -1 && !strings.Contains(host[colon:], "]") {
 		host = host[:colon]
 	}
 
@@ -146,10 +146,26 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 		host = strings.ToLower(strings.Join(labels, "."))
 	}
 
-	m.regexes.findMatches(strings.ToLower(u.String()), result)
-	m.hostRegexes.findMatches(strings.ToLower(u.Scheme) + "://" + host, result)
+	urlString := ""
+	if u.Scheme != "" {
+		urlString += strings.ToLower(u.Scheme) + ":"
+	}
+	if host != "" {
+		urlString += "//" + host
+		m.hostRegexes.findMatches(urlString, result)
+	}
+
+	path := strings.ToLower(u.Path)
 	m.pathRegexes.findMatches(path, result)
-	m.queryRegexes.findMatches(strings.ToLower(u.RawQuery), result)
+	urlString += path
+
+	query := strings.ToLower(u.RawQuery)
+	if query != "" {
+		m.queryRegexes.findMatches(query, result)
+		urlString += "?" + query
+	}
+
+	m.regexes.findMatches(urlString, result)
 
 	// Test for matches of the host and of the domains it belongs to.
 	s := host

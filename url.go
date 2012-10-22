@@ -161,6 +161,11 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 
 	query := strings.ToLower(u.RawQuery)
 	if query != "" {
+		q, err := url.QueryUnescape(query)
+		if err == nil {
+			// Change ' ' back to '+'.
+			query = strings.Replace(q, " ", "+", -1)
+		}
 		m.queryRegexes.findMatches(query, result)
 		urlString += "?" + query
 	}

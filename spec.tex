@@ -161,7 +161,8 @@ would actually get a score of 150 points.
 
 \item[URL regular expressions] A regular expression to match the URL is listed between slashes. 
 The points are added to the category score for each page whose URL matches the regular expression. 
-Regular expression matching is case-insensitive. The regular expression syntax is that supported by the RE2 library.
+The URL is converted to lower case before comparing it to the regular expressions.
+The regular expression syntax is that supported by the RE2 library.
 
 A regular expression can be restricted to matching a certain part of the URL by adding a one-character suffix
 immediately after the final slash.

@@ -61,7 +61,7 @@ func parseRule(s string) (r rule, leftover string, err error) {
 		if slash == 0 {
 			return rule{}, s, errors.New("unmatched slash")
 		}
-		r.content = strings.ToLower(s[1:slash])
+		r.content = s[1:slash]
 		s = s[slash+1:]
 		if s != "" {
 			switch s[0] {

@@ -18,7 +18,7 @@ import (
 // contain at least one of the strings in the set. If no such set can be found,
 // regexStrings returns an empty set.
 func regexStrings(re string) (stringSet, error) {
-	parsed, err := syntax.Parse(re, 0)
+	parsed, err := syntax.Parse(re, syntax.Perl)
 	if err != nil {
 		return nil, err
 	}

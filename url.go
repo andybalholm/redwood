@@ -19,36 +19,36 @@ type regexRule struct {
 // As an optimization, it uses Aho-Corasick string matching find which regular
 // expressions might match—instead of trying them all.
 type regexMap struct {
-	prefixList phraseList
+	stringList phraseList
 	rules      map[string][]regexRule
 }
 
 func newRegexMap() *regexMap {
 	return &regexMap{
-		prefixList: newPhraseList(),
+		stringList: newPhraseList(),
 		rules:      make(map[string][]regexRule),
 	}
 }
 
 func (rm *regexMap) findMatches(s string, tally map[rule]int) {
 	tried := map[string]bool{}
-	scanner := newPhraseScanner(rm.prefixList, func(prefix string) {
-		if tried[prefix] {
+	scanner := newPhraseScanner(rm.stringList, func(p string) {
+		if tried[p] {
 			return
 		}
-		for _, r := range rm.rules[prefix] {
+		for _, r := range rm.rules[p] {
 			if r.MatchString(s) {
 				tally[r.rule] = 1
 			}
 		}
-		tried[prefix] = true
+		tried[p] = true
 	})
 
 	for i := 0; i < len(s); i++ {
 		scanner.scanByte(s[i])
 	}
 
-	// Now try the regexes that have no literal string prefix.
+	// Now try the regexes that have no distinctive literal string component.
 	for _, r := range rm.rules[""] {
 		if r.MatchString(s) {
 			tally[r.rule] = 1
@@ -66,11 +66,17 @@ func (rm *regexMap) addRule(r rule) {
 		return
 	}
 
-	prefix, _ := re.LiteralPrefix()
-	if prefix != "" {
-		rm.prefixList.addPhrase(prefix)
+	ss, err := regexStrings(s)
+	if err != nil || ss.minLen() == 0 {
+		// Store this rule in the list of rules without a literal string component.
+		rm.rules[""] = append(rm.rules[""], regexRule{r, re})
+		return
 	}
-	rm.rules[prefix] = append(rm.rules[prefix], regexRule{r, re})
+
+	for _, p := range ss {
+		rm.stringList.addPhrase(p)
+		rm.rules[p] = append(rm.rules[p], regexRule{r, re})
+	}
 }
 
 type URLMatcher struct {
@@ -84,10 +90,10 @@ type URLMatcher struct {
 // finalize should be called after all rules have been added, but before 
 // using the URLMatcher.
 func (m *URLMatcher) finalize() {
-	m.regexes.prefixList.findFallbackNodes(0, nil)
-	m.hostRegexes.prefixList.findFallbackNodes(0, nil)
-	m.pathRegexes.prefixList.findFallbackNodes(0, nil)
-	m.queryRegexes.prefixList.findFallbackNodes(0, nil)
+	m.regexes.stringList.findFallbackNodes(0, nil)
+	m.hostRegexes.stringList.findFallbackNodes(0, nil)
+	m.pathRegexes.stringList.findFallbackNodes(0, nil)
+	m.queryRegexes.stringList.findFallbackNodes(0, nil)
 }
 
 func newURLMatcher() *URLMatcher {
@@ -152,7 +158,7 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 	}
 	if host != "" {
 		urlString += "//" + host
-		m.hostRegexes.findMatches(urlString, result)
+		m.hostRegexes.findMatches(host, result)
 	}
 
 	path := strings.ToLower(u.Path)

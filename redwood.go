@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"runtime"
@@ -40,7 +39,6 @@ func main() {
 	go accessLog()
 
 	startWebServer()
-	go http.ListenAndServe(":1345", nil)
 
 	icap.HandleFunc("/reqmod", handleRequest)
 	icap.HandleFunc("/respmod", handleResponse)

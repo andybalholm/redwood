@@ -25,7 +25,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 		w.WriteHeader(200, nil, false)
 
 	case "REQMOD":
-		if req.Request.Host == "gateway" {
+		if req.Request.Host == "203.0.113.1" {
 			icap.ServeLocally(w, req)
 			return
 		}

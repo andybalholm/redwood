@@ -1,7 +1,6 @@
 package main
 
 import (
-	"code.google.com/p/go-icap"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -25,10 +24,8 @@ func runURLTest(u string) {
 	}
 
 	c := context{
-		req: &icap.Request{
-			Request: &http.Request{
-				URL: URL,
-			},
+		request: &http.Request{
+			URL: URL,
 		},
 	}
 
@@ -71,7 +68,7 @@ func runURLTest(u string) {
 	}
 
 	fmt.Println()
-	c.req.Response = res
+	c.response = res
 	c.content = responseContent(res)
 
 	c.checkContentType()

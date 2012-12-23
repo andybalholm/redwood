@@ -8,7 +8,7 @@ import (
 // Filtering by MIME type.
 
 // The action to take for files of each type.
-// If it is not specified here, types beginning with "text" will be 
+// If it is not specified here, types beginning with "text" will be
 // content-filtered, and others will be allowed without scanning the content.
 var mimeActions = map[string]action{}
 
@@ -48,10 +48,10 @@ func (c *context) checkContentType() {
 	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
 		// These types tend to be used for content whose type is unknown,
 		// so we should try to second-guess them.
-		if e := c.httpResponse().Header.Get("Content-Encoding"); e == "" || e == "identity" {
+		if e := c.response.Header.Get("Content-Encoding"); e == "" || e == "identity" {
 			preview := c.content
 			if preview == nil {
-				preview = c.req.Preview
+				preview = c.icapRequest.Preview
 			}
 			ct = baseType(http.DetectContentType(preview))
 		}

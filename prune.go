@@ -119,7 +119,7 @@ func (c *context) pruneContent() {
 
 	// Mark the new content as having a charset of UTF-8.
 	prune(tree, metaCharsetSelector)
-	c.httpResponse().Header.Set("Content-Type", "text/html; charset=utf-8")
+	c.response.Header.Set("Content-Type", "text/html; charset=utf-8")
 
 	b := new(bytes.Buffer)
 	err = html.Render(b, tree)

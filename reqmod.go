@@ -30,7 +30,10 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
-		c := context{req: req}
+		c := context{
+			icapRequest: req,
+			request:     req.Request,
+		}
 
 		c.scanURL()
 

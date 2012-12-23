@@ -12,7 +12,7 @@ type phraseNode struct {
 	fallback int32
 }
 
-// A phraseList is a trie of phrase rules (with fallback pointers for 
+// A phraseList is a trie of phrase rules (with fallback pointers for
 // Aho-Corasick).
 // It acts as a state table for the state machine that scans the page content.
 // It is a byte-by-byte trie in UTF-8 encoding.

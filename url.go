@@ -87,7 +87,7 @@ type URLMatcher struct {
 	queryRegexes *regexMap
 }
 
-// finalize should be called after all rules have been added, but before 
+// finalize should be called after all rules have been added, but before
 // using the URLMatcher.
 func (m *URLMatcher) finalize() {
 	m.regexes.stringList.findFallbackNodes(0, nil)

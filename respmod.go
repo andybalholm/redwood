@@ -19,7 +19,11 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		w.WriteHeader(200, nil, false)
 
 	case "RESPMOD":
-		c := context{req: req}
+		c := context{
+			icapRequest: req,
+			request:     req.Request,
+			response:    req.Response,
+		}
 
 		c.checkContentType()
 
@@ -36,7 +40,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 		if c.action == FILTER {
 			c.scanURL()
-			c.content = responseContent(c.httpResponse())
+			c.content = responseContent(c.response)
 			c.pruneContent()
 			c.scanContent()
 		}

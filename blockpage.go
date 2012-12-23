@@ -35,33 +35,37 @@ type blockData struct {
 	Scores     string
 }
 
-func (c *context) showBlockPage(w icap.ResponseWriter) {
-	rw := icap.NewBridgedResponseWriter(w)
-
-	if categories[c.blocked[0]].invisible {
+// showBlockPage sends a page showing that the request was blocked.
+func showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard) {
+	if categories[sc.blocked[0]].invisible {
 		// Serve an invisible image instead of the usual block page.
-		rw.Header().Set("Content-Type", "image/gif")
-		rw.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(rw, transparent1x1)
+		w.Header().Set("Content-Type", "image/gif")
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, transparent1x1)
 		return
 	}
 
-	blockDesc := make([]string, len(c.blocked))
-	for i, name := range c.blocked {
+	blockDesc := make([]string, len(sc.blocked))
+	for i, name := range sc.blocked {
 		blockDesc[i] = categories[name].description
 	}
 	data := blockData{
-		URL:        c.URL().String(),
+		URL:        r.URL.String(),
 		Categories: strings.Join(blockDesc, ", "),
-		IP:         c.user(),
-		Tally:      listTally(c.stringTally()),
-		Scores:     listTally(c.scores),
+		IP:         r.RemoteAddr,
+		Tally:      listTally(stringTally(sc.tally)),
+		Scores:     listTally(sc.scores),
 	}
-	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-	rw.WriteHeader(http.StatusForbidden)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
 
-	err := blockTemplate.Execute(rw, data)
+	err := blockTemplate.Execute(w, data)
 	if err != nil {
 		log.Println("Error filling in block page template:", err)
 	}
+}
+
+func (c *context) showBlockPage(w icap.ResponseWriter) {
+	rw := icap.NewBridgedResponseWriter(w)
+	showBlockPage(rw, c.request, &c.scorecard)
 }

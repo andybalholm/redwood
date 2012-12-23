@@ -77,7 +77,7 @@ loop:
 
 	ps.scanByte(' ')
 
-	c.calculateScores()
+	c.calculate(c.user())
 }
 
 // scanJSContent scans only the contents of quoted JavaScript strings
@@ -97,7 +97,7 @@ func (c *context) scanJSContent() {
 		ps.scanByte(' ')
 	}
 
-	c.calculateScores()
+	c.calculate(c.user())
 }
 
 // responseContent reads the body of an HTTP response into a slice of bytes.

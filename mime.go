@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"io"
+	"mime"
 	"net/http"
 	"strings"
 )
@@ -33,6 +36,47 @@ var mimeBlock = newActiveFlag("mime-block", "", "content type to block",
 		mimeActions[t] = BLOCK
 		return nil
 	})
+
+// checkContentType examines the request's Content-Type header, and potentially
+// its content as well, to determine the content's MIME type.
+// Then it decides, based on the MIME type, whether it should be allowed,
+// filtered, or blocked.
+func checkContentType(resp *http.Response) (contentType string, a action) {
+	ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil || !strings.Contains(ct, "/") {
+		ct = ""
+	}
+
+	switch ct {
+	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
+		// These types tend to be used for content whose type is unknown,
+		// so we should try to second-guess them.
+		preview := make([]byte, 1024)
+		n, _ := resp.Body.Read(preview)
+		preview = preview[:n]
+
+		if n > 0 {
+			ct, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
+
+			// Make the preview data available for re-reading.
+			var rc struct {
+				io.Reader
+				io.Closer
+			}
+			rc.Reader = io.MultiReader(bytes.NewBuffer(preview), resp.Body)
+			rc.Closer = resp.Body
+			resp.Body = rc
+		}
+	}
+
+	if a, ok := mimeActions[ct]; ok {
+		return ct, a
+	}
+	if strings.HasPrefix(ct, "text/") {
+		return ct, FILTER
+	}
+	return ct, ALLOW
+}
 
 // checkContentType examines the request's Content-Type header, and potentially
 // its content as well, to determine the content's MIME type.

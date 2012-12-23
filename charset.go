@@ -3,35 +3,49 @@ package main
 import (
 	"bytes"
 	"exp/html"
+	"mime"
 	"strings"
 	"unicode/utf8"
 )
 
 // Character-set detection.
 
-// findCharset determines the character encoding to be used to interpret the
-// page's content, and stores it in c.charset.
 func (c *context) findCharset() {
-	ct := c.contentType()
-	cs := charsetFromContentType(ct)
-	content := c.content
+	c.charset = findCharset(c.contentType(), c.content)
+}
+
+// findCharset returns the character encoding to be used to interpret the
+// page's content.
+func findCharset(declaredContentType string, content []byte) (charset string) {
+	defer func() {
+		if ce := compatibilityEncodings[charset]; ce != "" {
+			charset = ce
+		}
+	}()
+
+	cs := charsetFromContentType(declaredContentType)
+	if cs != "" {
+		return cs
+	}
+
 	if len(content) > 1024 {
 		content = content[:1024]
 	}
 
-	if cs == "" && len(content) >= 2 {
+	if len(content) >= 2 {
 		if content[0] == 0xfe && content[1] == 0xff {
-			cs = "utf-16be"
-		} else if content[0] == 0xff && content[1] == 0xfe {
-			cs = "utf-16le"
+			return "utf-16be"
+		}
+		if content[0] == 0xff && content[1] == 0xfe {
+			return "utf-16le"
 		}
 	}
 
-	if cs == "" && len(content) >= 3 && content[0] == 0xef && content[1] == 0xbb && content[2] == 0xbf {
-		cs = "utf-8"
+	if len(content) >= 3 && content[0] == 0xef && content[1] == 0xbb && content[2] == 0xbf {
+		return "utf-8"
 	}
 
-	if cs == "" && (strings.Contains(ct, "html") || ct == "") {
+	if strings.Contains(declaredContentType, "html") || declaredContentType == "" {
 		// Look for a <meta> tag giving the encoding.
 		tree, err := html.Parse(bytes.NewBuffer(content))
 		if err == nil {
@@ -41,83 +55,41 @@ func (c *context) findCharset() {
 					a[attr.Key] = attr.Val
 				}
 				if charsetAttr := a["charset"]; charsetAttr != "" {
-					cs = strings.ToLower(charsetAttr)
-					break
+					return strings.ToLower(charsetAttr)
 				}
 				if strings.EqualFold(a["http-equiv"], "Content-Type") {
 					cs = charsetFromContentType(a["content"])
 					if cs != "" {
-						break
+						return cs
 					}
 				}
 			}
 		}
 	}
 
-	if cs == "" {
-		// Try to detect UTF-8.
-		// First eliminate any partial rune that may be split by the 1024-byte boundary.
-		for i := len(content) - 1; i >= 0 && i > len(content)-4; i-- {
-			b := content[i]
-			if b < 128 {
-				break
-			}
-			if utf8.RuneStart(b) {
-				content = content[:i]
-				break
-			}
+	// Try to detect UTF-8.
+	// First eliminate any partial rune that may be split by the 1024-byte boundary.
+	for i := len(content) - 1; i >= 0 && i > len(content)-4; i-- {
+		b := content[i]
+		if b < 128 {
+			break
 		}
-		if utf8.Valid(content) {
-			cs = "utf-8"
+		if utf8.RuneStart(b) {
+			content = content[:i]
+			break
 		}
 	}
-
-	if cs == "" {
-		cs = "windows-1252"
+	if utf8.Valid(content) {
+		return "utf-8"
 	}
 
-	if ce := compatibilityEncodings[cs]; ce != "" {
-		cs = ce
-	}
-
-	c.charset = cs
+	return "windows-1252"
 }
 
 func charsetFromContentType(t string) string {
 	t = strings.ToLower(t)
-
-	for t != "" {
-		i := strings.Index(t, "charset")
-		if i == -1 {
-			return ""
-		}
-		t = t[i+len("charset"):]
-		t = strings.TrimLeft(t, " \t\r\n\f")
-		if !strings.HasPrefix(t, "=") {
-			continue
-		}
-		t = strings.TrimLeft(t[1:], " \t\r\n\f")
-		if t == "" {
-			return ""
-		}
-		switch t[0] {
-		case '"', '\'':
-			quote := t[0]
-			for j := 1; j < len(t); j++ {
-				if t[j] == quote {
-					return t[1:j]
-				}
-			}
-			return ""
-		default:
-			j := strings.IndexAny(t, " ;\t\t\n\f")
-			if j == -1 {
-				return t
-			}
-			return t[:j]
-		}
-	}
-	return ""
+	_, params, _ := mime.ParseMediaType(t)
+	return params["charset"]
 }
 
 // compatibilityEncodings contains character sets that should be misinterpreted

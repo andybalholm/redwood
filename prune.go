@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -74,27 +75,32 @@ func loadPruningConfig(filename string) error {
 	return nil
 }
 
+func (c *context) pruneContent() {
+	if strings.Contains(c.contentType(), "html") {
+		c.findCharset()
+		c.modified = pruneContent(c.URL(), &c.content, c.charset)
+		if c.modified {
+			c.response.Header.Set("Content-Type", "text/html; charset=utf-8")
+			c.charset = "utf-8"
+		}
+	}
+}
+
 // pruneContent checks the URL to see if it is a site that is calling for
 // content pruning. If so, it parses the HTML, removes the specified tags, and
-// re-renders the HTML.
-func (c *context) pruneContent() {
-	if !strings.Contains(c.contentType(), "html") {
-		return
-	}
-	URLMatches := pruneMatcher.MatchingRules(c.URL())
+// re-renders the HTML. It returns true if the content was changed.
+func pruneContent(URL *url.URL, content *[]byte, charset string) bool {
+	URLMatches := pruneMatcher.MatchingRules(URL)
 	if len(URLMatches) == 0 {
-		return
+		return false
 	}
 
-	var r io.Reader = bytes.NewBuffer(c.content)
-	if c.charset == "" {
-		c.findCharset()
-	}
+	var r io.Reader = bytes.NewBuffer(*content)
 
-	if c.charset != "utf-8" {
-		d := mahonia.NewDecoder(c.charset)
+	if charset != "utf-8" {
+		d := mahonia.NewDecoder(charset)
 		if d == nil {
-			log.Printf("Unsupported charset (%s) on %s", c.charset, c.URL())
+			log.Printf("Unsupported charset (%s) on %s", charset, URL)
 		} else {
 			r = d.NewReader(r)
 		}
@@ -102,33 +108,34 @@ func (c *context) pruneContent() {
 
 	tree, err := html.Parse(r)
 	if err != nil {
-		log.Printf("Error parsing html from %s: %s", c.URL(), err)
-		return
+		log.Printf("Error parsing html from %s: %s", URL, err)
+		return false
 	}
 
+	modified := false
 	for urlRule := range URLMatches {
 		sel := pruneActions[urlRule]
 		if prune(tree, sel) > 0 {
-			c.modified = true
+			modified = true
 		}
 	}
 
-	if !c.modified {
-		return
+	if !modified {
+		return false
 	}
 
 	// Mark the new content as having a charset of UTF-8.
 	prune(tree, metaCharsetSelector)
-	c.response.Header.Set("Content-Type", "text/html; charset=utf-8")
 
 	b := new(bytes.Buffer)
 	err = html.Render(b, tree)
 	if err != nil {
-		log.Printf("Error rendering modified content from %s: %s", c.URL(), err)
-		return
+		log.Printf("Error rendering modified content from %s: %s", URL, err)
+		return false
 	}
 
-	c.content = b.Bytes()
+	*content = b.Bytes()
+	return true
 }
 
 // prune deletes children of n that match sel, and returns how many were

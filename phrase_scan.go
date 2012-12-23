@@ -15,31 +15,33 @@ import (
 
 var contentPhraseList = newPhraseList()
 
-// scanContent scans the content of a document for phrases,
-// and updates its counts and scores.
 func (c *context) scanContent() {
-	mime := c.contentType()
-	if strings.Contains(mime, "javascript") {
-		c.scanJSContent()
-		return
-	}
-
 	if c.charset == "" {
 		c.findCharset()
 	}
-	decode := mahonia.NewDecoder(c.charset)
+	scanContent(c.content, c.contentType(), c.charset, c.tally)
+	c.calculate(c.user())
+}
+
+// scanContent scans the content of a document for phrases,
+// and updates tally.
+func scanContent(content []byte, contentType, charset string, tally map[rule]int) {
+	if strings.Contains(contentType, "javascript") {
+		scanJSContent(content, tally)
+		return
+	}
+
+	decode := mahonia.NewDecoder(charset)
 	if decode == nil {
-		log.Printf("Unsupported charset (%s) on %s", c.charset, c.URL())
+		log.Printf("Unsupported charset (%s)", charset)
 		decode = mahonia.NewDecoder("utf-8")
 	}
-	if strings.Contains(c.contentType(), "html") {
+	if strings.Contains(contentType, "html") {
 		decode = mahonia.FallbackDecoder(mahonia.EntityDecoder(), decode)
 	}
 
-	content := c.content
-
 	ps := newPhraseScanner(contentPhraseList, func(s string) {
-		c.tally[rule{t: contentPhrase, content: s}]++
+		tally[rule{t: contentPhrase, content: s}]++
 	})
 	ps.scanByte(' ')
 	prevRune := ' '
@@ -76,16 +78,14 @@ loop:
 	}
 
 	ps.scanByte(' ')
-
-	c.calculate(c.user())
 }
 
 // scanJSContent scans only the contents of quoted JavaScript strings
 // in the document.
-func (c *context) scanJSContent() {
-	_, items := lex(string(c.content))
+func scanJSContent(content []byte, tally map[rule]int) {
+	_, items := lex(string(content))
 	ps := newPhraseScanner(contentPhraseList, func(s string) {
-		c.tally[rule{t: contentPhrase, content: s}]++
+		tally[rule{t: contentPhrase, content: s}]++
 	})
 
 	for s := range items {
@@ -96,8 +96,6 @@ func (c *context) scanJSContent() {
 		}
 		ps.scanByte(' ')
 	}
-
-	c.calculate(c.user())
 }
 
 // responseContent reads the body of an HTTP response into a slice of bytes.

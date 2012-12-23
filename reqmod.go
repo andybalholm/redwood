@@ -43,7 +43,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
-		if c.changeQuery() {
+		if changeQuery(c.request.URL) {
 			content, err := ioutil.ReadAll(req.Request.Body)
 			if err != nil {
 				log.Println(err)
@@ -66,5 +66,5 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 // scanURL calculates scores and an action based on the request's URL.
 func (c *context) scanURL() {
 	c.tally = URLRules.MatchingRules(c.URL())
-	c.calculateScores()
+	c.calculate(c.user())
 }

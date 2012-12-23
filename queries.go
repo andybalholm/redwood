@@ -74,9 +74,7 @@ func loadQueryConfig(filename string) error {
 
 // changeQuery checks the URL to see if it is a site that is calling for
 // query changes. If so, it modifies the URL and returns true.
-func (c *context) changeQuery() (changed bool) {
-	URL := c.URL()
-
+func changeQuery(URL *url.URL) (changed bool) {
 	matches := queryMatcher.MatchingRules(URL)
 	if len(matches) == 0 {
 		return false

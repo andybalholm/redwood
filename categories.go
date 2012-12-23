@@ -269,15 +269,3 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 
 	return sortedKeys(blocked)
 }
-
-// calculateScores calculates category scores and finds out whether the page
-// needs to be blocked, based on c.tally.
-func (c *context) calculateScores() {
-	c.scores = categoryScores(c.tally)
-	c.blocked = blockedCategories(c.scores, whichGroup[c.user()])
-	if len(c.blocked) > 0 {
-		c.action = BLOCK
-	} else {
-		c.action = ALLOW
-	}
-}

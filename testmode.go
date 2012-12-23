@@ -93,7 +93,7 @@ func runURLTest(u string) {
 		fmt.Println("No content phrases match.")
 	} else {
 		fmt.Println("The following rules match:")
-		printSortedTally(c.stringTally())
+		printSortedTally(stringTally(c.tally))
 	}
 
 	if len(c.scores) > 0 {

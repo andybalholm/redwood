@@ -78,7 +78,7 @@ func (c *context) log(w *csv.Writer) {
 		status = c.response.StatusCode
 	}
 
-	w.Write(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), c.request.Method, status, c.mime, len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", ")))
+	w.Write(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), c.request.Method, status, c.mime, len(c.content), modified, listTally(stringTally(c.tally)), listTally(c.scores), strings.Join(c.blocked, ", ")))
 	w.Flush()
 }
 
@@ -91,10 +91,10 @@ func toStrings(a ...interface{}) []string {
 	return result
 }
 
-// stringTally returns a copy of c.tally with strings instead of rules as keys.
-func (c *context) stringTally() map[string]int {
+// stringTally returns a copy of tally with strings instead of rules as keys.
+func stringTally(tally map[rule]int) map[string]int {
 	st := make(map[string]int)
-	for r, n := range c.tally {
+	for r, n := range tally {
 		st[r.String()] = n
 	}
 	return st

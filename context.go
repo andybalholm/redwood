@@ -9,7 +9,9 @@ import (
 // A context stores all kinds of information about a page that is being
 // filtered in one place.
 type context struct {
-	req *icap.Request // the ICAP request that we're dealing with
+	icapRequest *icap.Request
+	request     *http.Request
+	response    *http.Response
 
 	content  []byte         // the content of the page
 	mime     string         // the MIME type of the content, after sniffing
@@ -22,28 +24,20 @@ type context struct {
 }
 
 func (c *context) URL() *url.URL {
-	return c.req.Request.URL
-}
-
-func (c *context) httpRequest() *http.Request {
-	return c.req.Request
-}
-
-func (c *context) httpResponse() *http.Response {
-	return c.req.Response
+	return c.request.URL
 }
 
 func (c *context) user() string {
-	u := c.req.Header.Get("X-Client-Username")
+	u := c.icapRequest.Header.Get("X-Client-Username")
 	if u != "" {
 		return u
 	}
-	return c.req.Header.Get("X-Client-IP")
+	return c.icapRequest.Header.Get("X-Client-IP")
 }
 
 func (c *context) contentType() string {
-	if c.req.Response == nil {
+	if c.response == nil {
 		return ""
 	}
-	return c.req.Response.Header.Get("Content-Type")
+	return c.response.Header.Get("Content-Type")
 }

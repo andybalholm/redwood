@@ -386,7 +386,7 @@ func lexRegex(l *lexer) stateFn {
 	return lexText
 }
 
-// keywordDivOK contains a value of true for keywords that can be followed 
+// keywordDivOK contains a value of true for keywords that can be followed
 // by a division operator.
 var keywordDivOK = map[string]bool{
 	"break":      false,

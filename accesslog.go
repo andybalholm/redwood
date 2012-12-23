@@ -63,8 +63,6 @@ func accessLog() {
 
 // log writes a log entry (in CSV format) to w.
 func (c *context) log(w *csv.Writer) {
-	mode := c.req.Method
-
 	modified := ""
 	if c.modified {
 		modified = "pruned"
@@ -75,7 +73,12 @@ func (c *context) log(w *csv.Writer) {
 		user = fmt.Sprintf("%s(%s)", user, group)
 	}
 
-	w.Write(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), mode, c.mime, len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", ")))
+	status := 0
+	if c.response != nil {
+		status = c.response.StatusCode
+	}
+
+	w.Write(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), c.request.Method, status, c.mime, len(c.content), modified, listTally(c.stringTally()), listTally(c.scores), strings.Join(c.blocked, ", ")))
 	w.Flush()
 }
 

@@ -14,8 +14,7 @@ import (
 )
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
-var cores = flag.Int("cores", runtime.NumCPU(), "number of CPU cores to use")
-var pidfile = flag.String("pidfile", "/var/run/redwood.pid", "path of file to store process ID")
+var listenAddress = flag.String("listen-address", ":8000", "address (host:port) to listen for proxy connections on")
 
 func main() {
 	if *pidfile != "" {
@@ -40,8 +39,8 @@ func main() {
 
 	startWebServer()
 
-	err := http.ListenAndServe(":6502", proxyHandler{})
+	err := http.ListenAndServe(*listenAddress, proxyHandler{})
 	if err != nil {
-		log.Println("Error listening on port 6502:", err)
+		log.Println("Error running proxy server:", err)
 	}
 }

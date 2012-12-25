@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -19,7 +20,7 @@ var accessLogName = flag.String("access-log", "", "path to access-log file")
 
 // logChan is a channel for sending context objects, once processing is
 // completed, to be logged in the access log.
-var logChan = make(chan *context, 10)
+var logChan = make(chan []string, 10)
 
 // accessLog opens the log file and writes entries to it from logChan.
 // It should be run in its own goroutine.
@@ -27,16 +28,22 @@ func accessLog() {
 	var logfile = os.Stdout
 	actualFile := false
 	var err error
-	if *accessLogName != "" {
-		logfile, err = os.OpenFile(*accessLogName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-		if err != nil {
-			log.Printf("Could not open access log file (%s): %s\n Sending access log messages to standard output instead.", *accessLogName, err)
-			logfile = os.Stdout
-		} else {
-			actualFile = true
+	var csvWriter *csv.Writer
+
+	openLogFile := func() {
+		if *accessLogName != "" {
+			logfile, err = os.OpenFile(*accessLogName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+			if err != nil {
+				log.Printf("Could not open access log file (%s): %s\n Sending access log messages to standard output instead.", *accessLogName, err)
+				logfile = os.Stdout
+				actualFile = false
+			} else {
+				actualFile = true
+			}
 		}
+		csvWriter = csv.NewWriter(logfile)
 	}
-	csvWriter := csv.NewWriter(logfile)
+	openLogFile()
 
 	hupChan := make(chan os.Signal, 1)
 	signal.Notify(hupChan, syscall.SIGHUP)
@@ -44,42 +51,35 @@ func accessLog() {
 	for {
 		select {
 		case c := <-logChan:
-			c.log(csvWriter)
+			csvWriter.Write(c)
+			csvWriter.Flush()
 		case <-hupChan:
 			// When signaled with SIGHUP, close and reopen the log file.
 			if actualFile {
 				logfile.Close()
-				logfile, err = os.OpenFile(*accessLogName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-				if err != nil {
-					log.Printf("Could not open access log file (%s): %s\n Sending access log messages to standard output instead.", *accessLogName, err)
-					logfile = os.Stdout
-					actualFile = false
-				}
+				openLogFile()
 			}
-			csvWriter = csv.NewWriter(logfile)
 		}
 	}
 }
 
-// log writes a log entry (in CSV format) to w.
-func (c *context) log(w *csv.Writer) {
+// logAccess generates a log entry and sends it on logChan to be written.
+func logAccess(req *http.Request, resp *http.Response, sc scorecard, contentType string, contentLength int, pruned bool, user string) {
 	modified := ""
-	if c.modified {
+	if pruned {
 		modified = "pruned"
 	}
 
-	user := c.user()
 	if group := whichGroup[user]; group != "" {
 		user = fmt.Sprintf("%s(%s)", user, group)
 	}
 
 	status := 0
-	if c.response != nil {
-		status = c.response.StatusCode
+	if resp != nil {
+		status = resp.StatusCode
 	}
 
-	w.Write(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, c.action, c.URL(), c.request.Method, status, c.mime, len(c.content), modified, listTally(stringTally(c.tally)), listTally(c.scores), strings.Join(c.blocked, ", ")))
-	w.Flush()
+	logChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, sc.action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(sc.tally)), listTally(sc.scores), strings.Join(sc.blocked, ", "))
 }
 
 // toStrings converts its arguments into a slice of strings.

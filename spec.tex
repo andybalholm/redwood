@@ -22,12 +22,9 @@ into multiple categories instead of just ``Allow'' and ``Block.''
 
 \section{Basic Architecture}
 
-Redwood runs as an ICAP server. This means that it runs in connection 
-with a proxy server such as Squid, filtering HTTP requests and responses 
-passed to it by the proxy.
-
-Redwood examines each HTTP message to determine if it should be allowed to proceed. 
-If so, it passes the message back to the proxy so that it can be forwarded 
+Redwood runs as an HTTP proxy server. 
+It examines each HTTP message to determine if it should be allowed to proceed. 
+If so, it passes the message on 
 to its final destination. If not, it replaces the message with a customizable page 
 stating that the request is not allowed (optionally giving the reason 
 and providing a link for filing an overblock request).
@@ -47,6 +44,9 @@ Values may be enclosed in double quotes, with the usual backslash escapes.
 An example configuration file:
 
 \begin{verbatim}
+# Listen for connections on port 8000.
+listen-address :8000
+
 # the template for the block page
 blockpage "/etc/redwood/block.html"
 
@@ -62,9 +62,6 @@ categories /etc/redwood/categories
 # the minimum total score from a blocked category needed 
 # to block a page
 threshold 275
-
-# how many threads to run as on a multicore system
-cores=4
 
 # file configuring the content pruning
 content-pruning /etc/redwood/pruning.conf
@@ -282,8 +279,9 @@ It can be sent to a file by including the \verb"access-log" directive in Redwood
 The access log has the following fields: time, username or IP address, 
 action (allow, block, or ignore), URL, HTTP method (GET, PUT, etc.),
 HTTP response status (if an HTTP response was being processed), 
-content type, whether the content was modified by Redwood, which rules matched (and how many times), 
+content type, content-length, whether the content was modified by Redwood, which rules matched (and how many times), 
 the score for each category, and the list of categories that caused the page to be blocked (if it was).
+The content length is meaningful only if a phrase scan was performed.
 
 \section{Filter Groups}
 

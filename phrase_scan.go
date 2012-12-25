@@ -15,14 +15,6 @@ import (
 
 var contentPhraseList = newPhraseList()
 
-func (c *context) scanContent() {
-	if c.charset == "" {
-		c.findCharset()
-	}
-	scanContent(c.content, c.contentType(), c.charset, c.tally)
-	c.calculate(c.user())
-}
-
 // scanContent scans the content of a document for phrases,
 // and updates tally.
 func scanContent(content []byte, contentType, charset string, tally map[rule]int) {

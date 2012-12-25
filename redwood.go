@@ -4,7 +4,6 @@
 package main
 
 import (
-	"code.google.com/p/go-icap"
 	"flag"
 	"fmt"
 	"log"
@@ -39,14 +38,10 @@ func main() {
 
 	go accessLog()
 
-	go http.ListenAndServe(":6502", proxyHandler{})
-
 	startWebServer()
 
-	icap.HandleFunc("/reqmod", handleRequest)
-	icap.HandleFunc("/respmod", handleResponse)
-	err := icap.ListenAndServe(":1344", nil)
+	err := http.ListenAndServe(":6502", proxyHandler{})
 	if err != nil {
-		log.Println("Error listening on port 1344:", err)
+		log.Println("Error listening on port 6502:", err)
 	}
 }

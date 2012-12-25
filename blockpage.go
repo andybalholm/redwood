@@ -1,7 +1,6 @@
 package main
 
 import (
-	"code.google.com/p/go-icap"
 	"flag"
 	"fmt"
 	"html/template"
@@ -63,9 +62,4 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard) {
 	if err != nil {
 		log.Println("Error filling in block page template:", err)
 	}
-}
-
-func (c *context) showBlockPage(w icap.ResponseWriter) {
-	rw := icap.NewBridgedResponseWriter(w)
-	showBlockPage(rw, c.request, &c.scorecard)
 }

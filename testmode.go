@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // support for running "redwood -test http://example.com"
@@ -23,89 +25,102 @@ func runURLTest(u string) {
 		}
 	}
 
-	c := context{
-		request: &http.Request{
-			URL: URL,
-		},
-	}
-
 	fmt.Println("URL:", URL)
 	fmt.Println()
 
-	c.scanURL()
+	sc := scorecard{
+		tally: URLRules.MatchingRules(URL),
+	}
+	sc.calculate("")
 
-	if len(c.tally) == 0 {
+	if len(sc.tally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
 		fmt.Println("The following URL rules match:")
-		for s, _ := range c.tally {
+		for s, _ := range sc.tally {
 			fmt.Println(s)
 		}
 	}
 
-	if len(c.scores) > 0 {
+	if len(sc.scores) > 0 {
 		fmt.Println()
 		fmt.Println("The request has the following category scores:")
-		printSortedTally(c.scores)
+		printSortedTally(sc.scores)
 	}
 
-	if len(c.blocked) > 0 {
+	if len(sc.blocked) > 0 {
 		fmt.Println()
 		fmt.Println("The request is blocked by the following categories:")
-		for _, c := range c.blocked {
+		for _, c := range sc.blocked {
 			fmt.Println(c)
 		}
 		fmt.Println()
 		fmt.Println("But we'll check the content too anyway.")
 	}
 
+	if changeQuery(URL) {
+		fmt.Println()
+		fmt.Println("URL modified to:", URL)
+	}
+
 	fmt.Println()
 	fmt.Println("Downloading content...")
-	res, err := http.Get(URL.String())
+	resp, err := http.Get(URL.String())
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	defer resp.Body.Close()
 
 	fmt.Println()
-	c.response = res
-	c.content = responseContent(res)
 
-	c.checkContentType()
-	switch c.action {
+	contentType, action := checkContentType(resp)
+	switch action {
 	case ALLOW:
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
 		return
 	case BLOCK:
-		fmt.Println("The content has a banned MIME type:", c.mime)
+		fmt.Println("The content has a banned MIME type:", contentType)
 		return
 	}
 
-	c.pruneContent()
-	if c.modified {
+	content, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error while reading response body:", err)
+		return
+	}
+
+	modified := false
+	charset := findCharset(resp.Header.Get("Content-Type"), content)
+	if strings.Contains(contentType, "html") {
+		modified = pruneContent(URL, &content, charset)
+		charset = "utf-8"
+	}
+	if modified {
 		fmt.Println("Performed content pruning.")
 		fmt.Println()
 	}
 
-	c.scanContent()
+	scanContent(content, contentType, charset, sc.tally)
+	sc.calculate("")
 
-	if len(c.tally) == 0 {
+	if len(sc.tally) == 0 {
 		fmt.Println("No content phrases match.")
 	} else {
 		fmt.Println("The following rules match:")
-		printSortedTally(stringTally(c.tally))
+		printSortedTally(stringTally(sc.tally))
 	}
 
-	if len(c.scores) > 0 {
+	if len(sc.scores) > 0 {
 		fmt.Println()
 		fmt.Println("The response has the following category scores:")
-		printSortedTally(c.scores)
+		printSortedTally(sc.scores)
 	}
 
-	if len(c.blocked) > 0 {
+	if len(sc.blocked) > 0 {
 		fmt.Println()
 		fmt.Println("The page is blocked by the following categories:")
-		for _, c := range c.blocked {
+		for _, c := range sc.blocked {
 			fmt.Println(c)
 		}
 	}

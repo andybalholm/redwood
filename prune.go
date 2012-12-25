@@ -75,17 +75,6 @@ func loadPruningConfig(filename string) error {
 	return nil
 }
 
-func (c *context) pruneContent() {
-	if strings.Contains(c.contentType(), "html") {
-		c.findCharset()
-		c.modified = pruneContent(c.URL(), &c.content, c.charset)
-		if c.modified {
-			c.response.Header.Set("Content-Type", "text/html; charset=utf-8")
-			c.charset = "utf-8"
-		}
-	}
-}
-
 // pruneContent checks the URL to see if it is a site that is calling for
 // content pruning. If so, it parses the HTML, removes the specified tags, and
 // re-renders the HTML. It returns true if the content was changed.

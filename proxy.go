@@ -41,6 +41,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sc.calculate(client)
 	if sc.action == BLOCK {
 		showBlockPage(w, r, &sc)
+		logAccess(r, nil, sc, "", 0, false, client)
 		return
 	}
 
@@ -49,6 +50,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.DefaultTransport.RoundTrip(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		logAccess(r, nil, sc, "", 0, false, client)
 		return
 	}
 	defer resp.Body.Close()
@@ -60,11 +62,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sc.action = BLOCK
 		sc.blocked = []string{"blocked-mime"}
 		showBlockPage(w, r, &sc)
+		logAccess(r, resp, sc, contentType, 0, false, client)
 		return
 
 	case ALLOW:
+		sc.action = IGNORE
 		copyResponseHeader(w, resp)
 		io.Copy(w, resp.Body)
+		logAccess(r, resp, sc, contentType, 0, false, client)
 		return
 	}
 
@@ -88,11 +93,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if sc.action == BLOCK {
 		showBlockPage(w, r, &sc)
+		logAccess(r, resp, sc, contentType, len(content), modified, client)
 		return
 	}
 
 	copyResponseHeader(w, resp)
 	w.Write(content)
+	logAccess(r, resp, sc, contentType, len(content), modified, client)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

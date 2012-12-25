@@ -10,10 +10,6 @@ import (
 
 // Character-set detection.
 
-func (c *context) findCharset() {
-	c.charset = findCharset(c.contentType(), c.content)
-}
-
 // findCharset returns the character encoding to be used to interpret the
 // page's content.
 func findCharset(declaredContentType string, content []byte) (charset string) {

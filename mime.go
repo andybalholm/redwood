@@ -78,40 +78,6 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 	return ct, ALLOW
 }
 
-// checkContentType examines the request's Content-Type header, and potentially
-// its content as well, to determine the content's MIME type.
-// Then it decides, based on the MIME type, whether it should be allowed,
-// filtered, or blocked, and sets c.action accordingly.
-func (c *context) checkContentType() {
-	ct := baseType(c.contentType())
-	if !strings.Contains(ct, "/") {
-		ct = ""
-	}
-
-	switch ct {
-	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
-		// These types tend to be used for content whose type is unknown,
-		// so we should try to second-guess them.
-		if e := c.response.Header.Get("Content-Encoding"); e == "" || e == "identity" {
-			preview := c.content
-			if preview == nil {
-				preview = c.icapRequest.Preview
-			}
-			ct = baseType(http.DetectContentType(preview))
-		}
-	}
-
-	c.mime = ct
-
-	if a, ok := mimeActions[ct]; ok {
-		c.action = a
-	} else if strings.HasPrefix(ct, "text/") {
-		c.action = FILTER
-	} else {
-		c.action = ALLOW
-	}
-}
-
 // baseType strips off any modifiers (such as charset) and returns the simple
 // MIME type.
 func baseType(t string) string {

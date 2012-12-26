@@ -14,7 +14,7 @@ import (
 )
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
-var pidfile = flag.String("pidfile", "/var/run/redwood.pid", "path of file to store process ID")
+var pidfile = flag.String("pidfile", "", "path of file to store process ID")
 var listenAddress = flag.String("listen-address", ":8000", "address (host:port) to listen for proxy connections on")
 
 func main() {

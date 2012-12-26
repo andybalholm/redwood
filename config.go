@@ -101,6 +101,7 @@ func loadConfiguration() {
 
 	loadBlockPage()
 	loadCategories()
+	loadCertificate()
 }
 
 // configReader is a wrapper for reading a configuration file a line at a time,

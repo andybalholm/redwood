@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,11 +11,35 @@ import (
 	"strings"
 )
 
-type proxyHandler struct{}
+type proxyHandler struct {
+	// TLS is whether this is an HTTPS connection.
+	TLS bool
+
+	// connectPort is the server port that was specified in a CONNECT request.
+	connectPort string
+}
 
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Host == "203.0.113.1" {
 		http.DefaultServeMux.ServeHTTP(w, r)
+		return
+	}
+
+	if r.Method == "CONNECT" {
+		if !tlsReady {
+			http.Error(w, "This proxy server is not configured for HTTPS.", http.StatusMethodNotAllowed)
+			return
+		}
+		conn, err := newHijackedConn(w)
+		if err != nil {
+			fmt.Fprintln(conn, "HTTP/1.1 500 Internal Server Error")
+			fmt.Fprintln(conn)
+			fmt.Fprintln(conn, err)
+			conn.Close()
+			return
+		}
+		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		SSLBump(conn, r.URL.Host)
 		return
 	}
 
@@ -26,12 +52,19 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Add("X-Forwarded-For", client)
 	r.Header.Del("Accept-Encoding")
 
-	// Reconstruct the URL if this is a transparent proxy.
+	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
 	if r.URL.Host == "" {
-		r.URL.Host = r.Host
-		if r.URL.Scheme == "" {
+		host := r.Host
+		if h.connectPort != "" {
+			host = net.JoinHostPort(host, h.connectPort)
+		}
+		r.URL.Host = host
+	}
+	if r.URL.Scheme == "" {
+		if h.TLS {
+			r.URL.Scheme = "https"
+		} else {
 			r.URL.Scheme = "http"
-			// TODO: handle HTTPS
 		}
 	}
 
@@ -112,4 +145,39 @@ func copyResponseHeader(w http.ResponseWriter, resp *http.Response) {
 	}
 
 	w.WriteHeader(resp.StatusCode)
+}
+
+// A hijackedConn is a connection that has been hijacked (to fulfill a CONNECT
+// request).
+type hijackedConn struct {
+	net.Conn
+	*bufio.ReadWriter
+}
+
+func (hc *hijackedConn) Read(b []byte) (int, error) {
+	return hc.ReadWriter.Read(b)
+}
+
+func (hc *hijackedConn) Write(b []byte) (n int, err error) {
+	n, err = hc.ReadWriter.Write(b)
+	if err != nil {
+		return
+	}
+	err = hc.ReadWriter.Flush()
+	return
+}
+
+func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		return nil, errors.New("connection doesn't support hijacking")
+	}
+	conn, bufrw, err := hj.Hijack()
+	if err != nil {
+		return nil, err
+	}
+	return &hijackedConn{
+		Conn:       conn,
+		ReadWriter: bufrw,
+	}, nil
 }

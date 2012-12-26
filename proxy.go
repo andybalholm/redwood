@@ -54,11 +54,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
 	if r.URL.Host == "" {
-		host := r.Host
-		if h.connectPort != "" {
-			host = net.JoinHostPort(host, h.connectPort)
-		}
-		r.URL.Host = host
+		r.URL.Host = r.Host
 	}
 	if r.URL.Scheme == "" {
 		if h.TLS {
@@ -80,7 +76,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	changeQuery(r.URL)
 
-	resp, err := http.DefaultTransport.RoundTrip(r)
+	resp, err := unverifiedTransport.RoundTrip(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		logAccess(r, nil, sc, "", 0, false, client)

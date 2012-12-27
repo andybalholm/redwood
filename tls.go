@@ -54,6 +54,8 @@ func loadCertificate() {
 		}
 		parsedTLSCert = parsed
 		tlsReady = true
+
+		go cacheCertificates()
 	}
 }
 
@@ -61,7 +63,7 @@ func loadCertificate() {
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to.
 func SSLBump(conn net.Conn, serverAddr string) {
-	cert, err := generateCertificate(serverAddr)
+	cert, err := getCertificate(serverAddr)
 	if err != nil {
 		panic(fmt.Errorf("could not generate TLS certificate for %s: %s", serverAddr, err))
 	}
@@ -122,6 +124,7 @@ func generateCertificate(addr string) (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
+	defer conn.Close()
 	state := conn.ConnectionState()
 	serverCert := state.PeerCertificates[0]
 

@@ -43,7 +43,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Header.Add("Via", "Redwood")
+	r.Header.Add("Via", r.Proto + " Redwood")
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {

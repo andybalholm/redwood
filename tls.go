@@ -35,6 +35,7 @@ var unverifiedClientConfig = &tls.Config{
 // certificates.
 var unverifiedTransport = http.Transport{
 	TLSClientConfig: unverifiedClientConfig,
+	Proxy:           http.ProxyFromEnvironment,
 }
 
 // loadCertificate loads the TLS certificate specified by certFile and keyFile

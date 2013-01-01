@@ -76,7 +76,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	changeQuery(r.URL)
 
-	resp, err := unverifiedTransport.RoundTrip(r)
+	resp, err := transport.RoundTrip(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		logAccess(r, nil, sc, "", 0, false, client)
@@ -176,4 +176,32 @@ func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
 		Conn:       conn,
 		ReadWriter: bufrw,
 	}, nil
+}
+
+// retryTransport is an http.RoundTripper that automatically retries
+// failed GET and HEAD requests.
+type retryTransport struct {
+	http.Transport
+}
+
+var transport = retryTransport{
+	http.Transport{
+		TLSClientConfig: unverifiedClientConfig,
+		Proxy:           http.ProxyFromEnvironment,
+	},
+}
+
+func (t *retryTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	switch req.Method {
+	case "GET", "HEAD":
+		for i := 0; i < 3; i++ {
+			resp, err = t.Transport.RoundTrip(req)
+			if err == nil {
+				return resp, err
+			}
+		}
+		return nil, err
+	}
+
+	return t.Transport.RoundTrip(req)
 }

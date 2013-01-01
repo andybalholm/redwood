@@ -16,6 +16,7 @@ import (
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
 var pidfile = flag.String("pidfile", "", "path of file to store process ID")
 var listenAddress = flag.String("listen-address", ":8000", "address (host:port) to listen for proxy connections on")
+var transparentAddress = flag.String("transparent-https", "", "address to listen for intercepted HTTPS connections on")
 
 func main() {
 	if *pidfile != "" {
@@ -37,6 +38,10 @@ func main() {
 	}
 
 	go accessLog()
+
+	if *transparentAddress != "" {
+		go runTransparentServer(*transparentAddress)
+	}
 
 	startWebServer()
 

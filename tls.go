@@ -59,7 +59,21 @@ func loadCertificate() {
 func SSLBump(conn net.Conn, serverAddr string) {
 	cert, err := getCertificate(serverAddr)
 	if err != nil {
-		panic(fmt.Errorf("could not generate TLS certificate for %s: %s", serverAddr, err))
+		// Since it doesn't seem to be an HTTPS server, just connect directly.
+		log.Printf("Could not generate a TLS certificate for %s (%s); letting the client connect directly", serverAddr, err)
+		serverConn, err := net.Dial("tcp", serverAddr)
+		if err != nil {
+			log.Printf("Could not connect to %v: %v", serverAddr, err)
+			return
+		}
+
+		go func() {
+			io.Copy(conn, serverConn)
+			conn.Close()
+		}()
+		io.Copy(serverConn, conn)
+		serverConn.Close()
+		return
 	}
 
 	config := &tls.Config{

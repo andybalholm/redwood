@@ -31,14 +31,6 @@ var unverifiedClientConfig = &tls.Config{
 	InsecureSkipVerify: true,
 }
 
-// unverifiedTransport is an http.Transport that doesn't verify server
-// certificates.
-var unverifiedTransport = http.Transport{
-	TLSClientConfig:   unverifiedClientConfig,
-	Proxy:             http.ProxyFromEnvironment,
-	DisableKeepAlives: true,
-}
-
 // loadCertificate loads the TLS certificate specified by certFile and keyFile
 // into tlsCert.
 func loadCertificate() {

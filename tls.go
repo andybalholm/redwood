@@ -80,19 +80,26 @@ func SSLBump(conn net.Conn, serverAddr string) {
 		NextProtos:   []string{"http/1.1"},
 		Certificates: []tls.Certificate{cert, tlsCert},
 	}
+
+	tlsConn := tls.Server(conn, config)
+	err = tlsConn.Handshake()
+	if err != nil {
+		log.Printf("Error in TLS handshake for SSLBump connection to %v: %v", serverAddr, err)
+		return
+	}
+
 	_, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
 		port = ""
 	}
-	listener := &singleListener{conn: conn}
-	tlsListener := tls.NewListener(listener, config)
+	listener := &singleListener{conn: tlsConn}
 	server := http.Server{
 		Handler: proxyHandler{
 			TLS:         true,
 			connectPort: port,
 		},
 	}
-	server.Serve(tlsListener)
+	server.Serve(listener)
 }
 
 // A singleListener is a net.Listener that returns a single connection, then

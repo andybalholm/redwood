@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		SSLBump(conn, r.URL.Host)
+		return
+	}
+
+	if r.Header.Get("Upgrade") == "websocket" {
+		h.makeWebsocketConnection(w, r)
 		return
 	}
 
@@ -204,4 +210,52 @@ func (t *retryTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 	}
 
 	return t.Transport.RoundTrip(req)
+}
+
+func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Request) {
+	addr := r.Host
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		// There is no port specified; we need to add it.
+		port := h.connectPort
+		if port == "" {
+			port = "80"
+		}
+		addr = net.JoinHostPort(addr, port)
+	}
+	var err error
+	var serverConn net.Conn
+	if h.TLS {
+		serverConn, err = tls.Dial("tcp", addr, unverifiedClientConfig)
+	} else {
+		serverConn, err = net.Dial("tcp", addr)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = r.Write(serverConn)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "Couldn't create a websocket connection", http.StatusInternalServerError)
+		return
+	}
+	conn, bufrw, err := hj.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	go func() {
+		io.Copy(conn, serverConn)
+		conn.Close()
+	}()
+	io.Copy(serverConn, bufrw)
+	serverConn.Close()
+	return
 }

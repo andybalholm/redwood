@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net"
 	"net/http"
 	"sync"
@@ -131,6 +132,9 @@ func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
+// maxSerial is the largest serial number to use for a certificate.
+var maxSerial = big.NewInt(1<<63 - 1)
+
 // generateCertificate connects to the server at addr, gets its TLS
 // certificate, and returns a new certificate to be used when proxying
 // connections to that server.
@@ -142,6 +146,12 @@ func generateCertificate(addr string) (tls.Certificate, error) {
 	defer conn.Close()
 	state := conn.ConnectionState()
 	serverCert := state.PeerCertificates[0]
+
+	// Avoid duplicate serial numbers (NSS error -8054 in Chrome).
+	serverCert.SerialNumber, err = rand.Int(rand.Reader, maxSerial)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
+	}
 
 	priv, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {

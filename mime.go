@@ -51,7 +51,7 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
 		// These types tend to be used for content whose type is unknown,
 		// so we should try to second-guess them.
-		preview := make([]byte, 1024)
+		preview := make([]byte, 512)
 		n, _ := resp.Body.Read(preview)
 		preview = preview[:n]
 

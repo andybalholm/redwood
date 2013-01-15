@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -110,7 +111,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(fmt.Errorf("error while reading response body: %s", err))
+		log.Println("error while reading response body:", err)
+		return
 	}
 
 	modified := false

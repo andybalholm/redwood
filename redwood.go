@@ -4,6 +4,7 @@
 package main
 
 import (
+	"code.google.com/p/go-icap"
 	"flag"
 	"fmt"
 	"log"
@@ -15,8 +16,9 @@ import (
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
 var pidfile = flag.String("pidfile", "", "path of file to store process ID")
-var listenAddress = flag.String("listen-address", ":8000", "address (host:port) to listen for proxy connections on")
+var proxyAddress = flag.String("http-proxy", "", "address (host:port) to listen for proxy connections on")
 var transparentAddress = flag.String("transparent-https", "", "address to listen for intercepted HTTPS connections on")
+var icapAddress = flag.String("icap-server", "", "address to listen for ICAP connections on")
 
 func main() {
 	if *pidfile != "" {
@@ -39,14 +41,44 @@ func main() {
 
 	go accessLog()
 
-	if *transparentAddress != "" {
-		go runTransparentServer(*transparentAddress)
-	}
-
 	startWebServer()
 
-	err := http.ListenAndServe(*listenAddress, proxyHandler{})
-	if err != nil {
-		log.Println("Error running proxy server:", err)
+	portsListening := 0
+
+	if *proxyAddress != "" {
+		go func() {
+			err := http.ListenAndServe(*proxyAddress, proxyHandler{})
+			if err != nil {
+				log.Fatalln("Error running HTTP proxy:", err)
+			}
+		}()
+		portsListening++
+	}
+
+	if *transparentAddress != "" {
+		go func() {
+			err := runTransparentServer(*transparentAddress)
+			if err != nil {
+				log.Fatalln("Error running transparent HTTPS proxy:", err)
+			}
+		}()
+		portsListening++
+	}
+
+	if *icapAddress != "" {
+		icap.HandleFunc("/reqmod", handleRequest)
+		icap.HandleFunc("/respmod", handleResponse)
+		go func() {
+			err := icap.ListenAndServe(*icapAddress, nil)
+			if err != nil {
+				log.Fatalln("Error running ICAP server:", err)
+			}
+		}()
+		portsListening++
+	}
+
+	if portsListening > 0 {
+		// Wait forever (or until somebody calls log.Fatal).
+		select {}
 	}
 }

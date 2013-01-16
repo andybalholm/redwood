@@ -37,15 +37,13 @@ func runTransparentServer(addr string) error {
 			return err
 		}
 
-		serverAddr := realServerAddress(conn)
+		serverAddr, err := realServerAddress(conn)
+		if err != nil {
+			log.Println("Error getting original address for intercepted connection:", err)
+			continue
+		}
 		go SSLBump(conn, serverAddr)
 	}
 
 	panic("unreachable")
-}
-
-// realServerAddress returns an intercepted connection's original destination.
-// (This implementation is for FreeBSD.)
-func realServerAddress(conn net.Conn) string {
-	return conn.LocalAddr().String()
 }

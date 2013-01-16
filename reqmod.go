@@ -58,8 +58,6 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			w.WriteHeader(204, nil, false)
 		}
 
-		logAccess(req.Request, nil, sc, "", 0, false, user)
-
 	default:
 		w.WriteHeader(405, nil, false)
 	}

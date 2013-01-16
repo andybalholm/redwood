@@ -49,23 +49,28 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 
 	switch ct {
 	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
-		// These types tend to be used for content whose type is unknown,
-		// so we should try to second-guess them.
-		preview := make([]byte, 512)
-		n, _ := resp.Body.Read(preview)
-		preview = preview[:n]
+		if resp.Header.Get("Content-Encoding") == "" {
+			// These types tend to be used for content whose type is unknown,
+			// so we should try to second-guess them.
+			// But we don't bother if the content is gzipped; then we'd get application/gzip.
+			// We can hope (probably in vain) that a server smart enough to compress the
+			// content is smart enough to give us a correct media type.
+			preview := make([]byte, 512)
+			n, _ := resp.Body.Read(preview)
+			preview = preview[:n]
 
-		if n > 0 {
-			ct, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
+			if n > 0 {
+				ct, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
 
-			// Make the preview data available for re-reading.
-			var rc struct {
-				io.Reader
-				io.Closer
+				// Make the preview data available for re-reading.
+				var rc struct {
+					io.Reader
+					io.Closer
+				}
+				rc.Reader = io.MultiReader(bytes.NewBuffer(preview), resp.Body)
+				rc.Closer = resp.Body
+				resp.Body = rc
 			}
-			rc.Reader = io.MultiReader(bytes.NewBuffer(preview), resp.Body)
-			rc.Closer = resp.Body
-			resp.Body = rc
 		}
 	}
 

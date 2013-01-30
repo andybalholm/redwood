@@ -158,7 +158,18 @@ func generateCertificate(addr string) (tls.Certificate, error) {
 		return tls.Certificate{}, fmt.Errorf("failed to generate private key: %s", err)
 	}
 
-	newCertBytes, err := x509.CreateCertificate(rand.Reader, serverCert, parsedTLSCert, &priv.PublicKey, tlsCert.PrivateKey)
+	// Connect again, but this time check the server's certificate for validity.
+	conn2, err := tls.Dial("tcp", addr, nil)
+	if err == nil {
+		conn2.Close()
+	}
+	signingCert := parsedTLSCert
+	if err != nil {
+		// There was a certificate error, so generate a self-signed certificate.
+		signingCert = serverCert
+	}
+
+	newCertBytes, err := x509.CreateCertificate(rand.Reader, serverCert, signingCert, &priv.PublicKey, tlsCert.PrivateKey)
 	if err != nil {
 		return tls.Certificate{}, err
 	}

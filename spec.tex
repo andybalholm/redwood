@@ -306,4 +306,13 @@ whose name is the empty string.
 When the \verb"block", \verb"allow", and \verb"ignore" directives are used without a group name,
 they apply to the default group.
 
+\section{Authentication}
+
+When a client connects to Redwood's HTTP proxy server from outside the local network,
+Redwood requires HTTP basic proxy authentication, with a username and password.
+The usernames and passwords come from a file that is specified by the \verb"--password-file"
+configuration directive. Each line in the file consists of a username,
+a space or a tab, and a password.
+If no password file is specified, no connections from outside the LAN will be accepted.
+
 \end{document}

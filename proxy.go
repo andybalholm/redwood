@@ -21,7 +21,47 @@ type proxyHandler struct {
 	connectPort string
 }
 
+// lanAddress returns whether addr is in one of the LAN address ranges.
+func lanAddress(addr string) bool {
+	ip := net.ParseIP(addr)
+	if ip4 := ip.To4(); ip4 != nil {
+		switch ip4[0] {
+		case 10:
+			return true
+		case 172:
+			return ip4[1]&0xf0 == 16
+		case 192:
+			return ip4[1] == 168
+		}
+		return false
+	}
+
+	if ip[0]&0xfe == 0xfc {
+		return true
+	}
+	if ip[0] == 0xfe && (ip[1]&0xfc) == 0x80 {
+		return true
+	}
+
+	return false
+}
+
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	client := r.RemoteAddr
+	host, _, err := net.SplitHostPort(client)
+	if err == nil {
+		client = host
+	}
+	user := client
+
+	if !h.TLS && !lanAddress(client) {
+		u := authenticate(w, r)
+		if u == "" {
+			return
+		}
+		user = u
+	}
+
 	if r.Host == "203.0.113.1" {
 		http.DefaultServeMux.ServeHTTP(w, r)
 		return
@@ -51,11 +91,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.Header.Add("Via", r.Proto+" Redwood")
-	client := r.RemoteAddr
-	host, _, err := net.SplitHostPort(client)
-	if err == nil {
-		client = host
-	}
 	r.Header.Add("X-Forwarded-For", client)
 	r.Header.Del("Accept-Encoding")
 
@@ -74,10 +109,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sc := scorecard{
 		tally: URLRules.MatchingRules(r.URL),
 	}
-	sc.calculate(client)
+	sc.calculate(user)
 	if sc.action == BLOCK {
 		showBlockPage(w, r, &sc)
-		logAccess(r, nil, sc, "", 0, false, client)
+		logAccess(r, nil, sc, "", 0, false, user)
 		return
 	}
 
@@ -86,7 +121,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := transport.RoundTrip(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		logAccess(r, nil, sc, "", 0, false, client)
+		logAccess(r, nil, sc, "", 0, false, user)
 		return
 	}
 	defer resp.Body.Close()
@@ -98,14 +133,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sc.action = BLOCK
 		sc.blocked = []string{"blocked-mime"}
 		showBlockPage(w, r, &sc)
-		logAccess(r, resp, sc, contentType, 0, false, client)
+		logAccess(r, resp, sc, contentType, 0, false, user)
 		return
 
 	case ALLOW:
 		sc.action = IGNORE
 		copyResponseHeader(w, resp)
 		io.Copy(w, resp.Body)
-		logAccess(r, resp, sc, contentType, 0, false, client)
+		logAccess(r, resp, sc, contentType, 0, false, user)
 		return
 	}
 
@@ -126,17 +161,17 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scanContent(content, contentType, charset, sc.tally)
-	sc.calculate(client)
+	sc.calculate(user)
 
 	if sc.action == BLOCK {
 		showBlockPage(w, r, &sc)
-		logAccess(r, resp, sc, contentType, len(content), modified, client)
+		logAccess(r, resp, sc, contentType, len(content), modified, user)
 		return
 	}
 
 	copyResponseHeader(w, resp)
 	w.Write(content)
-	logAccess(r, resp, sc, contentType, len(content), modified, client)
+	logAccess(r, resp, sc, contentType, len(content), modified, user)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

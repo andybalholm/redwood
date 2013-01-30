@@ -164,7 +164,7 @@ func generateCertificate(addr string) (tls.Certificate, error) {
 		conn2.Close()
 	}
 	signingCert := parsedTLSCert
-	if err != nil {
+	if _, ok := err.(x509.UnknownAuthorityError); ok {
 		// There was a certificate error, so generate a self-signed certificate.
 		signingCert = serverCert
 	}

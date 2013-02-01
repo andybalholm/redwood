@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"runtime"
 	"sync"
 )
 
@@ -58,6 +59,15 @@ func loadCertificate() {
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to.
 func SSLBump(conn net.Conn, serverAddr string) {
+	defer func() {
+		if err := recover(); err != nil {
+			buf := make([]byte, 4096)
+			buf = buf[:runtime.Stack(buf, false)]
+			log.Printf("SSLBump: panic serving connection to %s: %v\n%s", serverAddr, err, buf)
+			conn.Close()
+		}
+	}()
+
 	cert, err := getCertificate(serverAddr)
 	if err != nil {
 		// Since it doesn't seem to be an HTTPS server, just connect directly.

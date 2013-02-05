@@ -53,7 +53,13 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		var body io.Reader = req.Response.Body
 		defer req.Response.Body.Close()
 		if req.Response.Header.Get("Content-Encoding") == "gzip" {
-			body, _ = gzip.NewReader(body)
+			var err error
+			body, err = gzip.NewReader(body)
+			if err != nil {
+				log.Println("error reading gzip-encoded response from %s: %s", req.Request.URL, err)
+				w.WriteHeader(500, nil, false)
+				return
+			}
 			req.Response.Header.Del("Content-Encoding")
 		}
 

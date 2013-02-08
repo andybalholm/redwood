@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"sync"
 )
@@ -22,10 +23,15 @@ import (
 
 var certFile = flag.String("tls-cert", "", "path to certificate for serving HTTPS")
 var keyFile = flag.String("tls-key", "", "path to TLS certificate key")
+var sslBypassFile = newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", readBypassFile)
+var tlsVerbose = flag.Bool("tls-verbose", false, "log all intercepted HTTPS connections")
 
 var tlsCert tls.Certificate
 var parsedTLSCert *x509.Certificate
 var tlsReady bool
+
+var tlsBypass = map[string]bool{}
+var tlsBypassRanges []*net.IPNet
 
 // unverifiedClientConfig is a TLS configuration that doesn't verify server
 // certificates.
@@ -55,6 +61,22 @@ func loadCertificate() {
 	}
 }
 
+func shouldBypass(host string) bool {
+	if tlsBypass[host] {
+		return true
+	}
+	addr := net.ParseIP(host)
+	if addr == nil {
+		return false
+	}
+	for _, subnet := range tlsBypassRanges {
+		if subnet.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to.
@@ -67,6 +89,27 @@ func SSLBump(conn net.Conn, serverAddr string) {
 			conn.Close()
 		}
 	}()
+
+	if host, _, err := net.SplitHostPort(serverAddr); err == nil && shouldBypass(host) {
+		// Just connect directly instead of bumping this connection.
+		serverConn, err := net.Dial("tcp", serverAddr)
+		if err != nil {
+			log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
+			return
+		}
+
+		go func() {
+			io.Copy(conn, serverConn)
+			conn.Close()
+		}()
+		io.Copy(serverConn, conn)
+		serverConn.Close()
+		return
+	}
+
+	if *tlsVerbose {
+		log.Printf("intercepting TLS connection from %s to %s", conn.RemoteAddr(), serverAddr)
+	}
 
 	cert, err := getCertificate(serverAddr)
 	if err != nil {
@@ -95,7 +138,7 @@ func SSLBump(conn net.Conn, serverAddr string) {
 	tlsConn := tls.Server(conn, config)
 	err = tlsConn.Handshake()
 	if err != nil {
-		log.Printf("Error in TLS handshake for SSLBump connection to %v: %v", serverAddr, err)
+		log.Printf("Error in TLS handshake for SSLBump connection from %v to %v: %v", conn.RemoteAddr(), serverAddr, err)
 		return
 	}
 
@@ -190,4 +233,30 @@ func generateCertificate(addr string) (tls.Certificate, error) {
 	pem.Encode(keyBuf, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
 	return tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
+}
+
+func readBypassFile(filename string) error {
+	f, err := os.Open(filename)
+	if err != nil {
+		return fmt.Errorf("could not open %s: %s", filename, err)
+	}
+	defer f.Close()
+	cr := newConfigReader(f)
+
+	for {
+		line, err := cr.ReadLine()
+		if err != nil {
+			break
+		}
+
+		if _, subnet, err := net.ParseCIDR(line); err == nil {
+			// It's a network range, like 192.168.0.1/24.
+			tlsBypassRanges = append(tlsBypassRanges, subnet)
+			continue
+		}
+
+		tlsBypass[line] = true
+	}
+
+	return nil
 }

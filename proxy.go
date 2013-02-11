@@ -146,8 +146,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("error while reading response body:", err)
-		return
+		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
 	}
 
 	modified := false

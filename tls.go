@@ -211,11 +211,11 @@ func generateCertificate(addr string) (tls.Certificate, error) {
 		return tls.Certificate{}, fmt.Errorf("failed to generate private key: %s", err)
 	}
 
-	// Connect again, but this time check the server's certificate for validity.
-	conn2, err := tls.Dial("tcp", addr, nil)
-	if err == nil {
-		conn2.Close()
+	intermediates := x509.NewCertPool()
+	for _, cert := range state.PeerCertificates[1:] {
+		intermediates.AddCert(cert)
 	}
+	_, err = serverCert.Verify(x509.VerifyOptions{Intermediates: intermediates})
 	signingCert := parsedTLSCert
 	if _, ok := err.(x509.UnknownAuthorityError); ok {
 		// There was a certificate error, so generate a self-signed certificate.

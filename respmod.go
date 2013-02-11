@@ -56,7 +56,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 			var err error
 			body, err = gzip.NewReader(body)
 			if err != nil {
-				log.Println("error reading gzip-encoded response from %s: %s", req.Request.URL, err)
+				log.Printf("error reading gzip-encoded response from %s: %s", req.Request.URL, err)
 				w.WriteHeader(500, nil, false)
 				return
 			}
@@ -65,8 +65,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 		content, err := ioutil.ReadAll(body)
 		if err != nil {
-			log.Println("error while reading response body:", err)
-			return
+			log.Printf("error while reading response body (URL: %s): %s", req.Request.URL, err)
 		}
 
 		modified := false

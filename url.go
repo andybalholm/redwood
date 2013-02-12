@@ -3,7 +3,7 @@ package main
 // URL matching and regular expressions
 
 import (
-	"code.google.com/p/go-idn/idna/punycode"
+	"code.google.com/p/go.net/idna"
 	"log"
 	"net/url"
 	"regexp"
@@ -137,19 +137,8 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 		host = host[:colon]
 	}
 
-	// Handle internationalized domain names.
-	if strings.Contains(host, "xn--") {
-		labels := strings.Split(host, ".")
-		for i, puny := range labels {
-			if !strings.HasPrefix(puny, "xn--") {
-				continue
-			}
-			uni, err := punycode.DecodeString(puny[len("xn--"):])
-			if err == nil {
-				labels[i] = uni
-			}
-		}
-		host = strings.ToLower(strings.Join(labels, "."))
+	if idn, err := idna.ToUnicode(host); err == nil {
+		host = idn
 	}
 
 	urlString := ""

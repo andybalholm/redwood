@@ -44,7 +44,7 @@ func realServerAddress(conn net.Conn) (string, error) {
 		return "", errors.New("unrecognized address family")
 	}
 
-	port := int(addr.data[0]) << 8 + int(addr.data[1])
+	port := int(addr.data[0])<<8 + int(addr.data[1])
 
 	return net.JoinHostPort(ip.String(), strconv.Itoa(port)), nil
 }

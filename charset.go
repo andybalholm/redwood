@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"exp/html"
+	"code.google.com/p/go.net/html"
 	"mime"
 	"strings"
 	"unicode/utf8"

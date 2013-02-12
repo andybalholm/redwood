@@ -14,4 +14,3 @@ func getsockopt(s int, level int, name int, val uintptr, vallen *uint32) (err er
 	}
 	return
 }
-

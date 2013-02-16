@@ -121,6 +121,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := transport.RoundTrip(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		log.Printf("error fetching %s: %s", r.URL, err)
 		logAccess(r, nil, sc, "", 0, false, user)
 		return
 	}

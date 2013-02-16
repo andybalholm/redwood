@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -32,6 +33,7 @@ var tlsReady bool
 
 var tlsBypass = map[string]bool{}
 var tlsBypassRanges []*net.IPNet
+var tlsBypassDomains []string
 
 // unverifiedClientConfig is a TLS configuration that doesn't verify server
 // certificates.
@@ -64,6 +66,11 @@ func loadCertificate() {
 func shouldBypass(host string) bool {
 	if tlsBypass[host] {
 		return true
+	}
+	for _, domain := range tlsBypassDomains {
+		if strings.HasSuffix(host, domain) {
+			return true
+		}
 	}
 	addr := net.ParseIP(host)
 	if addr == nil {
@@ -247,6 +254,12 @@ func readBypassFile(filename string) error {
 		line, err := cr.ReadLine()
 		if err != nil {
 			break
+		}
+
+		if strings.HasPrefix(line, ".") {
+			// This is a domain that we should bypass subdomains of too.
+			tlsBypassDomains = append(tlsBypassDomains, line)
+			continue
 		}
 
 		if _, subnet, err := net.ParseCIDR(line); err == nil {

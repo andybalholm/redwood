@@ -57,7 +57,11 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 			body, err = gzip.NewReader(body)
 			if err != nil {
 				log.Printf("error reading gzip-encoded response from %s: %s", req.Request.URL, err)
-				w.WriteHeader(500, nil, false)
+				// Let it through unchanged, hoping it's OK.
+				// It probably has a null body anyway.
+				w.WriteHeader(204, nil, false)
+				sc.action = IGNORE
+				logAccess(req.Request, req.Response, sc, contentType, 0, false, user)
 				return
 			}
 			req.Response.Header.Del("Content-Encoding")

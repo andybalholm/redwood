@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -45,7 +46,17 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
-		if changeQuery(req.Request.URL) {
+		requestChanged := changeQuery(req.Request.URL)
+
+		if strings.Contains(req.Request.Header.Get("Range"), ",") {
+			// This request would result in a multipart/byteranges response,
+			// which is not currently supported by the net/http package.
+			req.Request.Header.Del("Range")
+			req.Request.Header.Del("If-Range")
+			requestChanged = true
+		}
+
+		if requestChanged {
 			content, err := ioutil.ReadAll(req.Request.Body)
 			if err != nil {
 				log.Println(err)

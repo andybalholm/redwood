@@ -198,7 +198,15 @@ var maxSerial = big.NewInt(1<<63 - 1)
 // generateCertificate connects to the server at addr, gets its TLS
 // certificate, and returns a new certificate to be used when proxying
 // connections to that server.
-func generateCertificate(addr string) (tls.Certificate, error) {
+func generateCertificate(addr string) (cert tls.Certificate, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			buf := make([]byte, 4096)
+			buf = buf[:runtime.Stack(buf, false)]
+			err = fmt.Errorf("panic generating ssl certificate for %s: %s\n%s", addr, e, buf)
+		}
+	}()
+
 	conn, err := tls.Dial("tcp", addr, unverifiedClientConfig)
 	if err != nil {
 		return tls.Certificate{}, err

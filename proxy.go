@@ -94,13 +94,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Add("X-Forwarded-For", client)
 	r.Header.Del("Accept-Encoding")
 
-	if strings.Contains(r.Header.Get("Range"), ",") {
-		// This request would result in a multipart/byteranges response,
-		// which is not currently supported by the net/http package.
-		r.Header.Del("Range")
-		r.Header.Del("If-Range")
-	}
-
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
 	if r.URL.Host == "" {
 		r.URL.Host = r.Host

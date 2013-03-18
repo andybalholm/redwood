@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"strings"
@@ -45,6 +46,13 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 	ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || !strings.Contains(ct, "/") {
 		ct = ""
+	}
+
+	if ce := resp.Header.Get("Content-Encoding"); ce != "" && ce != "gzip" {
+		// If the server is using a Content-Encoding that we don't understand,
+		// we can't decode the content to filter it.
+		log.Println("unknown Content-Encoding", ce, "for", resp.Request.URL)
+		return ct, ALLOW
 	}
 
 	switch ct {

@@ -32,6 +32,10 @@ func newRegexMap() *regexMap {
 }
 
 func (rm *regexMap) findMatches(s string, tally map[rule]int) {
+	if len(rm.rules) == 0 {
+		return
+	}
+
 	tried := map[string]bool{}
 	scanner := newPhraseScanner(rm.stringList, func(p string) {
 		if tried[p] {

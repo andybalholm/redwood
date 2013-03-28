@@ -20,6 +20,7 @@ const (
 	urlMatch
 	urlRegex
 	hostRegex
+	domainRegex
 	pathRegex
 	queryRegex
 	contentPhrase
@@ -38,6 +39,8 @@ func (r rule) String() string {
 			suffix = "p"
 		case queryRegex:
 			suffix = "q"
+		case domainRegex:
+			suffix = "d"
 		}
 		return "/" + r.content + "/" + suffix
 	case contentPhrase:
@@ -73,6 +76,9 @@ func parseRule(s string) (r rule, leftover string, err error) {
 				s = s[1:]
 			case 'q':
 				r.t = queryRegex
+				s = s[1:]
+			case 'd':
+				r.t = domainRegex
 				s = s[1:]
 			}
 		}

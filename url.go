@@ -4,6 +4,7 @@ package main
 
 import (
 	"code.google.com/p/go.net/idna"
+	"code.google.com/p/go.net/publicsuffix"
 	"log"
 	"net/url"
 	"regexp"
@@ -80,11 +81,12 @@ func (rm *regexMap) addRule(r rule) {
 }
 
 type URLMatcher struct {
-	fragments    map[string]rule // a set of domain or domain+path URL fragments to test against
-	regexes      *regexMap       // to match whole URL
-	hostRegexes  *regexMap       // to match hostname only
-	pathRegexes  *regexMap
-	queryRegexes *regexMap
+	fragments     map[string]rule // a set of domain or domain+path URL fragments to test against
+	regexes       *regexMap       // to match whole URL
+	hostRegexes   *regexMap       // to match hostname only
+	domainRegexes *regexMap
+	pathRegexes   *regexMap
+	queryRegexes  *regexMap
 }
 
 // finalize should be called after all rules have been added, but before
@@ -92,6 +94,7 @@ type URLMatcher struct {
 func (m *URLMatcher) finalize() {
 	m.regexes.stringList.findFallbackNodes(0, nil)
 	m.hostRegexes.stringList.findFallbackNodes(0, nil)
+	m.domainRegexes.stringList.findFallbackNodes(0, nil)
 	m.pathRegexes.stringList.findFallbackNodes(0, nil)
 	m.queryRegexes.stringList.findFallbackNodes(0, nil)
 }
@@ -101,6 +104,7 @@ func newURLMatcher() *URLMatcher {
 	m.fragments = make(map[string]rule)
 	m.regexes = newRegexMap()
 	m.hostRegexes = newRegexMap()
+	m.domainRegexes = newRegexMap()
 	m.pathRegexes = newRegexMap()
 	m.queryRegexes = newRegexMap()
 	return m
@@ -115,6 +119,8 @@ func (m *URLMatcher) AddRule(r rule) {
 		m.regexes.addRule(r)
 	case hostRegex:
 		m.hostRegexes.addRule(r)
+	case domainRegex:
+		m.domainRegexes.addRule(r)
 	case pathRegex:
 		m.pathRegexes.addRule(r)
 	case queryRegex:
@@ -135,6 +141,20 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 	// IPv6 addresses contain colons inside brackets, so be careful.
 	if colon != -1 && !strings.Contains(host[colon:], "]") {
 		host = host[:colon]
+	}
+
+	// Find the main domain name (e.g. "google" in "www.google.com").
+	suffix := publicsuffix.List.PublicSuffix(host)
+	if suffix != "" && suffix != host {
+		domain := host[:len(host)-len(suffix)-1]
+		dot := strings.LastIndex(domain, ".")
+		if dot != -1 {
+			domain = domain[dot+1:]
+		}
+		if idn, err := idna.ToUnicode(domain); err == nil {
+			domain = idn
+		}
+		m.domainRegexes.findMatches(domain, result)
 	}
 
 	if idn, err := idna.ToUnicode(host); err == nil {

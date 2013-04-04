@@ -78,6 +78,7 @@ func main() {
 			}
 		}()
 		portsListening++
+		reloadSquid()
 	}
 
 	if portsListening > 0 {

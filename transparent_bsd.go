@@ -7,6 +7,6 @@ import (
 )
 
 // realServerAddress returns an intercepted connection's original destination.
-func realServerAddress(conn net.Conn) (string, error) {
-	return conn.LocalAddr().String(), nil
+func realServerAddress(conn *net.Conn) (string, error) {
+	return (*conn).LocalAddr().String(), nil
 }

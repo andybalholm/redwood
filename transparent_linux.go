@@ -16,8 +16,8 @@ type sockaddr struct {
 const SO_ORIGINAL_DST = 80
 
 // realServerAddress returns an intercepted connection's original destination.
-func realServerAddress(conn net.Conn) (string, error) {
-	tcpConn, ok := conn.(*net.TCPConn)
+func realServerAddress(conn *net.Conn) (string, error) {
+	tcpConn, ok := (*conn).(*net.TCPConn)
 	if !ok {
 		return "", errors.New("not a TCPConn")
 	}
@@ -26,6 +26,14 @@ func realServerAddress(conn net.Conn) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// To avoid potential problems from making the socket non-blocking.
+	tcpConn.Close()
+	*conn, err = net.FileConn(file)
+	if err != nil {
+		return "", err
+	}
+
 	defer file.Close()
 	fd := file.Fd()
 

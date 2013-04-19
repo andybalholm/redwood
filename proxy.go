@@ -26,7 +26,7 @@ func lanAddress(addr string) bool {
 	ip := net.ParseIP(addr)
 	if ip4 := ip.To4(); ip4 != nil {
 		switch ip4[0] {
-		case 10:
+		case 10, 127:
 			return true
 		case 172:
 			return ip4[1]&0xf0 == 16

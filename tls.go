@@ -84,6 +84,26 @@ func shouldBypass(host string) bool {
 	return false
 }
 
+// connectDirect connects to serverAddr and copies data between it and conn.
+func connectDirect(conn net.Conn, serverAddr string) {
+	if *tlsVerbose {
+		log.Printf("connecting %s directly to %s", conn.RemoteAddr(), serverAddr)
+	}
+	serverConn, err := net.Dial("tcp", serverAddr)
+	if err != nil {
+		log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
+		return
+	}
+
+	go func() {
+		io.Copy(conn, serverConn)
+		conn.Close()
+	}()
+	io.Copy(serverConn, conn)
+	serverConn.Close()
+	return
+}
+
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to.
@@ -98,19 +118,7 @@ func SSLBump(conn net.Conn, serverAddr string) {
 	}()
 
 	if host, _, err := net.SplitHostPort(serverAddr); err == nil && shouldBypass(host) {
-		// Just connect directly instead of bumping this connection.
-		serverConn, err := net.Dial("tcp", serverAddr)
-		if err != nil {
-			log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
-			return
-		}
-
-		go func() {
-			io.Copy(conn, serverConn)
-			conn.Close()
-		}()
-		io.Copy(serverConn, conn)
-		serverConn.Close()
+		connectDirect(conn, serverAddr)
 		return
 	}
 
@@ -122,18 +130,7 @@ func SSLBump(conn net.Conn, serverAddr string) {
 	if err != nil {
 		// Since it doesn't seem to be an HTTPS server, just connect directly.
 		log.Printf("Could not generate a TLS certificate for %s (%s); letting the client connect directly", serverAddr, err)
-		serverConn, err := net.Dial("tcp", serverAddr)
-		if err != nil {
-			log.Printf("Could not connect to %v: %v", serverAddr, err)
-			return
-		}
-
-		go func() {
-			io.Copy(conn, serverConn)
-			conn.Close()
-		}()
-		io.Copy(serverConn, conn)
-		serverConn.Close()
+		connectDirect(conn, serverAddr)
 		return
 	}
 

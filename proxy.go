@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -190,20 +189,11 @@ func copyResponseHeader(w http.ResponseWriter, resp *http.Response) {
 // request).
 type hijackedConn struct {
 	net.Conn
-	*bufio.ReadWriter
+	io.Reader
 }
 
 func (hc *hijackedConn) Read(b []byte) (int, error) {
-	return hc.ReadWriter.Read(b)
-}
-
-func (hc *hijackedConn) Write(b []byte) (n int, err error) {
-	n, err = hc.ReadWriter.Write(b)
-	if err != nil {
-		return
-	}
-	err = hc.ReadWriter.Flush()
-	return
+	return hc.Reader.Read(b)
 }
 
 func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
@@ -215,9 +205,13 @@ func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = bufrw.Flush()
+	if err != nil {
+		return nil, err
+	}
 	return &hijackedConn{
-		Conn:       conn,
-		ReadWriter: bufrw,
+		Conn:   conn,
+		Reader: bufrw.Reader,
 	}, nil
 }
 

@@ -21,16 +21,18 @@ var transparentAddress = flag.String("transparent-https", "", "address to listen
 var icapAddress = flag.String("icap-server", "", "address to listen for ICAP connections on")
 
 func main() {
+	loadConfiguration()
+
 	if *pidfile != "" {
 		pid := os.Getpid()
 		f, err := os.Create(*pidfile)
 		if err == nil {
 			fmt.Fprintln(f, pid)
 			f.Close()
+		} else {
+			log.Println("could not create pidfile:", err)
 		}
 	}
-
-	loadConfiguration()
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 

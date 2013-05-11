@@ -111,7 +111,7 @@ func loadCategory(dirname string) (c *category, err error) {
 	}
 
 	s, _ = conf.Get("action")
-	s = strings.ToLower(s)
+	s = strings.TrimSpace(strings.ToLower(s))
 	switch s {
 	case "allow":
 		c.action = ALLOW

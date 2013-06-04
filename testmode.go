@@ -94,9 +94,9 @@ func runURLTest(u string) {
 	charset := findCharset(resp.Header.Get("Content-Type"), content)
 	if strings.Contains(contentType, "html") {
 		modified = pruneContent(URL, &content, charset)
-		charset = "utf-8"
 	}
 	if modified {
+		charset = "utf-8"
 		fmt.Println("Performed content pruning.")
 		fmt.Println()
 	}

@@ -30,7 +30,7 @@ func (r rule) String() string {
 	switch r.t {
 	case urlMatch:
 		return r.content
-	case urlRegex, hostRegex, pathRegex, queryRegex:
+	case urlRegex, hostRegex, domainRegex, pathRegex, queryRegex:
 		suffix := ""
 		switch r.t {
 		case hostRegex:

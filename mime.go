@@ -48,10 +48,18 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 		ct = ""
 	}
 
-	if ce := resp.Header.Get("Content-Encoding"); ce != "" && ce != "gzip" {
+	switch resp.Header.Get("Content-Encoding") {
+	case "", "gzip":
+		// This is an encoding we can understand.
+
+	case "utf-8":
+		// This is an error.
+		resp.Header.Set("Content-Encoding", "")
+
+	default:
 		// If the server is using a Content-Encoding that we don't understand,
 		// we can't decode the content to filter it.
-		log.Println("unknown Content-Encoding", ce, "for", resp.Request.URL)
+		log.Println("unknown Content-Encoding", resp.Header.Get("Content-Encoding"), "for", resp.Request.URL)
 		return ct, ALLOW
 	}
 

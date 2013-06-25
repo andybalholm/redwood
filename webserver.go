@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-// The built-in web server, which serves URLs under http://gateway/
+// The built-in web server, which serves URLs under http://203.0.113.1/
 
 var staticFilesDir = flag.String("static-files-dir", "", "path to static files for built-in web server")
 var cgiBin = flag.String("cgi-bin", "", "path to CGI files for built-in web server")

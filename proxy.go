@@ -68,9 +68,17 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "CONNECT" {
 		if !tlsReady {
-			http.Error(w, "This proxy server is not configured for HTTPS.", http.StatusMethodNotAllowed)
-			return
+			sc := scorecard{
+				tally: URLRules.MatchingRules(r.URL),
+			}
+			sc.calculate(user)
+			if sc.action == BLOCK {
+				showBlockPage(w, r, &sc)
+				logAccess(r, nil, sc, "", 0, false, user)
+				return
+			}
 		}
+
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			fmt.Fprintln(conn, "HTTP/1.1 500 Internal Server Error")
@@ -80,7 +88,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		SSLBump(conn, r.URL.Host)
+		if tlsReady {
+			SSLBump(conn, r.URL.Host)
+		} else {
+			connectDirect(conn, r.URL.Host)
+		}
 		return
 	}
 

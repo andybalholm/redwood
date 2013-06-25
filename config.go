@@ -14,6 +14,7 @@ import (
 )
 
 var configFile = newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", readConfigFile)
+var _ = newActiveFlag("include", "", "additional config file to read", readConfigFile)
 
 var URLRules = newURLMatcher()
 

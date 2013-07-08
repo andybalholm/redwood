@@ -39,7 +39,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		case BLOCK:
 			sc.action = BLOCK
 			sc.blocked = []string{"blocked-mime"}
-			showBlockPage(icap.NewBridgedResponseWriter(w), req.Request, &sc)
+			showBlockPage(icap.NewBridgedResponseWriter(w), req.Request, &sc, user)
 			logAccess(req.Request, req.Response, sc, contentType, 0, false, user)
 			return
 
@@ -86,7 +86,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		sc.calculate(user)
 
 		if sc.action == BLOCK {
-			showBlockPage(icap.NewBridgedResponseWriter(w), req.Request, &sc)
+			showBlockPage(icap.NewBridgedResponseWriter(w), req.Request, &sc, user)
 			logAccess(req.Request, req.Response, sc, contentType, len(content), modified, user)
 			return
 		}

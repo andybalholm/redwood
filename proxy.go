@@ -73,7 +73,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			sc.calculate(user)
 			if sc.action == BLOCK {
-				showBlockPage(w, r, &sc)
+				showBlockPage(w, r, &sc, user)
 				logAccess(r, nil, sc, "", 0, false, user)
 				return
 			}
@@ -122,7 +122,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	sc.calculate(user)
 	if sc.action == BLOCK {
-		showBlockPage(w, r, &sc)
+		showBlockPage(w, r, &sc, user)
 		logAccess(r, nil, sc, "", 0, false, user)
 		return
 	}
@@ -144,7 +144,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case BLOCK:
 		sc.action = BLOCK
 		sc.blocked = []string{"blocked-mime"}
-		showBlockPage(w, r, &sc)
+		showBlockPage(w, r, &sc, user)
 		logAccess(r, resp, sc, contentType, 0, false, user)
 		return
 
@@ -175,7 +175,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sc.calculate(user)
 
 	if sc.action == BLOCK {
-		showBlockPage(w, r, &sc)
+		showBlockPage(w, r, &sc, user)
 		logAccess(r, resp, sc, contentType, len(content), modified, user)
 		return
 	}

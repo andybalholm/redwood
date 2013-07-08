@@ -40,7 +40,7 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 		}
 		sc.calculate(user)
 		if sc.action == BLOCK {
-			showBlockPage(icap.NewBridgedResponseWriter(w), req.Request, &sc)
+			showBlockPage(icap.NewBridgedResponseWriter(w), req.Request, &sc, user)
 			logAccess(req.Request, nil, sc, "", 0, false, user)
 			return
 		}

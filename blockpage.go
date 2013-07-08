@@ -29,13 +29,13 @@ func loadBlockPage() {
 type blockData struct {
 	URL        string
 	Categories string
-	IP         string
+	User       string
 	Tally      string
 	Scores     string
 }
 
 // showBlockPage sends a page showing that the request was blocked.
-func showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard) {
+func showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard, user string) {
 	if categories[sc.blocked[0]].invisible {
 		// Serve an invisible image instead of the usual block page.
 		w.Header().Set("Content-Type", "image/gif")
@@ -51,7 +51,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard) {
 	data := blockData{
 		URL:        r.URL.String(),
 		Categories: strings.Join(blockDesc, ", "),
-		IP:         r.RemoteAddr,
+		User:       user,
 		Tally:      listTally(stringTally(sc.tally)),
 		Scores:     listTally(sc.scores),
 	}

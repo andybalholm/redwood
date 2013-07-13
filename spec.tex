@@ -251,10 +251,21 @@ to be replaced by the appropriate information when the block page is sent:
 \item[\{\{.URL\}\}] the URL of the page that was blocked
 \item[\{\{.Categories\}\}] the names of the categories that caused the page to be blocked
 \item[\{\{.User\}\}] the user's IP address or username
+\item[\{\{.Group\}\}] the group the user belongs to, or an empty string
 \item[\{\{.Tally\}\}] a list of the rules that matched, and how many times each one matched
 \item[\{\{.Scores\}\}] a list of categories, and how many points the page scored in each category
 
 \end{description}
+
+The block page is generated using the Go template package; see
+\verb"http://golang.org/pkg/text/template"
+and
+\verb"http://golang.org/pkg/html/template"
+for documentation.
+
+There is one custom function defined for the templates to use, \verb"eq", 
+which tests its parameters for equality.
+For example, \verb[{{if eq .Group "admin"}}You're an administrator!{{end}}[
 
 Since the block page may need to refer to external resources
 (such as images, stylesheets, and scripts),

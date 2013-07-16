@@ -52,7 +52,10 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 	case "", "gzip":
 		// This is an encoding we can understand.
 
-	case "utf-8":
+	case "GZIP":
+		resp.Header.Set("Content-Encoding", "gzip")
+
+	case "utf-8", "UTF-8", "none":
 		// This is an error.
 		resp.Header.Set("Content-Encoding", "")
 

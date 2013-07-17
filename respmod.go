@@ -52,7 +52,8 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 		var body io.Reader = req.Response.Body
 		defer req.Response.Body.Close()
-		if req.Response.Header.Get("Content-Encoding") == "gzip" {
+		gzipped := req.Response.Header.Get("Content-Encoding") == "gzip"
+		if gzipped {
 			var err error
 			body, err = gzip.NewReader(body)
 			if err != nil {
@@ -96,8 +97,17 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		rw := icap.NewBridgedResponseWriter(w)
-		copyResponseHeader(rw, req.Response)
-		rw.Write(content)
+
+		if gzipped {
+			req.Response.Header.Set("Content-Encoding", "gzip")
+			copyResponseHeader(rw, req.Response)
+			gzw := gzip.NewWriter(rw)
+			gzw.Write(content)
+			gzw.Close()
+		} else {
+			copyResponseHeader(rw, req.Response)
+			rw.Write(content)
+		}
 		logAccess(req.Request, req.Response, sc, contentType, len(content), modified, user)
 
 	default:

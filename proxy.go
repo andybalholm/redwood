@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -103,6 +104,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	r.Header.Add("Via", r.Proto+" Redwood")
 	r.Header.Add("X-Forwarded-For", client)
+
+	gzipOK := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 	r.Header.Del("Accept-Encoding")
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
@@ -180,8 +183,17 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	copyResponseHeader(w, resp)
-	w.Write(content)
+	if gzipOK && len(content) > 1000 {
+		resp.Header.Set("Content-Encoding", "gzip")
+		copyResponseHeader(w, resp)
+		gzw := gzip.NewWriter(w)
+		gzw.Write(content)
+		gzw.Close()
+	} else {
+		copyResponseHeader(w, resp)
+		w.Write(content)
+	}
+
 	logAccess(r, resp, sc, contentType, len(content), modified, user)
 }
 

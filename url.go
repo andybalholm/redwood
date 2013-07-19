@@ -200,11 +200,12 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 			if r, ok := m.fragments[s2]; ok {
 				result[r] = 1
 			}
-			slash := strings.LastIndex(s2[:len(s2)-1], "/")
-			if slash == -1 {
+			slash := strings.LastIndex(s2, "/")
+			if slash < 1 {
+				// It's either not found, or at the first character.
 				break
 			}
-			s2 = s2[:slash+1]
+			s2 = s2[:slash]
 		}
 
 		if r, ok := m.fragments[s]; ok {

@@ -103,6 +103,9 @@ func parseRule(s string) (r rule, leftover string, err error) {
 		if r.content == "default" {
 			r.t = defaultRule
 		}
+		if strings.HasSuffix(r.content, "/") {
+			r.content = r.content[:len(r.content)-1]
+		}
 	}
 
 	return r, s, nil

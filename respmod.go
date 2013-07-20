@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.google.com/p/go-icap"
+	"compress/flate"
 	"compress/gzip"
 	"io"
 	"io/ioutil"
@@ -52,23 +53,21 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 
 		var body io.Reader = req.Response.Body
 		defer req.Response.Body.Close()
-		gzipped := req.Response.Header.Get("Content-Encoding") == "gzip"
-		if gzipped {
-			var err error
-			body, err = gzip.NewReader(body)
-			if err != nil {
-				if req.Response.StatusCode == 200 && req.Request.Method != "HEAD" {
-					// Unusual status codes and HEAD requests often don't have bodies anyway.
-					// Don't even bother to log the error then.
-					log.Printf("error reading gzip-encoded response from %s: %s", req.Request.URL, err)
-				}
-				// Let it through unchanged, hoping it's OK.
-				// It probably has a null body anyway.
-				w.WriteHeader(204, nil, false)
-				sc.action = IGNORE
-				logAccess(req.Request, req.Response, sc, contentType, 0, false, user)
-				return
+
+		contentEncoding := req.Response.Header.Get("Content-Encoding")
+		gzipped := contentEncoding == "gzip"
+		switch contentEncoding {
+		case "gzip":
+			gzr, err := gzip.NewReader(body)
+			if err == nil {
+				body = gzr
 			}
+			req.Response.Header.Del("Content-Encoding")
+
+		case "deflate":
+			fr := flate.NewReader(body)
+			defer fr.Close()
+			body = fr
 			req.Response.Header.Del("Content-Encoding")
 		}
 

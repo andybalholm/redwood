@@ -132,7 +132,7 @@ func pruneContent(URL *url.URL, content *[]byte, charset string) bool {
 func prune(n *html.Node, sel cascadia.Selector) int {
 	count := 0
 	child := n.FirstChild
-	for child != nil  {
+	for child != nil {
 		if sel(child) {
 			nextChild := child.NextSibling
 			n.RemoveChild(child)

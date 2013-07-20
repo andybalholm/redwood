@@ -49,7 +49,7 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 	}
 
 	switch resp.Header.Get("Content-Encoding") {
-	case "", "gzip":
+	case "", "gzip", "deflate":
 		// This is an encoding we can understand.
 
 	case "GZIP":

@@ -159,9 +159,25 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	content, err := ioutil.ReadAll(resp.Body)
+	lr := &io.LimitedReader{
+		R: resp.Body,
+		N: 1e7,
+	}
+	content, err := ioutil.ReadAll(lr)
 	if err != nil {
 		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
+	}
+	if lr.N == 0 {
+		log.Println("response body too long to filter:", r.URL)
+		copyResponseHeader(w, resp)
+		w.Write(content)
+		n, err := io.Copy(w, resp.Body)
+		if err != nil {
+			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
+		}
+		sc.action = IGNORE
+		logAccess(r, resp, sc, contentType, int(n)+len(content), false, user)
+		return
 	}
 
 	modified := false

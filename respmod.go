@@ -71,9 +71,26 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 			req.Response.Header.Del("Content-Encoding")
 		}
 
-		content, err := ioutil.ReadAll(body)
+		lr := &io.LimitedReader{
+			R: body,
+			N: 1e7, // 10 MB
+		}
+		content, err := ioutil.ReadAll(lr)
 		if err != nil {
 			log.Printf("error while reading response body (URL: %s): %s", req.Request.URL, err)
+		}
+		if lr.N == 0 {
+			log.Println("response body too long to filter:", req.Request.URL)
+			rw := icap.NewBridgedResponseWriter(w)
+			copyResponseHeader(rw, req.Response)
+			rw.Write(content)
+			n, err := io.Copy(rw, body)
+			if err != nil {
+				log.Printf("error while copying response (URL: %s): %s", req.Request.URL, err)
+			}
+			sc.action = IGNORE
+			logAccess(req.Request, req.Response, sc, contentType, int(n) + len(content), false, user)
+			return
 		}
 
 		modified := false

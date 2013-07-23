@@ -244,7 +244,13 @@ func generateCertificate(addr string) (cert tls.Certificate, err error) {
 	keyBuf := new(bytes.Buffer)
 	pem.Encode(keyBuf, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
-	return tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
+	newCert, err := tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	newCert.Certificate = append(newCert.Certificate, tlsCert.Certificate...)
+	return newCert, nil
 }
 
 func readBypassFile(filename string) error {

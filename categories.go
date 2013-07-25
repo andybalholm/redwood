@@ -177,6 +177,23 @@ func loadCategory(dirname string) (c *category, err error) {
 // them to URLRules and phraseRules.
 func collectRules() {
 	for _, c := range categories {
+		allIgnored := c.action == IGNORE
+		if a, ok := groupActions[""][c.name]; ok {
+			allIgnored = a == IGNORE
+		}
+		if allIgnored {
+			for _, actionMap := range groupActions {
+				if a, ok := actionMap[c.name]; ok && a != IGNORE {
+					allIgnored = false
+					break
+				}
+			}
+			if allIgnored {
+				// Don't bother to collect rules in categories that are always ignored.
+				continue
+			}
+		}
+
 		for rule, _ := range c.weights {
 			if rule.t == contentPhrase {
 				contentPhraseList.addPhrase(rule.content)

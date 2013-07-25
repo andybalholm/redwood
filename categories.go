@@ -239,7 +239,12 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 		c := categories[name]
 		if s > 0 {
 			a := c.action
+			if a1, ok := groupActions[""][name]; ok {
+				// Apply the default rules first.
+				a = a1
+			}
 			if a1, ok := groupActions[filterGroup][name]; ok {
+				// Then override with the ones specific to the group.
 				a = a1
 			}
 			switch a {

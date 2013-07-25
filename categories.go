@@ -190,6 +190,7 @@ func collectRules() {
 			}
 			if allIgnored {
 				// Don't bother to collect rules in categories that are always ignored.
+				delete(categories, c.name)
 				continue
 			}
 		}

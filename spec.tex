@@ -313,10 +313,8 @@ but only for users that belong to a specific filter group.
 For example, \verb"allow proxies admin" would allow users in the ``admin'' group
 to access sites in the ``proxies'' category even if they were normally blocked.
 
-If a user does not belong to any other group, he belongs to the default group,
-whose name is the empty string.
 When the \verb"block", \verb"allow", and \verb"ignore" directives are used without a group name,
-they apply to the default group.
+they apply to all users---except that groups may override them with different actions.
 
 \section{Authentication}
 

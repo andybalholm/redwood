@@ -13,8 +13,7 @@ var whichGroup = map[string]string{}
 // groupActions maps groups and categories to actions.
 // For example, if members of the admin group should be able to access sites
 // in the proxies category, groupActions["admin"]["proxies"] = ALLOW.
-// groupActions[""] contains the actions that apply to users who are not
-// members of any group.
+// groupActions[""] contains the default actions.
 var groupActions = map[string]map[string]action{}
 
 var groupMember = newActiveFlag("group", "", "assign a user to a filter group (--group 'group-name user-name')", assignGroupMember)

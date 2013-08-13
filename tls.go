@@ -59,6 +59,11 @@ func loadCertificate() {
 		parsedTLSCert = parsed
 		tlsReady = true
 
+		http.HandleFunc("/cert.der", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+			w.Write(tlsCert.Certificate[0])
+		})
+
 		go cacheCertificates()
 	}
 }

@@ -20,7 +20,7 @@ var accessLogName = flag.String("access-log", "", "path to access-log file")
 
 // logChan is a channel for sending context objects, once processing is
 // completed, to be logged in the access log.
-var logChan = make(chan []string, 10)
+var logChan = make(chan []string)
 
 // accessLog opens the log file and writes entries to it from logChan.
 // It should be run in its own goroutine.

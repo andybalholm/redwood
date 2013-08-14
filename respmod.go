@@ -13,6 +13,9 @@ import (
 // Response-modification functions.
 
 func handleResponse(w icap.ResponseWriter, req *icap.Request) {
+	activeConnections.Add(1)
+	defer activeConnections.Done()
+
 	h := w.Header()
 	h.Set("ISTag", ISTag)
 	h.Set("Service", "Redwood content filter")

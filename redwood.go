@@ -8,10 +8,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"runtime"
+	"strings"
 )
 
 var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
@@ -48,9 +50,15 @@ func main() {
 	portsListening := 0
 
 	if *proxyAddress != "" {
+		proxyListener, err := net.Listen("tcp", *proxyAddress)
+		if err != nil {
+			log.Fatalf("error listening for connections on %s: %s", *proxyAddress, err)
+		}
+		listenerChan <- proxyListener
+		server := http.Server{Handler: proxyHandler{}}
 		go func() {
-			err := http.ListenAndServe(*proxyAddress, proxyHandler{})
-			if err != nil {
+			err = server.Serve(proxyListener)
+			if err != nil && !strings.Contains(err.Error(), "use of closed") {
 				log.Fatalln("Error running HTTP proxy:", err)
 			}
 		}()
@@ -63,7 +71,7 @@ func main() {
 		}
 		go func() {
 			err := runTransparentServer(*transparentAddress)
-			if err != nil {
+			if err != nil && !strings.Contains(err.Error(), "use of closed") {
 				log.Fatalln("Error running transparent HTTPS proxy:", err)
 			}
 		}()
@@ -73,9 +81,14 @@ func main() {
 	if *icapAddress != "" {
 		icap.HandleFunc("/reqmod", handleRequest)
 		icap.HandleFunc("/respmod", handleResponse)
+		icapListener, err := net.Listen("tcp", *icapAddress)
+		if err != nil {
+			log.Fatalf("error listening for connections on %s: %s", *icapAddress, err)
+		}
+		listenerChan <- icapListener
 		go func() {
-			err := icap.ListenAndServe(*icapAddress, nil)
-			if err != nil {
+			err := new(icap.Server).Serve(icapListener)
+			if err != nil && !strings.Contains(err.Error(), "use of closed") {
 				log.Fatalln("Error running ICAP server:", err)
 			}
 		}()

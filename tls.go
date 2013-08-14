@@ -91,6 +91,9 @@ func shouldBypass(host string) bool {
 
 // connectDirect connects to serverAddr and copies data between it and conn.
 func connectDirect(conn net.Conn, serverAddr string) {
+	activeConnections.Add(1)
+	defer activeConnections.Done()
+
 	if *tlsVerbose {
 		log.Printf("connecting %s directly to %s", conn.RemoteAddr(), serverAddr)
 	}

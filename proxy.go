@@ -47,6 +47,9 @@ func lanAddress(addr string) bool {
 }
 
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	activeConnections.Add(1)
+	defer activeConnections.Done()
+
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {

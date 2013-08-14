@@ -14,7 +14,7 @@ func runTransparentServer(addr string) error {
 	if err != nil {
 		return err
 	}
-	defer ln.Close()
+	listenerChan <- ln
 
 	var tempDelay time.Duration
 

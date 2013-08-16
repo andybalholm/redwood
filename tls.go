@@ -61,7 +61,7 @@ func loadCertificate() {
 
 		http.HandleFunc("/cert.der", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/x-x509-ca-cert")
-			w.Write(tlsCert.Certificate[0])
+			w.Write(tlsCert.Certificate[len(tlsCert.Certificate)-1])
 		})
 
 		go cacheCertificates()

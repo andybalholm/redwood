@@ -32,6 +32,9 @@ func watchForSIGTERM() {
 			for _, ln := range listeners {
 				ln.Close()
 			}
+			if *pidfile != "" {
+				os.Remove(*pidfile)
+			}
 			activeConnections.Wait()
 			os.Exit(0)
 		}

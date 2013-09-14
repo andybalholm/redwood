@@ -53,9 +53,10 @@ func (p *phraseList) findFallbackNodes(node int32, text []byte) {
 		for j := i; j < len(text); j++ {
 			ch := (*p)[f].children
 			if ch == nil {
-				break
+				f = 0
+			} else {
+				f = ch[text[j]]
 			}
-			f = ch[text[j]]
 			if f == 0 {
 				break
 			}

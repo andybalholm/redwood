@@ -173,3 +173,13 @@ func newActiveFlag(name, value, usage string, f func(string) error) flag.Value {
 	flag.Var(af, name, usage)
 	return af
 }
+
+// ListFlag collects all values given for a flag into a slice.
+func ListFlag(name, usage string) *[]string {
+	var values []string
+	newActiveFlag(name, "", usage, func(v string) error {
+		values = append(values, v)
+		return nil
+	})
+	return &values
+}

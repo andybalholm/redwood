@@ -12,7 +12,7 @@ type scorecard struct {
 // needs to be blocked, based on c.tally and the group that user belongs to.
 func (c *scorecard) calculate(user string) {
 	c.scores = categoryScores(c.tally)
-	c.blocked = blockedCategories(c.scores, whichGroup[user])
+	c.blocked = blockedCategories(c.scores, WhichGroup(user))
 	if len(c.blocked) > 0 {
 		c.action = BLOCK
 	} else {

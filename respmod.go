@@ -92,7 +92,7 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 				log.Printf("error while copying response (URL: %s): %s", req.Request.URL, err)
 			}
 			sc.action = IGNORE
-			logAccess(req.Request, req.Response, sc, contentType, int(n) + len(content), false, user)
+			logAccess(req.Request, req.Response, sc, contentType, int(n)+len(content), false, user)
 			return
 		}
 

@@ -64,7 +64,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard, user s
 		URL:        r.URL.String(),
 		Categories: strings.Join(blockDesc, ", "),
 		User:       user,
-		Group:      whichGroup[user],
+		Group:      WhichGroup(user),
 		Tally:      listTally(stringTally(sc.tally)),
 		Scores:     listTally(sc.scores),
 	}

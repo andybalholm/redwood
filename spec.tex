@@ -307,6 +307,12 @@ to the group named ``admin.''
 If a user authenticates with the proxy using a username and password, 
 his username would be used instead of his IP address.
 
+In addition to IP addresses and usernames, IP address ranges may be used. 
+The following formats are accepted: \verb"10.1.10.1/24", \verb"10.1.10.0-10.1.10.255",
+and \verb"10.1.10.0-255".
+Individual IP address assignments take precedence over ranges.
+If multiple ranges match, the first one will be used.
+
 The filtering for a filter group is configured with the \verb"block", \verb"allow", and \verb"ignore"
 directives. These directives override the \verb"action" line in the \verb"category.conf" file,
 but only for users that belong to a specific filter group.

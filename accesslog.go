@@ -70,7 +70,7 @@ func logAccess(req *http.Request, resp *http.Response, sc scorecard, contentType
 		modified = "pruned"
 	}
 
-	if group := whichGroup[user]; group != "" {
+	if group := WhichGroup(user); group != "" {
 		user = fmt.Sprintf("%s(%s)", user, group)
 	}
 

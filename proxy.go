@@ -19,6 +19,9 @@ type proxyHandler struct {
 
 	// connectPort is the server port that was specified in a CONNECT request.
 	connectPort string
+
+	// user is a user that has already been authenticated.
+	user string
 }
 
 // lanAddress returns whether addr is in one of the LAN address ranges.
@@ -57,7 +60,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	user := client
 
-	if !h.TLS && !lanAddress(client) {
+	if h.user != "" {
+		user = h.user
+	} else if !h.TLS && (*authAlways || !lanAddress(client)) {
 		u := authenticate(w, r)
 		if u == "" {
 			return
@@ -93,7 +98,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		if tlsReady {
-			SSLBump(conn, r.URL.Host)
+			SSLBump(conn, r.URL.Host, user)
 		} else {
 			connectDirect(conn, r.URL.Host)
 		}

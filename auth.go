@@ -2,17 +2,26 @@ package main
 
 import (
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
+	"sync"
 )
 
 // HTTP proxy authentication.
 
 var passwordFile = newActiveFlag("password-file", "", "path to file of usernames and passwords", readPasswordFile)
+var authHelper = newActiveFlag("auth-helper", "", "program to authenticate users", startAuthHelper)
+var authAlways = flag.Bool("always-require-auth", false, "require authentication even for LAN users")
+
 var passwords = map[string]string{}
+var passwordLock sync.RWMutex
+
+var authenticators []func(user, password string) bool
 
 func readPasswordFile(filename string) error {
 	f, err := os.Open(filename)
@@ -77,10 +86,56 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 	user := auth[:colon]
 	password := auth[colon+1:]
 
-	if password != passwords[user] {
-		send407(w)
-		return ""
+	passwordLock.RLock()
+	ok := password == passwords[user]
+	passwordLock.RUnlock()
+	if ok {
+		return user
 	}
 
-	return user
+	for _, a := range authenticators {
+		if a(user, password) {
+			if _, ok := passwords[user]; !ok {
+				// Cache the password for later use.
+				passwordLock.Lock()
+				passwords[user] = password
+				passwordLock.Unlock()
+			}
+			return user
+		}
+	}
+
+	send407(w)
+	return ""
+}
+
+func startAuthHelper(cmd string) error {
+	c := exec.Command(cmd)
+	in, err := c.StdinPipe()
+	if err != nil {
+		return err
+	}
+	out, err := c.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	err = c.Start()
+	if err != nil {
+		return err
+	}
+
+	var m sync.Mutex
+	authenticators = append(authenticators, func(user, password string) bool {
+		m.Lock()
+		defer m.Unlock()
+		fmt.Fprintln(in, user, password)
+		var response string
+		fmt.Fscanln(out, &response)
+		if response == "OK" {
+			return true
+		}
+		return false
+	})
+
+	return nil
 }

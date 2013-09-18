@@ -326,9 +326,15 @@ they apply to all users---except that groups may override them with different ac
 
 When a client connects to Redwood's HTTP proxy server from outside the local network,
 Redwood requires HTTP basic proxy authentication, with a username and password.
-The usernames and passwords come from a file that is specified by the \verb"--password-file"
+If the \verb"--always-require-auth" option is specified, 
+authentication will be required for all users, even those on the local network.
+The usernames and passwords can come from a file that is specified by the \verb"--password-file"
 configuration directive. Each line in the file consists of a username,
 a space or a tab, and a password.
-If no password file is specified, no connections from outside the LAN will be accepted.
+Alternatively, a program can be specified to perform authentication with \verb"--auth-helper".
+Each line of the program's input will be a username and a password, separated by a space.
+It should respond with \verb"OK" if the password is correct, or \verb"ERR" if it is not.
+One such program is \verb"basic_pam_auth", which is included with Squid.
+If no password file or authentication helper is specified, no connections from outside the LAN will be accepted.
 
 \end{document}

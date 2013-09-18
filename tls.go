@@ -114,8 +114,8 @@ func connectDirect(conn net.Conn, serverAddr string) {
 
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
-// trying to connect to.
-func SSLBump(conn net.Conn, serverAddr string) {
+// trying to connect to. user is the name of an already-authenticated user.
+func SSLBump(conn net.Conn, serverAddr, user string) {
 	defer func() {
 		if err := recover(); err != nil {
 			buf := make([]byte, 4096)
@@ -163,6 +163,7 @@ func SSLBump(conn net.Conn, serverAddr string) {
 		Handler: proxyHandler{
 			TLS:         true,
 			connectPort: port,
+			user:        user,
 		},
 	}
 	server.Serve(listener)

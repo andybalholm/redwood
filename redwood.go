@@ -12,7 +12,6 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"runtime"
 	"strings"
 )
 
@@ -35,8 +34,6 @@ func main() {
 			log.Println("could not create pidfile:", err)
 		}
 	}
-
-	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	if *testURL != "" {
 		runURLTest(*testURL)

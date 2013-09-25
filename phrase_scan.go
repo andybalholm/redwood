@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"code.google.com/p/go.net/html"
 	"code.google.com/p/mahonia"
 	"compress/gzip"
 	"io/ioutil"
@@ -28,9 +29,7 @@ func scanContent(content []byte, contentType, charset string, tally map[rule]int
 		log.Printf("Unsupported charset (%s)", charset)
 		decode = mahonia.NewDecoder("utf-8")
 	}
-	if strings.Contains(contentType, "html") {
-		decode = mahonia.FallbackDecoder(mahonia.EntityDecoder(), decode)
-	}
+	entities := strings.Contains(contentType, "html")
 
 	ps := newPhraseScanner(contentPhraseList, func(s string) {
 		tally[rule{t: contentPhrase, content: s}]++
@@ -41,14 +40,49 @@ func scanContent(content []byte, contentType, charset string, tally map[rule]int
 
 loop:
 	for len(content) > 0 {
-		// Read one Unicode character from content.
-		c, size, status := decode(content)
-		content = content[size:]
-		switch status {
-		case mahonia.STATE_ONLY:
-			continue
-		case mahonia.NO_ROOM:
-			break loop
+		var c rune
+		if entities && content[0] == '&' {
+			// Try to decode a character entity.
+			entityLen := 1
+			for entityLen < 32 && entityLen < len(content) {
+				if b := content[entityLen]; 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9' || entityLen == 1 && b == '#' {
+					entityLen++
+				} else {
+					break
+				}
+			}
+			if entityLen < len(content) && content[entityLen] == ';' {
+				entityLen++
+			}
+			e := string(content[:entityLen])
+			decoded := html.UnescapeString(e)
+			if decoded == e {
+				// It isn't a valid entity; just read it as an ampersand.
+				c = '&'
+				content = content[1:]
+			} else {
+				unchanged := 0
+				for unchanged < len(e) && unchanged < len(decoded) {
+					if e[len(e)-unchanged-1] == decoded[len(decoded)-unchanged-1] {
+						unchanged++
+					} else {
+						break
+					}
+				}
+				c = []rune(decoded)[0]
+				content = content[len(e)-unchanged:]
+			}
+		} else {
+			// Read one Unicode character from content.
+			r, size, status := decode(content)
+			content = content[size:]
+			switch status {
+			case mahonia.STATE_ONLY:
+				continue
+			case mahonia.NO_ROOM:
+				break loop
+			}
+			c = r
 		}
 
 		// Simplify it to lower-case words separated by single spaces.

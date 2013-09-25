@@ -99,7 +99,7 @@ func (ps *phraseScanner) scanByte(c byte) {
 	if ch := ps.list[currentNode].children; ch != nil {
 		newState = ch[c]
 	}
-	for newState == 0 && currentNode != 0 {
+	for currentNode != 0 && newState == 0 {
 		currentNode = ps.list[currentNode].fallback
 		if ch := ps.list[currentNode].children; ch != nil {
 			newState = ch[c]

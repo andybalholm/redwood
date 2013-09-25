@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"crypto/tls"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +13,8 @@ import (
 	"net/http"
 	"strings"
 )
+
+var disableGzip = flag.Bool("disable-gzip", false, "Don't compress HTTP responses with gzip.")
 
 type proxyHandler struct {
 	// TLS is whether this is an HTTPS connection.
@@ -113,7 +116,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Add("Via", r.Proto+" Redwood")
 	r.Header.Add("X-Forwarded-For", client)
 
-	gzipOK := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+	gzipOK := !*disableGzip && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 	r.Header.Del("Accept-Encoding")
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).

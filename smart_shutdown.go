@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var listenerChan = make(chan net.Listener)
@@ -35,6 +36,11 @@ func watchForSIGTERM() {
 			if *pidfile != "" {
 				os.Remove(*pidfile)
 			}
+			go func() {
+				// Stop after 24 hours even if the connections aren't closed.
+				time.Sleep(24 * time.Hour)
+				os.Exit(0)
+			}()
 			activeConnections.Wait()
 			os.Exit(0)
 		}

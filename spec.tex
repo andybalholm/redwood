@@ -328,6 +328,8 @@ When a client connects to Redwood's HTTP proxy server from outside the local net
 Redwood requires HTTP basic proxy authentication, with a username and password.
 If the \verb"--always-require-auth" option is specified, 
 authentication will be required for all users, even those on the local network.
+But if the \verb"--disable-auth" option is specified, 
+authentication will not be required for any users, local or remote.
 The usernames and passwords can come from a file that is specified by the \verb"--password-file"
 configuration directive. Each line in the file consists of a username,
 a space or a tab, and a password.

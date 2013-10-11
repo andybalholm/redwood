@@ -65,7 +65,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.user != "" {
 		user = h.user
-	} else if !h.TLS && (*authAlways || !lanAddress(client)) {
+	} else if !*authNever && !h.TLS && (*authAlways || !lanAddress(client)) {
 		u := authenticate(w, r)
 		if u == "" {
 			return

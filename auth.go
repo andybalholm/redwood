@@ -17,6 +17,7 @@ import (
 var passwordFile = newActiveFlag("password-file", "", "path to file of usernames and passwords", readPasswordFile)
 var authHelper = newActiveFlag("auth-helper", "", "program to authenticate users", startAuthHelper)
 var authAlways = flag.Bool("always-require-auth", false, "require authentication even for LAN users")
+var authNever = flag.Bool("disable-auth", false, "never require authentication")
 
 var passwords = map[string]string{}
 var passwordLock sync.RWMutex

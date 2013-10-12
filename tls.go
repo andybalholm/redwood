@@ -90,7 +90,8 @@ func shouldBypass(host string) bool {
 }
 
 // connectDirect connects to serverAddr and copies data between it and conn.
-func connectDirect(conn net.Conn, serverAddr string) {
+// extraData is sent to the server first.
+func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
@@ -101,6 +102,10 @@ func connectDirect(conn net.Conn, serverAddr string) {
 	if err != nil {
 		log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
 		return
+	}
+
+	if extraData != nil {
+		serverConn.Write(extraData)
 	}
 
 	go func() {
@@ -125,9 +130,32 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		}
 	}()
 
-	if host, _, err := net.SplitHostPort(serverAddr); err == nil && shouldBypass(host) {
-		connectDirect(conn, serverAddr)
+	// Read the client hello so that we can find out the name of the server (not
+	// just the address).
+	clientHello, err := readClientHello(conn)
+	if err != nil {
+		log.Printf("error reading client hello in TLS connection from %s to %s: %s", conn.RemoteAddr(), serverAddr, err)
+		connectDirect(conn, serverAddr, clientHello)
 		return
+	}
+
+	serverName, ok := clientHelloServerName(clientHello)
+	if ok && serverName != "" {
+		if *tlsVerbose {
+			log.Printf("Server name requested for %s is %s.", serverAddr, serverName)
+		}
+		if shouldBypass(serverName) {
+			connectDirect(conn, serverAddr, clientHello)
+			return
+		}
+	} else {
+		if *tlsVerbose {
+			log.Printf("Could not find server name for %s.", serverAddr)
+		}
+		if host, _, err := net.SplitHostPort(serverAddr); err == nil && shouldBypass(host) {
+			connectDirect(conn, serverAddr, clientHello)
+			return
+		}
 	}
 
 	if *tlsVerbose {
@@ -138,7 +166,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	if err != nil {
 		// Since it doesn't seem to be an HTTPS server, just connect directly.
 		log.Printf("Could not generate a TLS certificate for %s (%s); letting the client connect directly", serverAddr, err)
-		connectDirect(conn, serverAddr)
+		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
 
@@ -147,7 +175,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		Certificates: []tls.Certificate{cert, tlsCert},
 	}
 
-	tlsConn := tls.Server(conn, config)
+	tlsConn := tls.Server(&insertingConn{conn, clientHello}, config)
 	err = tlsConn.Handshake()
 	if err != nil {
 		log.Printf("Error in TLS handshake for SSLBump connection from %v to %v: %v", conn.RemoteAddr(), serverAddr, err)
@@ -167,6 +195,23 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		},
 	}
 	server.Serve(listener)
+}
+
+// A insertingConn is a net.Conn that inserts extra data at the start of the
+// incoming data stream.
+type insertingConn struct {
+	net.Conn
+	extraData []byte
+}
+
+func (c *insertingConn) Read(p []byte) (n int, err error) {
+	if len(c.extraData) == 0 {
+		return c.Conn.Read(p)
+	}
+
+	n = copy(p, c.extraData)
+	c.extraData = c.extraData[n:]
+	return
 }
 
 // A singleListener is a net.Listener that returns a single connection, then
@@ -292,4 +337,127 @@ func readBypassFile(filename string) error {
 	}
 
 	return nil
+}
+
+func readClientHello(conn net.Conn) (hello []byte, err error) {
+	var header [5]byte
+	n, err := io.ReadFull(conn, header[:])
+	hello = header[:n]
+	if err != nil {
+		return hello, err
+	}
+
+	if header[0] != 22 {
+		return hello, fmt.Errorf("expected content type of 22, got %d", header[0])
+	}
+	if header[1] != 3 {
+		return hello, fmt.Errorf("expected major version of 3, got %d", header[1])
+	}
+	recordLen := int(header[3])<<8 | int(header[4])
+	if recordLen > 0x3000 {
+		return hello, fmt.Errorf("expected length less than 12kB, got %d", recordLen)
+	}
+	if recordLen < 4 {
+		return hello, fmt.Errorf("expected length of at least 4 bytes, got %d", recordLen)
+	}
+
+	protocolData := make([]byte, recordLen)
+	n, err = io.ReadFull(conn, protocolData)
+	hello = append(hello, protocolData[:n]...)
+	if err != nil {
+		return hello, err
+	}
+	if protocolData[0] != 1 {
+		return hello, fmt.Errorf("Expected message type 1 (ClientHello), got %d", protocolData[0])
+	}
+	protocolLen := int(protocolData[1])<<16 | int(protocolData[2])<<8 | int(protocolData[3])
+	if protocolLen != recordLen-4 {
+		return hello, fmt.Errorf("recordLen=%d, protocolLen=%d", recordLen, protocolLen)
+	}
+
+	return hello, nil
+}
+
+func clientHelloServerName(data []byte) (name string, ok bool) {
+	if len(data) < 5 {
+		return "", false
+	}
+	// Strip off the record header.
+	data = data[5:]
+
+	if len(data) < 42 {
+		return "", false
+	}
+
+	sessionIdLen := int(data[38])
+	if sessionIdLen > 32 || len(data) < 39+sessionIdLen {
+		return "", false
+	}
+	data = data[39+sessionIdLen:]
+	if len(data) < 2 {
+		return "", false
+	}
+
+	cipherSuiteLen := int(data[0])<<8 | int(data[1])
+	if cipherSuiteLen%2 == 1 || len(data) < 2+cipherSuiteLen {
+		return "", false
+	}
+	data = data[2+cipherSuiteLen:]
+	if len(data) < 1 {
+		return "", false
+	}
+
+	compressionMethodsLen := int(data[0])
+	if len(data) < 1+compressionMethodsLen {
+		return "", false
+	}
+	data = data[1+compressionMethodsLen:]
+	if len(data) < 2 {
+		return "", false
+	}
+
+	extensionsLength := int(data[0])<<8 | int(data[1])
+	data = data[2:]
+	if extensionsLength != len(data) {
+		return "", false
+	}
+
+	for len(data) != 0 {
+		if len(data) < 4 {
+			return "", false
+		}
+		extension := uint16(data[0])<<8 | uint16(data[1])
+		length := int(data[2])<<8 | int(data[3])
+		data = data[4:]
+		if len(data) < length {
+			return "", false
+		}
+
+		if extension == 0 /* server name */ {
+			if length < 2 {
+				return "", false
+			}
+			numNames := int(data[0])<<8 | int(data[1])
+			d := data[2:]
+			for i := 0; i < numNames; i++ {
+				if len(d) < 3 {
+					return "", false
+				}
+				nameType := d[0]
+				nameLen := int(d[1])<<8 | int(d[2])
+				d = d[3:]
+				if len(d) < nameLen {
+					return "", false
+				}
+				if nameType == 0 {
+					return string(d[:nameLen]), true
+				}
+				d = d[nameLen:]
+			}
+		}
+
+		data = data[length:]
+	}
+
+	return "", true
 }

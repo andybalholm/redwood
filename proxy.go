@@ -103,7 +103,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if tlsReady {
 			SSLBump(conn, r.URL.Host, user)
 		} else {
-			connectDirect(conn, r.URL.Host)
+			connectDirect(conn, r.URL.Host, nil)
 		}
 		return
 	}

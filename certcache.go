@@ -6,17 +6,23 @@ import (
 
 // Cache generated TLS certificates.
 
-type certRequest struct {
+type serverId struct {
 	// serverAddress is the address (host:port) of the server.
 	serverAddress string
+
+	// serverName is the Server Name Indication used in the TLS client hello.
+	serverName string
+}
+
+type certRequest struct {
+	serverId
 
 	// responseChan is a channel to send the response on.
 	responseChan chan certResponse
 }
 
 type certResponse struct {
-	// serverAddress is the address of the server this certificate is for.
-	serverAddress string
+	serverId
 
 	// cert is the certificate that was generated.
 	cert tls.Certificate
@@ -30,47 +36,47 @@ var certRequestChan = make(chan certRequest)
 // cacheCertificates runs the certificate cache. It should be run in its own
 // goroutine.
 func cacheCertificates() {
-	cache := map[string]certResponse{}
-	pending := map[string][]certRequest{}
+	cache := map[serverId]certResponse{}
+	pending := map[serverId][]certRequest{}
 	responses := make(chan certResponse)
 
 	for {
 		select {
 		case req := <-certRequestChan:
-			addr := req.serverAddress
-			if resp, ok := cache[addr]; ok {
+			id := req.serverId
+			if resp, ok := cache[id]; ok {
 				req.responseChan <- resp
 				continue
 			}
-			if _, ok := pending[addr]; !ok {
+			if _, ok := pending[id]; !ok {
 				go func() {
-					cert, err := generateCertificate(addr)
+					cert, err := generateCertificate(id.serverAddress, id.serverName)
 					responses <- certResponse{
-						serverAddress: addr,
-						cert:          cert,
-						err:           err,
+						serverId: id,
+						cert:     cert,
+						err:      err,
 					}
 				}()
 			}
-			pending[addr] = append(pending[addr], req)
+			pending[id] = append(pending[id], req)
 
 		case resp := <-responses:
-			addr := resp.serverAddress
-			for _, req := range pending[addr] {
+			id := resp.serverId
+			for _, req := range pending[id] {
 				req.responseChan <- resp
 			}
-			delete(pending, addr)
-			cache[addr] = resp
+			delete(pending, id)
+			cache[id] = resp
 		}
 	}
 }
 
 // getCertificate is like generateCertificate, except that it uses the cache.
-func getCertificate(addr string) (tls.Certificate, error) {
+func getCertificate(addr string, name string) (tls.Certificate, error) {
 	responseChan := make(chan certResponse)
 	certRequestChan <- certRequest{
-		serverAddress: addr,
-		responseChan:  responseChan,
+		serverId:     serverId{addr, name},
+		responseChan: responseChan,
 	}
 	resp := <-responseChan
 	return resp.cert, resp.err

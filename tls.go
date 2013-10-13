@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"flag"
 	"fmt"
 	"io"
@@ -162,7 +160,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		log.Printf("intercepting TLS connection from %s to %s", conn.RemoteAddr(), serverAddr)
 	}
 
-	cert, err := getCertificate(serverAddr)
+	cert, err := getCertificate(serverAddr, serverName)
 	if err != nil {
 		// Since it doesn't seem to be an HTTPS server, just connect directly.
 		log.Printf("Could not generate a TLS certificate for %s (%s); letting the client connect directly", serverAddr, err)
@@ -248,8 +246,9 @@ var maxSerial = big.NewInt(1<<63 - 1)
 
 // generateCertificate connects to the server at addr, gets its TLS
 // certificate, and returns a new certificate to be used when proxying
-// connections to that server.
-func generateCertificate(addr string) (cert tls.Certificate, err error) {
+// connections to that server. It sends a TLS Server Name Indication
+// with name.
+func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			buf := make([]byte, 4096)
@@ -258,7 +257,7 @@ func generateCertificate(addr string) (cert tls.Certificate, err error) {
 		}
 	}()
 
-	conn, err := tls.Dial("tcp", addr, unverifiedClientConfig)
+	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: name, InsecureSkipVerify: true})
 	if err != nil {
 		return tls.Certificate{}, err
 	}
@@ -293,14 +292,9 @@ func generateCertificate(addr string) (cert tls.Certificate, err error) {
 		return tls.Certificate{}, err
 	}
 
-	certBuf := new(bytes.Buffer)
-	pem.Encode(certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: newCertBytes})
-	keyBuf := new(bytes.Buffer)
-	pem.Encode(keyBuf, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-
-	newCert, err := tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
-	if err != nil {
-		return tls.Certificate{}, err
+	newCert := tls.Certificate{
+		Certificate: [][]byte{newCertBytes},
+		PrivateKey: priv,
 	}
 
 	newCert.Certificate = append(newCert.Certificate, tlsCert.Certificate...)

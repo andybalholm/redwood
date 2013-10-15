@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"flag"
 	"fmt"
 	"io"
@@ -265,12 +266,6 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 	state := conn.ConnectionState()
 	serverCert := state.PeerCertificates[0]
 
-	// Avoid duplicate serial numbers (NSS error -8054 in Chrome).
-	serverCert.SerialNumber, err = rand.Int(rand.Reader, maxSerial)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
-	}
-
 	priv, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("failed to generate private key: %s", err)
@@ -281,23 +276,53 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 		intermediates.AddCert(cert)
 	}
 	_, err = serverCert.Verify(x509.VerifyOptions{Intermediates: intermediates})
-	signingCert := parsedTLSCert
+	selfSigned := false
 	if _, ok := err.(x509.UnknownAuthorityError); ok {
 		// There was a certificate error, so generate a self-signed certificate.
-		signingCert = serverCert
+		if *tlsVerbose {
+			log.Println("Generating self-signed certificate for", name)
+		}
+		selfSigned = true
 	}
 
-	newCertBytes, err := x509.CreateCertificate(rand.Reader, serverCert, signingCert, &priv.PublicKey, tlsCert.PrivateKey)
+	template := serverCert
+
+	if selfSigned {
+		template = &x509.Certificate{
+			SerialNumber: new(big.Int).SetInt64(0),
+			Subject:      pkix.Name{CommonName: name},
+			NotBefore:    serverCert.NotBefore,
+			NotAfter:     serverCert.NotAfter,
+			KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			DNSNames:     []string{name},
+		}
+	} else {
+		// Avoid duplicate serial numbers (NSS error -8054 in Chrome).
+		template.SerialNumber, err = rand.Int(rand.Reader, maxSerial)
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
+		}
+	}
+
+	var newCertBytes []byte
+	if selfSigned {
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	} else {
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, parsedTLSCert, &priv.PublicKey, tlsCert.PrivateKey)
+	}
 	if err != nil {
 		return tls.Certificate{}, err
 	}
 
 	newCert := tls.Certificate{
 		Certificate: [][]byte{newCertBytes},
-		PrivateKey: priv,
+		PrivateKey:  priv,
 	}
 
-	newCert.Certificate = append(newCert.Certificate, tlsCert.Certificate...)
+	if !selfSigned {
+		newCert.Certificate = append(newCert.Certificate, tlsCert.Certificate...)
+	}
 	return newCert, nil
 }
 

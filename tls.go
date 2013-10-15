@@ -298,6 +298,11 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
 		}
+		template.SubjectKeyId = nil
+		template.AuthorityKeyId = nil
+		template.OCSPServer = nil
+		template.IssuingCertificateURL = nil
+		template.CRLDistributionPoints = nil
 	}
 
 	var newCertBytes []byte

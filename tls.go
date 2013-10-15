@@ -6,9 +6,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net"
@@ -275,14 +277,10 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 	for _, cert := range state.PeerCertificates[1:] {
 		intermediates.AddCert(cert)
 	}
-	_, err = serverCert.Verify(x509.VerifyOptions{Intermediates: intermediates})
-	selfSigned := false
-	if _, ok := err.(x509.UnknownAuthorityError); ok {
-		// There was a certificate error, so generate a self-signed certificate.
-		if *tlsVerbose {
-			log.Println("Generating self-signed certificate for", name)
-		}
-		selfSigned = true
+	selfSigned := !validCert(serverCert, intermediates)
+
+	if *tlsVerbose && selfSigned {
+		log.Println("Generating self-signed certificate for", name)
 	}
 
 	template := serverCert
@@ -324,6 +322,77 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 		newCert.Certificate = append(newCert.Certificate, tlsCert.Certificate...)
 	}
 	return newCert, nil
+}
+
+func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
+	_, err := cert.Verify(x509.VerifyOptions{Intermediates: intermediates})
+	if err == nil {
+		return true
+	}
+	if _, ok := err.(x509.UnknownAuthorityError); !ok {
+		// There was an error, but not because the certificate wasn't signed
+		// by a recognized CA. So we go ahead and use the cert and let
+		// the client experience the same error.
+		return true
+	}
+
+	// Before we give up, we'll try fetching some intermediate certificates.
+	if len(cert.IssuingCertificateURL) == 0 {
+		return false
+	}
+
+	for _, certURL := range cert.IssuingCertificateURL {
+		if *tlsVerbose {
+			log.Printf("trying to fetch intermediate certificate from %s", certURL)
+		}
+		resp, err := http.Get(certURL)
+		if err == nil {
+			defer resp.Body.Close()
+		}
+		if err != nil || resp.StatusCode != 200 {
+			if *tlsVerbose {
+				log.Println("could not fetch intermediate certificate from", certURL)
+			}
+			continue
+		}
+		certPEM, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			if *tlsVerbose {
+				log.Printf("error reading intermediate certificate from %s: %s", certURL, err)
+			}
+			continue
+		}
+		var certDER *pem.Block
+		for {
+			certDER, certPEM = pem.Decode(certPEM)
+			if certDER == nil {
+				break
+			}
+			if certDER.Type != "CERTIFICATE" {
+				continue
+			}
+			thisCert, err := x509.ParseCertificate(certDER.Bytes)
+			if err != nil {
+				if *tlsVerbose {
+					log.Printf("error parsing intermediate certificate from %s: %s", certURL, err)
+				}
+				continue
+			}
+			intermediates.AddCert(thisCert)
+		}
+	}
+
+	_, err = cert.Verify(x509.VerifyOptions{Intermediates: intermediates})
+	if err == nil {
+		return true
+	}
+	if _, ok := err.(x509.UnknownAuthorityError); !ok {
+		// There was an error, but not because the certificate wasn't signed
+		// by a recognized CA. So we go ahead and use the cert and let
+		// the client experience the same error.
+		return true
+	}
+	return false
 }
 
 func readBypassFile(filename string) error {

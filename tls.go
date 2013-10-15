@@ -145,18 +145,17 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		if *tlsVerbose {
 			log.Printf("Server name requested for %s is %s.", serverAddr, serverName)
 		}
-		if shouldBypass(serverName) {
-			connectDirect(conn, serverAddr, clientHello)
-			return
-		}
 	} else {
 		if *tlsVerbose {
 			log.Printf("Could not find server name for %s.", serverAddr)
 		}
-		if host, _, err := net.SplitHostPort(serverAddr); err == nil && shouldBypass(host) {
-			connectDirect(conn, serverAddr, clientHello)
-			return
+		if host, _, err := net.SplitHostPort(serverAddr); err == nil {
+			serverName = host
 		}
+	}
+	if shouldBypass(serverName) {
+		connectDirect(conn, serverAddr, clientHello)
+		return
 	}
 
 	if *tlsVerbose {

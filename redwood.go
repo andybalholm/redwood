@@ -65,9 +65,6 @@ func main() {
 	}
 
 	if len(*transparentAddresses) > 0 {
-		if !tlsReady {
-			log.Fatal("Can't run a transparent HTTPS proxy without server certificates configured.")
-		}
 		for _, addr := range *transparentAddresses {
 			go func() {
 				err := runTransparentServer(addr)

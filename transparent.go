@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"net/http"
 	"net/url"
 	"time"
 )
@@ -77,15 +78,17 @@ func checkSSLHost(conn net.Conn, serverAddr string) {
 		}
 	}
 
+	u := &url.URL{
+		Scheme: "https",
+		Host:   serverName,
+	}
 	sc := scorecard{
-		tally: URLRules.MatchingRules(&url.URL{
-			Scheme: "https",
-			Host:   serverName,
-		}),
+		tally: URLRules.MatchingRules(u),
 	}
 	sc.calculate("")
+	req, _ := http.NewRequest("", u.String(), nil)
+	logAccess(req, nil, sc, "", 0, false, conn.RemoteAddr().String())
 	if sc.action == BLOCK {
-		log.Println("Blocked HTTPS connection to", serverName)
 		conn.Close()
 		return
 	}

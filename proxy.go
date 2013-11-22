@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var disableGzip = flag.Bool("disable-gzip", false, "Don't compress HTTP responses with gzip.")
@@ -266,32 +267,19 @@ func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
 	}, nil
 }
 
-// retryTransport is an http.RoundTripper that automatically retries
-// failed GET and HEAD requests.
-type retryTransport struct {
-	http.Transport
+var transport = http.Transport{
+	TLSClientConfig: unverifiedClientConfig,
+	Proxy:           http.ProxyFromEnvironment,
 }
 
-var transport = retryTransport{
-	http.Transport{
-		TLSClientConfig: unverifiedClientConfig,
-		Proxy:           http.ProxyFromEnvironment,
-	},
-}
-
-func (t *retryTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	switch req.Method {
-	case "GET", "HEAD":
-		for i := 0; i < 3; i++ {
-			resp, err = t.Transport.RoundTrip(req)
-			if err == nil {
-				return resp, err
-			}
+// This is to deal with the problem of stale keepalive connections, which cause
+// transport.RoundTrip to return io.EOF.
+func init() {
+	go func() {
+		for _ = range time.Tick(10 * time.Second) {
+			transport.CloseIdleConnections()
 		}
-		return nil, err
-	}
-
-	return t.Transport.RoundTrip(req)
+	}()
 }
 
 func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Request) {

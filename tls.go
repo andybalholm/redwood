@@ -1,8 +1,8 @@
 package main
 
 import (
+	"crypto/md5"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -265,11 +265,6 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 	state := conn.ConnectionState()
 	serverCert := state.PeerCertificates[0]
 
-	priv, err := rsa.GenerateKey(rand.Reader, 1024)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to generate private key: %s", err)
-	}
-
 	intermediates := x509.NewCertPool()
 	for _, cert := range state.PeerCertificates[1:] {
 		intermediates.AddCert(cert)
@@ -293,8 +288,10 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 			DNSNames:     []string{name},
 		}
 	} else {
-		// Avoid duplicate serial numbers (NSS error -8054 in Chrome).
-		template.SerialNumber, err = rand.Int(rand.Reader, maxSerial)
+		// Use a hash of the real certificate as the serial number.
+		h := md5.New()
+		h.Write(serverCert.Raw)
+		template.SerialNumber = big.NewInt(0).SetBytes(h.Sum(nil))
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
 		}
@@ -307,9 +304,9 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 
 	var newCertBytes []byte
 	if selfSigned {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, parsedTLSCert.PublicKey, tlsCert.PrivateKey)
 	} else {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, parsedTLSCert, &priv.PublicKey, tlsCert.PrivateKey)
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, parsedTLSCert, parsedTLSCert.PublicKey, tlsCert.PrivateKey)
 	}
 	if err != nil {
 		return tls.Certificate{}, err
@@ -317,7 +314,7 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 
 	newCert := tls.Certificate{
 		Certificate: [][]byte{newCertBytes},
-		PrivateKey:  priv,
+		PrivateKey:  tlsCert.PrivateKey,
 	}
 
 	if !selfSigned {

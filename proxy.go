@@ -57,6 +57,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
+	if len(r.URL.String()) > 10000 {
+		http.Error(w, "URL too long", http.StatusRequestURITooLong)
+		return
+	}
+
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {

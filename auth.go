@@ -87,6 +87,11 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 	user := auth[:colon]
 	password := auth[colon+1:]
 
+	if password == "" {
+		send407(w)
+		return ""
+	}
+
 	passwordLock.RLock()
 	ok := password == passwords[user]
 	passwordLock.RUnlock()

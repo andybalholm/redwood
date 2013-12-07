@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -25,7 +26,6 @@ import (
 var certFile = flag.String("tls-cert", "", "path to certificate for serving HTTPS")
 var keyFile = flag.String("tls-key", "", "path to TLS certificate key")
 var sslBypassFile = newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", readBypassFile)
-var tlsVerbose = flag.Bool("tls-verbose", false, "log all intercepted HTTPS connections")
 
 var tlsCert tls.Certificate
 var parsedTLSCert *x509.Certificate
@@ -93,9 +93,6 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
-	if *tlsVerbose {
-		log.Printf("connecting %s directly to %s", conn.RemoteAddr(), serverAddr)
-	}
 	serverConn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
 		log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
@@ -132,7 +129,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	// just the address).
 	clientHello, err := readClientHello(conn)
 	if err != nil {
-		log.Printf("error reading client hello in TLS connection from %s to %s: %s", conn.RemoteAddr(), serverAddr, err)
+		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err))
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
@@ -146,6 +143,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	}
 
 	if shouldBypass(serverName) {
+		logTLS(user, serverAddr, serverName, errors.New("site bypass"))
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
@@ -155,6 +153,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
+		logTLS(user, serverAddr, serverName, err)
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
@@ -170,6 +169,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	cert, err := imitateCertificate(serverCert, !valid)
 	if err != nil {
 		serverConn.Close()
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err))
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
@@ -185,7 +185,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, config)
 	err = tlsConn.Handshake()
 	if err != nil {
-		log.Printf("Error in TLS handshake for SSLBump connection from %v to %v: %v", conn.RemoteAddr(), serverAddr, err)
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err))
 		return
 	}
 
@@ -201,6 +201,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 			user:        user,
 		},
 	}
+	logTLS(user, serverAddr, serverName, nil)
 	server.Serve(listener)
 }
 
@@ -320,24 +321,15 @@ func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 	}
 
 	for _, certURL := range cert.IssuingCertificateURL {
-		if *tlsVerbose {
-			log.Printf("trying to fetch intermediate certificate from %s", certURL)
-		}
 		resp, err := http.Get(certURL)
 		if err == nil {
 			defer resp.Body.Close()
 		}
 		if err != nil || resp.StatusCode != 200 {
-			if *tlsVerbose {
-				log.Println("could not fetch intermediate certificate from", certURL)
-			}
 			continue
 		}
 		certPEM, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			if *tlsVerbose {
-				log.Printf("error reading intermediate certificate from %s: %s", certURL, err)
-			}
 			continue
 		}
 		var certDER *pem.Block
@@ -351,9 +343,6 @@ func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 			}
 			thisCert, err := x509.ParseCertificate(certDER.Bytes)
 			if err != nil {
-				if *tlsVerbose {
-					log.Printf("error parsing intermediate certificate from %s: %s", certURL, err)
-				}
 				continue
 			}
 			intermediates.AddCert(thisCert)

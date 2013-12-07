@@ -17,24 +17,24 @@ import (
 // recording pages filtered to access log
 
 var accessLogName = flag.String("access-log", "", "path to access-log file")
+var accessLogChan = make(chan []string)
 
-// logChan is a channel for sending context objects, once processing is
-// completed, to be logged in the access log.
-var logChan = make(chan []string)
+var tlsLogName = flag.String("tls-log", "", "path to tls log file")
+var tlsLogChan = make(chan []string)
 
-// accessLog opens the log file and writes entries to it from logChan.
+// csvLog opens a log file and writes entries to it from logChan.
 // It should be run in its own goroutine.
-func accessLog() {
+func csvLog(filename string, logChan chan []string) {
 	var logfile = os.Stdout
 	actualFile := false
 	var err error
 	var csvWriter *csv.Writer
 
 	openLogFile := func() {
-		if *accessLogName != "" {
-			logfile, err = os.OpenFile(*accessLogName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		if filename != "" {
+			logfile, err = os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 			if err != nil {
-				log.Printf("Could not open access log file (%s): %s\n Sending access log messages to standard output instead.", *accessLogName, err)
+				log.Printf("Could not open log file (%s): %s\n Sending access log messages to standard output instead.", filename, err)
 				logfile = os.Stdout
 				actualFile = false
 			} else {
@@ -79,7 +79,16 @@ func logAccess(req *http.Request, resp *http.Response, sc scorecard, contentType
 		status = resp.StatusCode
 	}
 
-	logChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, sc.action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(sc.tally)), listTally(sc.scores), strings.Join(sc.blocked, ", "))
+	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, sc.action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(sc.tally)), listTally(sc.scores), strings.Join(sc.blocked, ", "))
+}
+
+func logTLS(user, serverAddr, serverName string, err error) {
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+
+	tlsLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, serverName, serverAddr, errStr)
 }
 
 // toStrings converts its arguments into a slice of strings.

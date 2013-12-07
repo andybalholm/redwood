@@ -40,7 +40,8 @@ func main() {
 		return
 	}
 
-	go accessLog()
+	go csvLog(*accessLogName, accessLogChan)
+	go csvLog(*tlsLogName, tlsLogChan)
 
 	startWebServer()
 

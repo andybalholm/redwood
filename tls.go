@@ -63,8 +63,6 @@ func loadCertificate() {
 			w.Header().Set("Content-Type", "application/x-x509-ca-cert")
 			w.Write(tlsCert.Certificate[len(tlsCert.Certificate)-1])
 		})
-
-		go cacheCertificates()
 	}
 }
 
@@ -140,32 +138,44 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	}
 
 	serverName, ok := clientHelloServerName(clientHello)
-	if ok && serverName != "" {
-		if *tlsVerbose {
-			log.Printf("Server name requested for %s is %s.", serverAddr, serverName)
-		}
-	} else {
-		serverName = serverNameAtAddress(serverAddr)
-		if *tlsVerbose {
-			log.Printf("Server name detected at %s is %s.", serverAddr, serverName)
+	if !ok || serverName == "" {
+		serverName, _, err = net.SplitHostPort(serverAddr)
+		if err != nil {
+			serverName = serverAddr
 		}
 	}
+
 	if shouldBypass(serverName) {
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
 
-	if *tlsVerbose {
-		log.Printf("intercepting TLS connection from %s to %s", conn.RemoteAddr(), serverAddr)
-	}
-
-	cert, err := getCertificate(serverAddr, serverName)
+	serverConn, err := tls.Dial("tcp", serverAddr, &tls.Config{
+		ServerName:         serverName,
+		InsecureSkipVerify: true,
+	})
 	if err != nil {
-		// Since it doesn't seem to be an HTTPS server, just connect directly.
-		log.Printf("Could not generate a TLS certificate for %s (%s); letting the client connect directly", serverAddr, err)
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
+
+	state := serverConn.ConnectionState()
+	serverCert := state.PeerCertificates[0]
+	intermediates := x509.NewCertPool()
+	for _, ic := range state.PeerCertificates[1:] {
+		intermediates.AddCert(ic)
+	}
+
+	valid := validCert(serverCert, intermediates)
+	cert, err := imitateCertificate(serverCert, !valid)
+	if err != nil {
+		serverConn.Close()
+		connectDirect(conn, serverAddr, clientHello)
+		return
+	}
+
+	// TODO: use serverConn
+	serverConn.Close()
 
 	config := &tls.Config{
 		NextProtos:   []string{"http/1.1"},
@@ -238,43 +248,6 @@ func (s *singleListener) Close() error {
 
 func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
-}
-
-// maxSerial is the largest serial number to use for a certificate.
-var maxSerial = big.NewInt(1<<63 - 1)
-
-// generateCertificate connects to the server at addr, gets its TLS
-// certificate, and returns a new certificate to be used when proxying
-// connections to that server. It sends a TLS Server Name Indication
-// with name.
-func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
-	defer func() {
-		if e := recover(); e != nil {
-			buf := make([]byte, 4096)
-			buf = buf[:runtime.Stack(buf, false)]
-			err = fmt.Errorf("panic generating ssl certificate for %s: %s\n%s", addr, e, buf)
-		}
-	}()
-
-	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: name, InsecureSkipVerify: true})
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-	defer conn.Close()
-	state := conn.ConnectionState()
-	serverCert := state.PeerCertificates[0]
-
-	intermediates := x509.NewCertPool()
-	for _, cert := range state.PeerCertificates[1:] {
-		intermediates.AddCert(cert)
-	}
-	selfSigned := !validCert(serverCert, intermediates)
-
-	if *tlsVerbose && selfSigned {
-		log.Println("Generating self-signed certificate for", name)
-	}
-
-	return imitateCertificate(serverCert, selfSigned)
 }
 
 // imitateCertificate returns a new TLS certificate that has most of the same

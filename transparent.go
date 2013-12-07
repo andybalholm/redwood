@@ -67,15 +67,8 @@ func checkSSLHost(conn net.Conn, serverAddr string) {
 	}
 
 	serverName, ok := clientHelloServerName(clientHello)
-	if ok && serverName != "" {
-		if *tlsVerbose {
-			log.Printf("Server name requested for %s is %s.", serverAddr, serverName)
-		}
-	} else {
+	if !ok || serverName == "" {
 		serverName = serverNameAtAddress(serverAddr)
-		if *tlsVerbose {
-			log.Printf("Server name detected at %s is %s.", serverAddr, serverName)
-		}
 	}
 
 	u := &url.URL{

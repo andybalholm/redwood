@@ -283,20 +283,28 @@ what the score is in each category, which categories would block the page, etc.
 
 \section{Log Files}
 
-Redwood has two categories of messages that can be logged:
-general diagnostic messages, and a record of ICAP requests processed (called the access log).
-The general diagnostic messages are sent to standard error by default,
+Redwood has several categories of messages that can be logged:
+
+General diagnostic messages are sent to standard error by default,
 and may be redirected to a file using normal shell redirection.
-The access log is in CSV format, 
+
+The access log has a line for each request processed.
+It is in CSV format
 and goes to standard output by default.
 It can be sent to a file by including the \verb"access-log" directive in Redwood's configuration file.
-
 The access log has the following fields: time, username or IP address, 
 action (allow, block, or ignore), URL, HTTP method (GET, PUT, etc.),
 HTTP response status (if an HTTP response was being processed), 
 content type, content-length, whether the content was modified by Redwood, which rules matched (and how many times), 
 the score for each category, and the list of categories that caused the page to be blocked (if it was).
 The content length is meaningful only if a phrase scan was performed.
+
+The TLS log has a line for each HTTPS connection that was intercepted.
+Like the access log, it goes to standard output by default, 
+and it can be sent to a file with the \verb"tls-log" directive.
+The TLS log has the following fields:
+time, username or client IP address, server name, server address, 
+and any error that was encountered.
 
 \section{Filter Groups}
 
@@ -340,3 +348,4 @@ One such program is \verb"basic_pam_auth", which is included with Squid.
 If no password file or authentication helper is specified, no connections from outside the LAN will be accepted.
 
 \end{document}
+

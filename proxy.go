@@ -26,6 +26,10 @@ type proxyHandler struct {
 
 	// user is a user that has already been authenticated.
 	user string
+
+	// rt is the RoundTripper that will be used to fulfill the requests.
+	// If it is nil, a default Transport will be used.
+	rt http.RoundTripper
 }
 
 // lanAddress returns whether addr is in one of the LAN address ranges.
@@ -149,7 +153,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	changeQuery(r.URL)
 
-	resp, err := transport.RoundTrip(r)
+	var resp *http.Response
+	if h.rt == nil {
+		resp, err = transport.RoundTrip(r)
+	} else {
+		resp, err = h.rt.RoundTrip(r)
+	}
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)

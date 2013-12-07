@@ -174,9 +174,6 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		return
 	}
 
-	// TODO: use serverConn
-	serverConn.Close()
-
 	config := &tls.Config{
 		NextProtos:   []string{"http/1.1"},
 		Certificates: []tls.Certificate{cert, tlsCert},
@@ -199,6 +196,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 			TLS:         true,
 			connectPort: port,
 			user:        user,
+			rt:          NewTLSRedialTransport(serverConn, serverName),
 		},
 	}
 	logTLS(user, serverAddr, serverName, nil)

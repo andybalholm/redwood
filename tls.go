@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -275,17 +274,24 @@ func generateCertificate(addr, name string) (cert tls.Certificate, err error) {
 		log.Println("Generating self-signed certificate for", name)
 	}
 
+	return imitateCertificate(serverCert, selfSigned)
+}
+
+// imitateCertificate returns a new TLS certificate that has most of the same
+// data as serverCert but is signed by Redwood's root certificate, or
+// self-signed.
+func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls.Certificate, err error) {
 	template := serverCert
 
 	if selfSigned {
 		template = &x509.Certificate{
 			SerialNumber: new(big.Int).SetInt64(0),
-			Subject:      pkix.Name{CommonName: name},
+			Subject:      serverCert.Subject,
 			NotBefore:    serverCert.NotBefore,
 			NotAfter:     serverCert.NotAfter,
-			KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-			DNSNames:     []string{name},
+			KeyUsage:     serverCert.KeyUsage,
+			ExtKeyUsage:  serverCert.ExtKeyUsage,
+			DNSNames:     serverCert.DNSNames,
 		}
 	} else {
 		// Use a hash of the real certificate as the serial number.

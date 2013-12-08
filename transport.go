@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"github.com/jlaffaye/goftp"
+	"io"
+	"mime"
 	"net"
 	"net/http"
+	"path"
 	"sync"
 	"time"
 )
@@ -89,4 +93,65 @@ func (t *TLSRedialTransport) RoundTrip(req *http.Request) (resp *http.Response, 
 	}
 
 	return
+}
+
+// An FTPTransport fetches files via FTP.
+type FTPTransport struct{}
+
+func (FTPTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	addr := req.URL.Host
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		addr = net.JoinHostPort(addr, "21")
+	}
+
+	server, err := ftp.Connect(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = server.Login("anonymous", "anonymous")
+	if err != nil {
+		server.Quit()
+		return nil, err
+	}
+
+	body, err := server.Retr(req.URL.Path)
+	if err != nil {
+		server.Quit()
+		return nil, err
+	}
+
+	resp = &http.Response{
+		StatusCode: 200,
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Request:    req,
+		Body:       closeQuitter{body, server},
+		Header:     make(http.Header),
+	}
+
+	ext := path.Ext(req.URL.Path)
+	if ext != "" {
+		ct := mime.TypeByExtension(ext)
+		if ct != "" {
+			resp.Header.Set("Content-Type", ct)
+		}
+	}
+
+	return resp, nil
+}
+
+type closeQuitter struct {
+	io.ReadCloser
+	server *ftp.ServerConn
+}
+
+func (c closeQuitter) Close() error {
+	err := c.ReadCloser.Close()
+	err2 := c.server.Quit()
+
+	if err == nil {
+		err = err2
+	}
+	return err
 }

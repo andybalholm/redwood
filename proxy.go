@@ -295,6 +295,8 @@ func init() {
 			transport.CloseIdleConnections()
 		}
 	}()
+
+	transport.RegisterProtocol("ftp", FTPTransport{})
 }
 
 func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Request) {

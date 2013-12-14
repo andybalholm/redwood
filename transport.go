@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
-	"github.com/jlaffaye/goftp"
+	"github.com/remogatto/ftpget"
 	"io"
+	"log"
 	"mime"
 	"net"
 	"net/http"
@@ -99,34 +100,41 @@ func (t *TLSRedialTransport) RoundTrip(req *http.Request) (resp *http.Response, 
 type FTPTransport struct{}
 
 func (FTPTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	addr := req.URL.Host
-	if _, _, err := net.SplitHostPort(addr); err != nil {
-		addr = net.JoinHostPort(addr, "21")
+	if req.Method != "GET" {
+		return &http.Response{
+			StatusCode: http.StatusMethodNotAllowed,
+			Request:    req,
+		}, nil
 	}
 
-	server, err := ftp.Connect(addr)
+	fullPath := req.URL.Host + req.URL.Path
+	r, w := io.Pipe()
+	xfer, err := ftp.GetAsync(fullPath, w)
 	if err != nil {
 		return nil, err
 	}
 
-	err = server.Login("anonymous", "anonymous")
-	if err != nil {
-		server.Quit()
-		return nil, err
-	}
-
-	body, err := server.Retr(req.URL.Path)
-	if err != nil {
-		server.Quit()
-		return nil, err
-	}
+	go func() {
+		for stat := range xfer.Status {
+			switch stat {
+			case ftp.COMPLETED:
+				w.Close()
+				return
+			case ftp.ERROR:
+				err := <-xfer.Error
+				log.Printf("FTP: error downloading %v: %v", req.URL, err)
+				w.CloseWithError(err)
+				return
+			}
+		}
+	}()
 
 	resp = &http.Response{
 		StatusCode: 200,
 		ProtoMajor: 1,
 		ProtoMinor: 1,
 		Request:    req,
-		Body:       closeQuitter{body, server},
+		Body:       r,
 		Header:     make(http.Header),
 	}
 
@@ -139,19 +147,4 @@ func (FTPTransport) RoundTrip(req *http.Request) (resp *http.Response, err error
 	}
 
 	return resp, nil
-}
-
-type closeQuitter struct {
-	io.ReadCloser
-	server *ftp.ServerConn
-}
-
-func (c closeQuitter) Close() error {
-	err := c.ReadCloser.Close()
-	err2 := c.server.Quit()
-
-	if err == nil {
-		err = err2
-	}
-	return err
 }

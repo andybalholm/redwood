@@ -14,6 +14,8 @@ import (
 var staticFilesDir = flag.String("static-files-dir", "", "path to static files for built-in web server")
 var cgiBin = flag.String("cgi-bin", "", "path to CGI files for built-in web server")
 
+const localServer = "203.0.113.1"
+
 func startWebServer() {
 	if *staticFilesDir != "" {
 		http.Handle("/", http.FileServer(http.Dir(*staticFilesDir)))

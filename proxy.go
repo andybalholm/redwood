@@ -83,7 +83,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		user = u
 	}
 
-	if r.Host == "203.0.113.1" {
+	if r.Host == localServer {
 		http.DefaultServeMux.ServeHTTP(w, r)
 		return
 	}

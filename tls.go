@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"flag"
@@ -125,6 +126,40 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		}
 	}()
 
+	if serverAddr == localServer+":443" {
+		// The internal server gets special treatment, since there is no remote
+		// server to connect to.
+		cert, err := imitateCertificate(&x509.Certificate{
+			Subject:     pkix.Name{CommonName: localServer},
+			NotBefore:   parsedTLSCert.NotBefore,
+			NotAfter:    parsedTLSCert.NotAfter,
+			KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		}, false)
+		if err != nil {
+			log.Printf("Error generataing HTTPS certificate for local server (%s): %v", serverAddr, err)
+			conn.Close()
+			return
+		}
+
+		config := &tls.Config{
+			NextProtos:   []string{"http/1.1"},
+			Certificates: []tls.Certificate{cert, tlsCert},
+		}
+		tlsConn := tls.Server(conn, config)
+		err = tlsConn.Handshake()
+		if err != nil {
+			logTLS(user, serverAddr, localServer, fmt.Errorf("error in handshake with client: %v", err))
+			conn.Close()
+			return
+		}
+		listener := &singleListener{conn: tlsConn}
+		server := http.Server{}
+		logTLS(user, serverAddr, localServer, nil)
+		server.Serve(listener)
+		return
+	}
+
 	// Read the client hello so that we can find out the name of the server (not
 	// just the address).
 	clientHello, err := readClientHello(conn)
@@ -183,6 +218,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	err = tlsConn.Handshake()
 	if err != nil {
 		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err))
+		conn.Close()
 		return
 	}
 

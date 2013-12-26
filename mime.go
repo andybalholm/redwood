@@ -67,7 +67,7 @@ func checkContentType(resp *http.Response) (contentType string, a action) {
 	}
 
 	switch ct {
-	case "text/plain", "text/html", "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
+	case "unknown/unknown", "application/unknown", "*/*", "", "application/octet-stream":
 		if resp.Header.Get("Content-Encoding") == "" {
 			// These types tend to be used for content whose type is unknown,
 			// so we should try to second-guess them.

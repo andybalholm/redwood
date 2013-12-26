@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"code.google.com/p/cascadia"
 	"code.google.com/p/go.net/html"
-	"code.google.com/p/mahonia"
+	"code.google.com/p/go.net/html/charset"
+	"code.google.com/p/go.text/transform"
 	"fmt"
 	"io"
 	"log"
@@ -78,21 +79,17 @@ func loadPruningConfig(filename string) error {
 // pruneContent checks the URL to see if it is a site that is calling for
 // content pruning. If so, it parses the HTML, removes the specified tags, and
 // re-renders the HTML. It returns true if the content was changed.
-func pruneContent(URL *url.URL, content *[]byte, charset string) bool {
+func pruneContent(URL *url.URL, content *[]byte, cs string) bool {
 	URLMatches := pruneMatcher.MatchingRules(URL)
 	if len(URLMatches) == 0 {
 		return false
 	}
 
-	var r io.Reader = bytes.NewBuffer(*content)
+	var r io.Reader = bytes.NewReader(*content)
 
-	if charset != "utf-8" {
-		d := mahonia.NewDecoder(charset)
-		if d == nil {
-			log.Printf("Unsupported charset (%s) on %s", charset, URL)
-		} else {
-			r = d.NewReader(r)
-		}
+	if cs != "utf-8" {
+		e, _ := charset.Lookup(cs)
+		r = transform.NewReader(r, e.NewDecoder())
 	}
 
 	tree, err := html.Parse(r)

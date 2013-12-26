@@ -4,103 +4,58 @@ package main
 
 import (
 	"bytes"
-	"code.google.com/p/go.net/html"
-	"code.google.com/p/mahonia"
+	"code.google.com/p/go.net/html/charset"
+	"code.google.com/p/go.text/transform"
 	"compress/gzip"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 )
 
 var contentPhraseList = newPhraseList()
 
 // scanContent scans the content of a document for phrases,
 // and updates tally.
-func scanContent(content []byte, contentType, charset string, tally map[rule]int) {
+func scanContent(content []byte, contentType, cs string, tally map[rule]int) {
 	if strings.Contains(contentType, "javascript") {
 		scanJSContent(content, tally)
 		return
 	}
 
-	decode := mahonia.NewDecoder(charset)
-	if decode == nil {
-		log.Printf("Unsupported charset (%s)", charset)
-		decode = mahonia.NewDecoder("utf-8")
+	transformers := make([]transform.Transformer, 0, 3)
+	if cs != "utf-8" {
+		e, _ := charset.Lookup(cs)
+		transformers = append(transformers, e.NewDecoder())
 	}
-	entities := strings.Contains(contentType, "html")
+
+	if strings.Contains(contentType, "html") {
+		transformers = append(transformers, entityDecoder{})
+	}
+	transformers = append(transformers, new(wordTransformer))
 
 	ps := newPhraseScanner(contentPhraseList, func(s string) {
 		tally[rule{t: contentPhrase, content: s}]++
 	})
 	ps.scanByte(' ')
-	prevRune := ' '
-	var buf [4]byte // buffer for UTF-8 encoding of runes
 
-loop:
+	var t transform.Transformer
+	if len(transformers) == 1 {
+		t = transformers[0]
+	} else {
+		t = transform.Chain(transformers...)
+	}
+
+	buf := make([]byte, 4096)
 	for len(content) > 0 {
-		var c rune
-		if entities && content[0] == '&' {
-			// Try to decode a character entity.
-			entityLen := 1
-			for entityLen < 32 && entityLen < len(content) {
-				if b := content[entityLen]; 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z' || '0' <= b && b <= '9' || entityLen == 1 && b == '#' {
-					entityLen++
-				} else {
-					break
-				}
-			}
-			if entityLen < len(content) && content[entityLen] == ';' {
-				entityLen++
-			}
-			e := string(content[:entityLen])
-			decoded := html.UnescapeString(e)
-			if decoded == e {
-				// It isn't a valid entity; just read it as an ampersand.
-				c = '&'
-				content = content[1:]
-			} else {
-				unchanged := 0
-				for unchanged < len(e) && unchanged < len(decoded) {
-					if e[len(e)-unchanged-1] == decoded[len(decoded)-unchanged-1] {
-						unchanged++
-					} else {
-						break
-					}
-				}
-				c = []rune(decoded)[0]
-				content = content[len(e)-unchanged:]
-			}
-		} else {
-			// Read one Unicode character from content.
-			r, size, status := decode(content)
-			content = content[size:]
-			switch status {
-			case mahonia.STATE_ONLY:
-				continue
-			case mahonia.NO_ROOM:
-				break loop
-			}
-			c = r
+		nDst, nSrc, err := t.Transform(buf, content, true)
+		if nSrc == 0 && nDst == 0 {
+			panic(err)
 		}
-
-		// Simplify it to lower-case words separated by single spaces.
-		c = wordRune(c)
-		if c == ' ' && prevRune == ' ' {
-			continue
+		for _, c := range buf[:nDst] {
+			ps.scanByte(c)
 		}
-		prevRune = c
-
-		// Convert it to UTF-8 and scan the bytes.
-		if c < 128 {
-			ps.scanByte(byte(c))
-			continue
-		}
-		n := utf8.EncodeRune(buf[:], c)
-		for _, b := range buf[:n] {
-			ps.scanByte(b)
-		}
+		content = content[nSrc:]
 	}
 
 	ps.scanByte(' ')

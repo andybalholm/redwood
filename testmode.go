@@ -1,6 +1,7 @@
 package main
 
 import (
+	"code.google.com/p/go.net/html/charset"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -91,17 +92,17 @@ func runURLTest(u string) {
 	}
 
 	modified := false
-	charset := findCharset(resp.Header.Get("Content-Type"), content)
+	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "html") {
-		modified = pruneContent(URL, &content, charset)
+		modified = pruneContent(URL, &content, cs)
 	}
 	if modified {
-		charset = "utf-8"
+		cs = "utf-8"
 		fmt.Println("Performed content pruning.")
 		fmt.Println()
 	}
 
-	scanContent(content, contentType, charset, sc.tally)
+	scanContent(content, contentType, cs, sc.tally)
 	sc.calculate("")
 
 	if len(sc.tally) == 0 {

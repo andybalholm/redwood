@@ -1,7 +1,9 @@
 package main
 
 import (
+	"code.google.com/p/go.text/transform"
 	"unicode"
+	"unicode/utf8"
 )
 
 // wordRune maps c into a reduced set of "word" characters.
@@ -39,4 +41,34 @@ func wordString(s string) string {
 	}
 
 	return string(runes)
+}
+
+// A wordTransformer does the same transformation as wordString, but in a
+// streaming fashion.
+type wordTransformer struct {
+	prevRune rune
+}
+
+func (t *wordTransformer) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err error) {
+	for nSrc < len(src) {
+		r, n := utf8.DecodeRune(src[nSrc:])
+		if r == utf8.RuneError && !atEOF && !utf8.FullRune(src[nSrc:]) {
+			err = transform.ErrShortSrc
+			return
+		}
+		r = wordRune(r)
+		if r == ' ' && t.prevRune == ' ' {
+			nSrc += n
+			continue
+		}
+		if nDst+utf8.RuneLen(r) > len(dst) {
+			err = transform.ErrShortDst
+			return
+		}
+
+		t.prevRune = r
+		nSrc += n
+		nDst += utf8.EncodeRune(dst[nDst:], r)
+	}
+	return
 }

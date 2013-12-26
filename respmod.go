@@ -2,6 +2,7 @@ package main
 
 import (
 	"code.google.com/p/go-icap"
+	"code.google.com/p/go.net/html/charset"
 	"compress/flate"
 	"compress/gzip"
 	"io"
@@ -97,16 +98,16 @@ func handleResponse(w icap.ResponseWriter, req *icap.Request) {
 		}
 
 		modified := false
-		charset := findCharset(req.Response.Header.Get("Content-Type"), content)
+		_, cs, _ := charset.DetermineEncoding(content, req.Response.Header.Get("Content-Type"))
 		if strings.Contains(contentType, "html") {
-			modified = pruneContent(req.Request.URL, &content, charset)
+			modified = pruneContent(req.Request.URL, &content, cs)
 			if modified {
 				req.Response.Header.Set("Content-Type", "text/html; charset=utf-8")
-				charset = "utf-8"
+				cs = "utf-8"
 			}
 		}
 
-		scanContent(content, contentType, charset, sc.tally)
+		scanContent(content, contentType, cs, sc.tally)
 		sc.calculate(user)
 
 		if sc.action == BLOCK {

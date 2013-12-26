@@ -1,6 +1,7 @@
 package main
 
 import (
+	"code.google.com/p/go.net/html/charset"
 	"compress/gzip"
 	"crypto/tls"
 	"errors"
@@ -208,16 +209,16 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	modified := false
-	charset := findCharset(resp.Header.Get("Content-Type"), content)
+	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "html") {
-		modified = pruneContent(r.URL, &content, charset)
+		modified = pruneContent(r.URL, &content, cs)
 		if modified {
 			resp.Header.Set("Content-Type", "text/html; charset=utf-8")
-			charset = "utf-8"
+			cs = "utf-8"
 		}
 	}
 
-	scanContent(content, contentType, charset, sc.tally)
+	scanContent(content, contentType, cs, sc.tally)
 	sc.calculate(user)
 
 	if sc.action == BLOCK {

@@ -227,8 +227,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if resp.Header.Get("Content-Type") == "" {
+		// If the server didn't specify a content type, don't let the http
+		// package add one by doing MIME sniffing.
+		resp.Header.Set("Content-Type", "")
+	}
+
 	if gzipOK && len(content) > 1000 {
 		resp.Header.Set("Content-Encoding", "gzip")
+		resp.Header.Del("Content-Length")
 		copyResponseHeader(w, resp)
 		gzw := gzip.NewWriter(w)
 		gzw.Write(content)

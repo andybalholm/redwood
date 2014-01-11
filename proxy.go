@@ -95,9 +95,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				tally: URLRules.MatchingRules(r.URL),
 			}
 			sc.calculate(user)
+			logAccess(r, nil, sc, "", 0, false, user)
 			if sc.action == BLOCK {
 				showBlockPage(w, r, &sc, user)
-				logAccess(r, nil, sc, "", 0, false, user)
 				return
 			}
 		}

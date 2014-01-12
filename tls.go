@@ -16,9 +16,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"os"
+	"net/url"
 	"runtime"
-	"strings"
 	"sync"
 )
 
@@ -26,15 +25,15 @@ import (
 
 var certFile = flag.String("tls-cert", "", "path to certificate for serving HTTPS")
 var keyFile = flag.String("tls-key", "", "path to TLS certificate key")
-var sslBypassFile = newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", readBypassFile)
+var sslBypassFile = newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", tlsBypass.Load)
+var sslBumpFile = newActiveFlag("tls-bump-only", "", "path to a list of the only sites that should be SSLBumped", loadTlsBumpOnly)
 
 var tlsCert tls.Certificate
 var parsedTLSCert *x509.Certificate
 var tlsReady bool
 
-var tlsBypass = map[string]bool{}
-var tlsBypassRanges []*net.IPNet
-var tlsBypassDomains []string
+var tlsBypass = NewHostList()
+var tlsBumpOnly *HostList
 
 // unverifiedClientConfig is a TLS configuration that doesn't verify server
 // certificates.
@@ -65,27 +64,6 @@ func loadCertificate() {
 			w.Write(tlsCert.Certificate[len(tlsCert.Certificate)-1])
 		})
 	}
-}
-
-func shouldBypass(host string) bool {
-	if tlsBypass[host] {
-		return true
-	}
-	for _, domain := range tlsBypassDomains {
-		if strings.HasSuffix(host, domain) {
-			return true
-		}
-	}
-	addr := net.ParseIP(host)
-	if addr == nil {
-		return false
-	}
-	for _, subnet := range tlsBypassRanges {
-		if subnet.Contains(addr) {
-			return true
-		}
-	}
-	return false
 }
 
 // connectDirect connects to serverAddr and copies data between it and conn.
@@ -177,9 +155,23 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		}
 	}
 
-	if shouldBypass(serverName) {
+	if tlsBypass.Contains(serverName) {
 		logTLS(user, serverAddr, serverName, errors.New("site bypass"))
 		connectDirect(conn, serverAddr, clientHello)
+		return
+	}
+	if !tlsReady || (tlsBumpOnly != nil && !tlsBumpOnly.Contains(serverName)) {
+		// Do hostname filtering; if the host is allowed, let the client connect directly.
+		u := &url.URL{Host: serverName}
+		sc := scorecard{tally: URLRules.MatchingRules(u)}
+		sc.calculate(user)
+		req, _ := http.NewRequest("CONNECT", u.String(), nil)
+		logAccess(req, nil, sc, "", 0, false, user)
+		if sc.action == BLOCK {
+			conn.Close()
+		} else {
+			connectDirect(conn, serverAddr, clientHello)
+		}
 		return
 	}
 
@@ -396,38 +388,6 @@ func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 	return false
 }
 
-func readBypassFile(filename string) error {
-	f, err := os.Open(filename)
-	if err != nil {
-		return fmt.Errorf("could not open %s: %s", filename, err)
-	}
-	defer f.Close()
-	cr := newConfigReader(f)
-
-	for {
-		line, err := cr.ReadLine()
-		if err != nil {
-			break
-		}
-
-		if strings.HasPrefix(line, ".") {
-			// This is a domain that we should bypass subdomains of too.
-			tlsBypassDomains = append(tlsBypassDomains, line)
-			continue
-		}
-
-		if _, subnet, err := net.ParseCIDR(line); err == nil {
-			// It's a network range, like 192.168.0.1/24.
-			tlsBypassRanges = append(tlsBypassRanges, subnet)
-			continue
-		}
-
-		tlsBypass[line] = true
-	}
-
-	return nil
-}
-
 func readClientHello(conn net.Conn) (hello []byte, err error) {
 	var header [5]byte
 	n, err := io.ReadFull(conn, header[:])
@@ -588,4 +548,11 @@ func getServerNameAtAddress(addr string) string {
 	state := conn.ConnectionState()
 	serverCert := state.PeerCertificates[0]
 	return serverCert.Subject.CommonName
+}
+
+func loadTlsBumpOnly(filename string) error {
+	if tlsBumpOnly == nil {
+		tlsBumpOnly = NewHostList()
+	}
+	return tlsBumpOnly.Load(filename)
 }

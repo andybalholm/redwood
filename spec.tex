@@ -347,5 +347,25 @@ It should respond with \verb"OK" if the password is correct, or \verb"ERR" if it
 One such program is \verb"basic_pam_auth", which is included with Squid.
 If no password file or authentication helper is specified, no connections from outside the LAN will be accepted.
 
+\section{SSLBump}
+
+Redwood can be configured to perform Man-in-the-Middle filtering of HTTPS traffic.
+This feature is called SSLBump after the corresponding feature in Squid.
+
+For SSLBump to work, Redwood must be configured with a root certificate that is trusted
+by the users' browsers.
+Paths to the certificate and its private key are specified with the \verb"tls-cert" and \verb"tls-key"
+options.
+The certificate and key should be in PEM format.
+
+If you want to intercept SSL only for certain sites, 
+specify a file listing the sites with the \verb"tls-bump-only" option.
+The sites should be listed one per line.
+If the name of the site starts with a period, it will match subdomains as well.
+
+To exempt certain sites from SSLBump,
+list them in a file specified with \verb"tls-bypass".
+It has the same format as the \verb"tls-bump-only" file.
+
 \end{document}
 

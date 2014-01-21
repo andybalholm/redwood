@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"runtime"
 	"sync"
+	"time"
 )
 
 // Intercept TLS (HTTPS) connections.
@@ -79,11 +80,22 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 	}
 
 	if extraData != nil {
+		// There may also be data waiting in the socket's input buffer;
+		// read it before we send the data on, so that the first packet of
+		// the connection doesn't get split in two.
+		conn.SetReadDeadline(time.Now().Add(time.Millisecond))
+		buf := make([]byte, 2000)
+		n, _ := conn.Read(buf)
+		conn.SetReadDeadline(time.Time{})
+		if n > 0 {
+			extraData = append(extraData, buf[:n]...)
+		}
 		serverConn.Write(extraData)
 	}
 
 	go func() {
 		io.Copy(conn, serverConn)
+		time.Sleep(time.Second)
 		conn.Close()
 	}()
 	io.Copy(serverConn, conn)

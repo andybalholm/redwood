@@ -152,14 +152,44 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	changeQuery(r.URL)
+	urlChanged := changeQuery(r.URL)
+
+	if !urlChanged {
+		// Rebuild the URL in a way that will preserve which characters are escaped
+		// and which aren't, for compatibility with broken servers.
+		rawURL := r.RequestURI
+		if strings.HasPrefix(rawURL, r.URL.Scheme) {
+			rawURL = rawURL[len(r.URL.Scheme):]
+			rawURL = strings.TrimPrefix(rawURL, "://")
+			slash := strings.Index(rawURL, "/")
+			if slash == -1 {
+				rawURL = "/"
+			} else {
+				rawURL = rawURL[slash:]
+			}
+		}
+		q := strings.Index(rawURL, "?")
+		if q != -1 {
+			rawURL = rawURL[:q]
+		}
+		r.URL.Opaque = rawURL
+	}
 
 	var resp *http.Response
 	if h.rt == nil {
+		if r.URL.Opaque != "" && transport.Proxy != nil {
+			if p, _ := transport.Proxy(r); p != nil {
+				// If the request is going through a proxy, the host needs to be
+				// included in the opaque element.
+				r.URL.Opaque = "//" + r.URL.Host + r.URL.Opaque
+			}
+		}
 		resp, err = transport.RoundTrip(r)
 	} else {
 		resp, err = h.rt.RoundTrip(r)
 	}
+
+	r.URL.Opaque = ""
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)

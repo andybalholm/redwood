@@ -42,7 +42,8 @@ func runTransparentServer(addr string) error {
 			log.Println("Error getting original address for intercepted connection:", err)
 			continue
 		}
-		go SSLBump(conn, serverAddr, conn.RemoteAddr().String())
+		user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+		go SSLBump(conn, serverAddr, user)
 	}
 
 	panic("unreachable")

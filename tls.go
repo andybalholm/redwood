@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -164,6 +165,15 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		serverName, _, err = net.SplitHostPort(serverAddr)
 		if err != nil {
 			serverName = serverAddr
+		}
+
+		if ip := net.ParseIP(serverName); ip != nil {
+			// All we have is an IP address, not a name from a CONNECT request.
+			// See if we can do better by reverse DNS.
+			names, err := net.LookupAddr(serverName)
+			if err == nil && len(names) > 0 {
+				serverName = strings.TrimSuffix(names[0], ".")
+			}
 		}
 	}
 

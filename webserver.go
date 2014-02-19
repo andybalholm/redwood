@@ -1,18 +1,39 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"log"
 	"net/http"
 	"net/http/cgi"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // The built-in web server, which serves URLs under http://203.0.113.1/
 
 var staticFilesDir = flag.String("static-files-dir", "", "path to static files for built-in web server")
 var cgiBin = flag.String("cgi-bin", "", "path to CGI files for built-in web server")
+
+var reverseProxy = newActiveFlag("reverse-proxy", "", "reverse-proxy path for built-in web server (the original local path, and the remote URL to rewrite it to)", func(val string) error {
+	f := strings.Fields(val)
+	if len(f) != 2 {
+		return errors.New("the reverse-proxy option takes two strings, separated by a space: /local/path/ http://remote.url/path/")
+	}
+	localPath, remote := f[0], f[1]
+	if !strings.HasSuffix(localPath, "/") {
+		localPath += "/"
+	}
+	remoteURL, err := url.Parse(remote)
+	if err != nil {
+		return err
+	}
+	http.Handle(localPath, http.StripPrefix(localPath, httputil.NewSingleHostReverseProxy(remoteURL)))
+	return nil
+})
 
 const localServer = "203.0.113.1"
 

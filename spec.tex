@@ -272,6 +272,8 @@ Redwood includes an internal web server.
 This web server does not accept connections directly,
 but whenever Redwood processes a request with a server address of 203.0.113.1,
 it directs the request to the internal server instead of processing it normally.
+The content of the internal web server is configured with the 
+\verb"static-files-dir", \verb"cgi-bin", and \verb"reverse-proxy" directives.
 
 \section{Test Mode}
 

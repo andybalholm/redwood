@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net"
+	"reflect"
 	"strconv"
 	"syscall"
 	"unsafe"
@@ -16,30 +17,19 @@ type sockaddr struct {
 const SO_ORIGINAL_DST = 80
 
 // realServerAddress returns an intercepted connection's original destination.
-func realServerAddress(conn *net.Conn) (string, error) {
-	tcpConn, ok := (*conn).(*net.TCPConn)
+func realServerAddress(conn net.Conn) (string, error) {
+	tcpConn, ok := conn.(*net.TCPConn)
 	if !ok {
 		return "", errors.New("not a TCPConn")
 	}
 
-	file, err := tcpConn.File()
-	if err != nil {
-		return "", err
-	}
-
-	// To avoid potential problems from making the socket non-blocking.
-	tcpConn.Close()
-	*conn, err = net.FileConn(file)
-	if err != nil {
-		return "", err
-	}
-
-	defer file.Close()
-	fd := file.Fd()
+	TCPConn := reflect.ValueOf(tcpConn).Elem()
+	netFD := TCPConn.FieldByName("fd").Elem()
+	fd := netFD.FieldByName("sysfd").Int()
 
 	var addr sockaddr
 	size := uint32(unsafe.Sizeof(addr))
-	err = getsockopt(int(fd), syscall.SOL_IP, SO_ORIGINAL_DST, uintptr(unsafe.Pointer(&addr)), &size)
+	err := getsockopt(int(fd), syscall.SOL_IP, SO_ORIGINAL_DST, unsafe.Pointer(&addr), &size)
 	if err != nil {
 		return "", err
 	}

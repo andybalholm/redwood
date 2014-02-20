@@ -37,7 +37,7 @@ func runTransparentServer(addr string) error {
 			return err
 		}
 
-		serverAddr, err := realServerAddress(&conn)
+		serverAddr, err := realServerAddress(conn)
 		if err != nil {
 			log.Println("Error getting original address for intercepted connection:", err)
 			continue

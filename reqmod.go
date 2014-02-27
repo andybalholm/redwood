@@ -33,6 +33,11 @@ func handleRequest(w icap.ResponseWriter, req *icap.Request) {
 			return
 		}
 
+		if realHost, ok := virtualHosts[req.Request.Host]; ok {
+			req.Request.Host = realHost
+			req.Request.URL.Host = realHost
+		}
+
 		user := req.Header.Get("X-Client-Username")
 		if user == "" {
 			user = req.Header.Get("X-Client-IP")

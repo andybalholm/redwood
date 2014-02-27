@@ -273,7 +273,18 @@ This web server does not accept connections directly,
 but whenever Redwood processes a request with a server address of 203.0.113.1,
 it directs the request to the internal server instead of processing it normally.
 The content of the internal web server is configured with the 
-\verb"static-files-dir", \verb"cgi-bin", and \verb"reverse-proxy" directives.
+\verb"static-files-dir", and \verb"cgi-bin" directives.
+
+If a more advanced virtual server is needed, you can use the \verb"virtual-host"
+directive to transparently redirect requests for a given hostname to a different address,
+such as an Apache web server running on your gateway.
+If the server is running on your gateway, listening on port 8888, and you want it to be 
+available as \verb"myserver.local", use \verb"virtual-host myserver.local localhost:8888".
+(Note: proxy settings are not set on the client, and Redwood is intercepting
+requests transparently, this will work only if the DNS server resolves the name
+to an IP address outside your local network. 
+Any IP address will do, though. OpenDNS's website-unavailable address works fine.
+Also note that \verb"virtual-host" only works with HTTP, not with HTTPS.)
 
 \section{Test Mode}
 

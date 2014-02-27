@@ -89,6 +89,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if realHost, ok := virtualHosts[r.Host]; ok {
+		r.Host = realHost
+		r.URL.Host = realHost
+	}
+
 	if r.Method == "CONNECT" {
 		if !tlsReady {
 			sc := scorecard{

@@ -95,7 +95,7 @@ func (p *phraseList) findFallbackNodes(node int32, text []byte) {
 	for i := 1; i < len(text); i++ {
 		f := int32(0) // If there is no suffix in common, use the root.
 		for j := i; j < len(text); j++ {
-			f := (*p)[f].child(text[j])
+			f = (*p)[f].child(text[j])
 			if f == 0 {
 				break
 			}

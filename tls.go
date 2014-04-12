@@ -311,7 +311,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls
 			Subject:      serverCert.Subject,
 			NotBefore:    serverCert.NotBefore,
 			NotAfter:     serverCert.NotAfter,
-			KeyUsage:     serverCert.KeyUsage,
+			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 			ExtKeyUsage:  serverCert.ExtKeyUsage,
 			DNSNames:     serverCert.DNSNames,
 		}
@@ -319,6 +319,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls
 		// Use a hash of the real certificate as the serial number.
 		h := md5.New()
 		h.Write(serverCert.Raw)
+		h.Write([]byte{0}) // To give different serial numbers after the key usage change.
 		template.SerialNumber = big.NewInt(0).SetBytes(h.Sum(nil))
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
@@ -328,6 +329,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls
 		template.OCSPServer = nil
 		template.IssuingCertificateURL = nil
 		template.CRLDistributionPoints = nil
+		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
 	}
 
 	var newCertBytes []byte

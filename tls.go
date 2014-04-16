@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/tls"
@@ -370,7 +371,14 @@ func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 		return false
 	}
 
-	for _, certURL := range cert.IssuingCertificateURL {
+	toFetch := cert.IssuingCertificateURL
+	fetched := make(map[string]bool)
+
+	for i := 0; i < len(toFetch); i++ {
+		certURL := toFetch[i]
+		if fetched[certURL] {
+			continue
+		}
 		resp, err := http.Get(certURL)
 		if err == nil {
 			defer resp.Body.Close()
@@ -378,24 +386,38 @@ func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 		if err != nil || resp.StatusCode != 200 {
 			continue
 		}
-		certPEM, err := ioutil.ReadAll(resp.Body)
+		fetchedCert, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			continue
 		}
-		var certDER *pem.Block
-		for {
-			certDER, certPEM = pem.Decode(certPEM)
-			if certDER == nil {
-				break
+
+		// The fetched certificate might be in either DER or PEM format.
+		if bytes.Contains(fetchedCert, []byte("-----BEGIN CERTIFICATE-----")) {
+			// It's PEM.
+			var certDER *pem.Block
+			for {
+				certDER, fetchedCert = pem.Decode(fetchedCert)
+				if certDER == nil {
+					break
+				}
+				if certDER.Type != "CERTIFICATE" {
+					continue
+				}
+				thisCert, err := x509.ParseCertificate(certDER.Bytes)
+				if err != nil {
+					continue
+				}
+				intermediates.AddCert(thisCert)
+				toFetch = append(toFetch, thisCert.IssuingCertificateURL...)
 			}
-			if certDER.Type != "CERTIFICATE" {
-				continue
-			}
-			thisCert, err := x509.ParseCertificate(certDER.Bytes)
+		} else {
+			// Hopefully it's DER.
+			thisCert, err := x509.ParseCertificate(fetchedCert)
 			if err != nil {
 				continue
 			}
 			intermediates.AddCert(thisCert)
+			toFetch = append(toFetch, thisCert.IssuingCertificateURL...)
 		}
 	}
 

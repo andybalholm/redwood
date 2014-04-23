@@ -177,6 +177,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if q != -1 {
 			rawURL = rawURL[:q]
 		}
+		if strings.HasPrefix(rawURL, "//") {
+			// The path should start with a single slash not two.
+			rawURL = rawURL[1:]
+		}
 		r.URL.Opaque = rawURL
 	}
 

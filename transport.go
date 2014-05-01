@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
-	"fmt"
-	"github.com/remogatto/ftpget"
 	"io"
 	"log"
 	"mime"
@@ -13,6 +11,8 @@ import (
 	"path"
 	"sync"
 	"time"
+
+	"github.com/remogatto/ftpget"
 )
 
 // A TLSRedialTransport is an http.RoundTripper that sends all the requests
@@ -65,7 +65,12 @@ func (t *TLSRedialTransport) dial(network, addr string) (conn net.Conn, err erro
 
 	if !bytes.Equal(t.publicKey, newConn.ConnectionState().PeerCertificates[0].RawSubjectPublicKeyInfo) {
 		newConn.Close()
-		return nil, fmt.Errorf("TLS private key at %s changed", t.ServerName)
+		log.Printf("TLS private key at %s changed", t.ServerName)
+
+		// Our little certificate-pinning trick failed because the server changed
+		// certificates (or we've been MITM'd). See if the server has a valid
+		// certificate, even if it's not the same one.
+		return tls.Dial("tcp", t.serverAddr, &tls.Config{ServerName: t.ServerName})
 	}
 
 	return newConn, nil

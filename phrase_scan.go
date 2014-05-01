@@ -4,13 +4,14 @@ package main
 
 import (
 	"bytes"
-	"code.google.com/p/go.net/html/charset"
-	"code.google.com/p/go.text/transform"
 	"compress/gzip"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
+
+	"code.google.com/p/go.net/html/charset"
+	"code.google.com/p/go.text/transform"
 )
 
 var contentPhraseList = newPhraseList()
@@ -50,7 +51,14 @@ func scanContent(content []byte, contentType, cs string, tally map[rule]int) {
 	for len(content) > 0 {
 		nDst, nSrc, err := t.Transform(buf, content, true)
 		if nSrc == 0 && nDst == 0 {
-			panic(err)
+			if err == transform.ErrShortSrc {
+				log.Printf("Encountered ErrShortSrc while decoding page content; remaining content: %q", content)
+			} else {
+				log.Println("Error decoding page content:", err)
+			}
+			nSrc = len(content)
+			nDst = nSrc
+			copy(buf, content)
 		}
 		for _, c := range buf[:nDst] {
 			ps.scanByte(c)

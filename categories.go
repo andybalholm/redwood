@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -134,6 +135,7 @@ func loadCategory(dirname string) (c *category, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("error listing rule files: %v", err)
 	}
+	sort.Strings(ruleFiles)
 	for _, list := range ruleFiles {
 		r, err := os.Open(list)
 		if err != nil {

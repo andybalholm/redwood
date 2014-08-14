@@ -22,7 +22,7 @@ into multiple categories instead of just ``Allow'' and ``Block.''
 
 \section{Basic Architecture}
 
-Redwood runs as an HTTP proxy server or as an ICAP server.
+Redwood runs as an HTTP proxy server.
 It examines each HTTP message to determine if it should be allowed to proceed. 
 If so, it passes the message on 
 to its final destination. If not, it replaces the message with a customizable page 
@@ -47,9 +47,6 @@ An example configuration file:
 \begin{verbatim}
 # Listen for connections on port 8000.
 http-proxy :8000
-
-# Also run as an ICAP server, listening on port 1344.
-icap-server :1344
 
 # the template for the block page
 blockpage "/etc/redwood/block.html"
@@ -288,7 +285,7 @@ Also note that \verb"virtual-host" only works with HTTP, not with HTTPS.)
 
 \section{Test Mode}
 
-If Redwood is run with the \verb"-test" switch, it does not run as an ICAP server. 
+If Redwood is run with the \verb"-test" switch, it does not run as a proxy server. 
 Instead, it evaluates the URL given as an argument after the switch.
 It prints detailed debugging information about how the URL and its content would be rated
 if that page were requested in normal operation: how many times each rule matches, 

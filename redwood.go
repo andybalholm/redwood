@@ -4,7 +4,6 @@
 package main
 
 import (
-	"code.google.com/p/go-icap"
 	"flag"
 	"fmt"
 	"log"
@@ -15,11 +14,10 @@ import (
 	"strings"
 )
 
-var testURL = flag.String("test", "", "URL to test instead of running ICAP server")
+var testURL = flag.String("test", "", "URL to test instead of running proxy server")
 var pidfile = flag.String("pidfile", "", "path of file to store process ID")
 var proxyAddresses = ListFlag("http-proxy", "address (host:port) to listen for proxy connections on")
 var transparentAddresses = ListFlag("transparent-https", "address to listen for intercepted HTTPS connections on")
-var icapAddresses = ListFlag("icap-server", "address to listen for ICAP connections on")
 
 func main() {
 	loadConfiguration()
@@ -75,26 +73,6 @@ func main() {
 			}()
 			portsListening++
 		}
-	}
-
-	if len(*icapAddresses) > 0 {
-		icap.HandleFunc("/reqmod", handleRequest)
-		icap.HandleFunc("/respmod", handleResponse)
-		for _, addr := range *icapAddresses {
-			icapListener, err := net.Listen("tcp", addr)
-			if err != nil {
-				log.Fatalf("error listening for connections on %s: %s", addr, err)
-			}
-			listenerChan <- icapListener
-			go func() {
-				err := new(icap.Server).Serve(icapListener)
-				if err != nil && !strings.Contains(err.Error(), "use of closed") {
-					log.Fatalln("Error running ICAP server:", err)
-				}
-			}()
-			portsListening++
-		}
-		reloadSquid()
 	}
 
 	if portsListening > 0 {

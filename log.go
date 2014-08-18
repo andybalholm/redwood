@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/csv"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,10 +15,7 @@ import (
 
 // recording pages filtered to access log
 
-var accessLogName = flag.String("access-log", "", "path to access-log file")
 var accessLogChan = make(chan []string)
-
-var tlsLogName = flag.String("tls-log", "", "path to tls log file")
 var tlsLogChan = make(chan []string)
 
 // csvLog opens a log file and writes entries to it from logChan.
@@ -64,13 +60,13 @@ func csvLog(filename string, logChan chan []string) {
 }
 
 // logAccess generates a log entry and sends it on logChan to be written.
-func logAccess(req *http.Request, resp *http.Response, sc scorecard, contentType string, contentLength int, pruned bool, user string) {
+func (c *config) logAccess(req *http.Request, resp *http.Response, sc scorecard, contentType string, contentLength int, pruned bool, user string) {
 	modified := ""
 	if pruned {
 		modified = "pruned"
 	}
 
-	if group := WhichGroup(user); group != "" {
+	if group := c.WhichGroup(user); group != "" {
 		user = fmt.Sprintf("%s(%s)", user, group)
 	}
 

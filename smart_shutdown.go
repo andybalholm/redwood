@@ -33,8 +33,9 @@ func watchForSIGTERM() {
 			for _, ln := range listeners {
 				ln.Close()
 			}
-			if *pidfile != "" {
-				os.Remove(*pidfile)
+			conf := getConfig()
+			if conf.PIDFile != "" {
+				os.Remove(conf.PIDFile)
 			}
 			go func() {
 				// Stop after 24 hours even if the connections aren't closed.

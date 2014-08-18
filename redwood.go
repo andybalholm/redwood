@@ -4,7 +4,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -14,17 +13,16 @@ import (
 	"strings"
 )
 
-var testURL = flag.String("test", "", "URL to test instead of running proxy server")
-var pidfile = flag.String("pidfile", "", "path of file to store process ID")
-var proxyAddresses = ListFlag("http-proxy", "address (host:port) to listen for proxy connections on")
-var transparentAddresses = ListFlag("transparent-https", "address to listen for intercepted HTTPS connections on")
-
 func main() {
-	loadConfiguration()
+	conf, err := loadConfiguration()
+	if err != nil {
+		log.Fatal(err)
+	}
+	currentConfig = conf
 
-	if *pidfile != "" {
+	if conf.PIDFile != "" {
 		pid := os.Getpid()
-		f, err := os.Create(*pidfile)
+		f, err := os.Create(conf.PIDFile)
 		if err == nil {
 			fmt.Fprintln(f, pid)
 			f.Close()
@@ -33,46 +31,42 @@ func main() {
 		}
 	}
 
-	if *testURL != "" {
-		runURLTest(*testURL)
+	if conf.TestURL != "" {
+		runURLTest(conf.TestURL)
 		return
 	}
 
-	go csvLog(*accessLogName, accessLogChan)
-	go csvLog(*tlsLogName, tlsLogChan)
+	go csvLog(conf.AccessLog, accessLogChan)
+	go csvLog(conf.TLSLog, tlsLogChan)
 
-	startWebServer()
+	conf.startWebServer()
 
 	portsListening := 0
 
-	if len(*proxyAddresses) > 0 {
-		for _, addr := range *proxyAddresses {
-			proxyListener, err := net.Listen("tcp", addr)
-			if err != nil {
-				log.Fatalf("error listening for connections on %s: %s", addr, err)
-			}
-			listenerChan <- proxyListener
-			server := http.Server{Handler: proxyHandler{}}
-			go func() {
-				err = server.Serve(proxyListener)
-				if err != nil && !strings.Contains(err.Error(), "use of closed") {
-					log.Fatalln("Error running HTTP proxy:", err)
-				}
-			}()
-			portsListening++
+	for _, addr := range conf.ProxyAddresses {
+		proxyListener, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("error listening for connections on %s: %s", addr, err)
 		}
+		listenerChan <- proxyListener
+		server := http.Server{Handler: proxyHandler{}}
+		go func() {
+			err = server.Serve(proxyListener)
+			if err != nil && !strings.Contains(err.Error(), "use of closed") {
+				log.Fatalln("Error running HTTP proxy:", err)
+			}
+		}()
+		portsListening++
 	}
 
-	if len(*transparentAddresses) > 0 {
-		for _, addr := range *transparentAddresses {
-			go func() {
-				err := runTransparentServer(addr)
-				if err != nil && !strings.Contains(err.Error(), "use of closed") {
-					log.Fatalln("Error running transparent HTTPS proxy:", err)
-				}
-			}()
-			portsListening++
-		}
+	for _, addr := range conf.TransparentAddresses {
+		go func() {
+			err := runTransparentServer(addr)
+			if err != nil && !strings.Contains(err.Error(), "use of closed") {
+				log.Fatalln("Error running transparent HTTPS proxy:", err)
+			}
+		}()
+		portsListening++
 	}
 
 	if portsListening > 0 {

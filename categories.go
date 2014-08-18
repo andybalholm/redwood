@@ -3,22 +3,15 @@ package main
 // storage and loading of categories
 
 import (
-	"flag"
 	"fmt"
-	"github.com/kylelemons/go-gypsy/yaml"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/kylelemons/go-gypsy/yaml"
 )
-
-var categoriesDir = flag.String("categories", "/etc/redwood/categories", "path to configuration files for categories")
-
-// minimum bad points to block a page
-var blockThreshold = flag.Int("threshold", 0, "minimum score for a blocked category to block a page")
-
-var countOnce = flag.Bool("count-once", false, "count each phrase only once per page")
 
 // A weight contains the point values assigned to a rule+category combination.
 type weight struct {
@@ -56,17 +49,19 @@ type category struct {
 	invisible   bool            // use invisible GIF instead of block page
 }
 
-var categories = map[string]*category{
-	"blocked-mime": &category{ // a fake category for pages blocked by MIME type
-		name:        "blocked-mime",
-		description: "Blocked MIME Type",
-		action:      BLOCK,
-	},
-}
-
 // loadCategories loads the category configuration files
-func loadCategories() {
-	dir, err := os.Open(*categoriesDir)
+func (cf *config) loadCategories() {
+	if cf.Categories == nil {
+		cf.Categories = map[string]*category{
+			"blocked-mime": &category{ // a fake category for pages blocked by MIME type
+				name:        "blocked-mime",
+				description: "Blocked MIME Type",
+				action:      BLOCK,
+			},
+		}
+	}
+
+	dir, err := os.Open(cf.CategoriesDir)
 	if err != nil {
 		log.Print("Could not open category directory: ", err)
 		return
@@ -81,17 +76,17 @@ func loadCategories() {
 
 	for _, fi := range info {
 		if name := fi.Name(); fi.IsDir() && name[0] != '.' {
-			categoryPath := filepath.Join(*categoriesDir, name)
+			categoryPath := filepath.Join(cf.CategoriesDir, name)
 			c, err := loadCategory(categoryPath)
 			if err == nil {
-				categories[c.name] = c
+				cf.Categories[c.name] = c
 			} else {
 				log.Printf("Error loading category %s: %v", name, err)
 			}
 		}
 	}
 
-	collectRules()
+	cf.collectRules()
 }
 
 // loadCategory loads the configuration for one category
@@ -177,14 +172,14 @@ func loadCategory(dirname string) (c *category, err error) {
 
 // collectRules collects the rules from all the categories and adds
 // them to URLRules and phraseRules.
-func collectRules() {
-	for _, c := range categories {
+func (cf *config) collectRules() {
+	for _, c := range cf.Categories {
 		allIgnored := c.action == IGNORE
-		if a, ok := groupActions[""][c.name]; ok {
+		if a, ok := cf.groupActions[""][c.name]; ok {
 			allIgnored = a == IGNORE
 		}
 		if allIgnored {
-			for _, actionMap := range groupActions {
+			for _, actionMap := range cf.groupActions {
 				if a, ok := actionMap[c.name]; ok && a != IGNORE {
 					allIgnored = false
 					break
@@ -192,32 +187,32 @@ func collectRules() {
 			}
 			if allIgnored {
 				// Don't bother to collect rules in categories that are always ignored.
-				delete(categories, c.name)
+				delete(cf.Categories, c.name)
 				continue
 			}
 		}
 
 		for rule, _ := range c.weights {
 			if rule.t == contentPhrase {
-				contentPhraseList.addPhrase(rule.content)
+				cf.ContentPhraseList.addPhrase(rule.content)
 			} else {
-				URLRules.AddRule(rule)
+				cf.URLRules.AddRule(rule)
 			}
 		}
 	}
-	contentPhraseList.findFallbackNodes(0, nil)
-	URLRules.finalize()
+	cf.ContentPhraseList.findFallbackNodes(0, nil)
+	cf.URLRules.finalize()
 }
 
 // score returns c's score for a page that matched
 // the rules in tally. The keys are the rule names, and the values
 // are the counts of how many times each rule was matched.
-func (c *category) score(tally map[rule]int) int {
+func (c *category) score(tally map[rule]int, conf *config) int {
 	total := 0
 	weights := c.weights
 	for r, count := range tally {
 		w := weights[r]
-		if *countOnce {
+		if conf.CountOnce {
 			total += w.points
 			continue
 		}
@@ -231,14 +226,14 @@ func (c *category) score(tally map[rule]int) int {
 }
 
 // categoryScores returns a map containing a page's score for each category.
-func categoryScores(tally map[rule]int) map[string]int {
+func (cf *config) categoryScores(tally map[rule]int) map[string]int {
 	if len(tally) == 0 {
 		return nil
 	}
 
 	scores := make(map[string]int)
-	for _, c := range categories {
-		s := c.score(tally)
+	for _, c := range cf.Categories {
+		s := c.score(tally, cf)
 		if s != 0 {
 			scores[c.name] = s
 		}
@@ -248,7 +243,7 @@ func categoryScores(tally map[rule]int) map[string]int {
 
 // blockedCategories returns a list of categories that would cause a page to be blocked.
 // The keys of scores are category names, and the values are the number of points scored.
-func blockedCategories(scores map[string]int, filterGroup string) []string {
+func (cf *config) blockedCategories(scores map[string]int, filterGroup string) []string {
 	if len(scores) == 0 {
 		return nil
 	}
@@ -256,14 +251,14 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 	blocked := make(map[string]int)
 	maxAllowed := 0 // highest score of any category with action ALLOW
 	for name, s := range scores {
-		c := categories[name]
+		c := cf.Categories[name]
 		if s > 0 {
 			a := c.action
-			if a1, ok := groupActions[""][name]; ok {
+			if a1, ok := cf.groupActions[""][name]; ok {
 				// Apply the default rules first.
 				a = a1
 			}
-			if a1, ok := groupActions[filterGroup][name]; ok {
+			if a1, ok := cf.groupActions[filterGroup][name]; ok {
 				// Then override with the ones specific to the group.
 				a = a1
 			}
@@ -281,7 +276,7 @@ func blockedCategories(scores map[string]int, filterGroup string) []string {
 				}
 
 			case BLOCK:
-				if s > maxAllowed && s > *blockThreshold {
+				if s > maxAllowed && s > cf.Threshold {
 					blocked[name] = s
 				}
 			}

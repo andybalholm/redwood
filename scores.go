@@ -10,9 +10,9 @@ type scorecard struct {
 
 // calculate calculates category scores and finds out whether the page
 // needs to be blocked, based on c.tally and the group that user belongs to.
-func (c *scorecard) calculate(user string) {
-	c.scores = categoryScores(c.tally)
-	c.blocked = blockedCategories(c.scores, WhichGroup(user))
+func (c *scorecard) calculate(user string, conf *config) {
+	c.scores = conf.categoryScores(c.tally)
+	c.blocked = conf.blockedCategories(c.scores, conf.WhichGroup(user))
 	if len(c.blocked) > 0 {
 		c.action = BLOCK
 	} else {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,17 +13,7 @@ import (
 
 // HTTP proxy authentication.
 
-var passwordFile = newActiveFlag("password-file", "", "path to file of usernames and passwords", readPasswordFile)
-var authHelper = newActiveFlag("auth-helper", "", "program to authenticate users", startAuthHelper)
-var authAlways = flag.Bool("always-require-auth", false, "require authentication even for LAN users")
-var authNever = flag.Bool("disable-auth", false, "never require authentication")
-
-var passwords = map[string]string{}
-var passwordLock sync.RWMutex
-
-var authenticators []func(user, password string) bool
-
-func readPasswordFile(filename string) error {
+func (c *config) readPasswordFile(filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("could not open %s: %s", filename, err)
@@ -46,7 +35,7 @@ func readPasswordFile(filename string) error {
 
 		user := line[:space]
 		pass := strings.TrimSpace(line[space:])
-		passwords[user] = pass
+		c.Passwords[user] = pass
 	}
 
 	return nil
@@ -66,6 +55,8 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 		send407(w)
 		return ""
 	}
+
+	conf := getConfig()
 
 	auth = auth[len("Basic "):]
 	auth = strings.TrimSpace(auth)
@@ -92,20 +83,20 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 		return ""
 	}
 
-	passwordLock.RLock()
-	ok := password == passwords[user]
-	passwordLock.RUnlock()
+	conf.PasswordLock.RLock()
+	ok := password == conf.Passwords[user]
+	conf.PasswordLock.RUnlock()
 	if ok {
 		return user
 	}
 
-	for _, a := range authenticators {
+	for _, a := range conf.Authenticators {
 		if a(user, password) {
-			if _, ok := passwords[user]; !ok {
+			if _, ok := conf.Passwords[user]; !ok {
 				// Cache the password for later use.
-				passwordLock.Lock()
-				passwords[user] = password
-				passwordLock.Unlock()
+				conf.PasswordLock.Lock()
+				conf.Passwords[user] = password
+				conf.PasswordLock.Unlock()
 			}
 			return user
 		}
@@ -115,7 +106,7 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 	return ""
 }
 
-func startAuthHelper(cmd string) error {
+func (cf *config) startAuthHelper(cmd string) error {
 	c := exec.Command(cmd)
 	in, err := c.StdinPipe()
 	if err != nil {
@@ -131,7 +122,7 @@ func startAuthHelper(cmd string) error {
 	}
 
 	var m sync.Mutex
-	authenticators = append(authenticators, func(user, password string) bool {
+	cf.Authenticators = append(cf.Authenticators, func(user, password string) bool {
 		m.Lock()
 		defer m.Unlock()
 		fmt.Fprintln(in, user, password)

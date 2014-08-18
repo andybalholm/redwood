@@ -10,12 +10,9 @@ import (
 
 // Filter groups—different rules for different groups of users.
 
-// whichGroup maps usernames or IP addresses to filter group names.
-var whichGroup = map[string]string{}
-
 // WhichGroup returns the group name for a username or IP address.
-func WhichGroup(user string) string {
-	if g, ok := whichGroup[user]; ok {
+func (c *config) WhichGroup(user string) string {
+	if g, ok := c.whichGroup[user]; ok {
 		return g
 	}
 
@@ -24,7 +21,7 @@ func WhichGroup(user string) string {
 		return ""
 	}
 
-	for _, gr := range groupRanges {
+	for _, gr := range c.groupRanges {
 		if gr.r.Contains(ip) {
 			return gr.group
 		}
@@ -114,34 +111,9 @@ type rangeToGroup struct {
 	group string
 }
 
-var groupRanges []rangeToGroup
-
-// groupActions maps groups and categories to actions.
-// For example, if members of the admin group should be able to access sites
-// in the proxies category, groupActions["admin"]["proxies"] = ALLOW.
-// groupActions[""] contains the default actions.
-var groupActions = map[string]map[string]action{}
-
-var groupMember = newActiveFlag("group", "", "assign a user to a filter group (--group 'group-name user-name')", assignGroupMember)
-
-var groupBlock = newActiveFlag("block", "", "block a category for a filter group (--block 'category group')",
-	func(s string) error {
-		return assignGroupAction(s, BLOCK)
-	})
-
-var groupIgnore = newActiveFlag("ignore", "", "ignore a category for a filter group (--ignore 'category group')",
-	func(s string) error {
-		return assignGroupAction(s, IGNORE)
-	})
-
-var groupAllow = newActiveFlag("allow", "", "allow a category for a filter group (--allow 'category group')",
-	func(s string) error {
-		return assignGroupAction(s, ALLOW)
-	})
-
 // assignGroupMember assigns users to a filter group. s contains the group name and a
 // space-separated list of users (either IP addresses or usernames).
-func assignGroupMember(s string) error {
+func (c *config) assignGroupMember(s string) error {
 	space := strings.Index(s, " ")
 	if space == -1 {
 		return fmt.Errorf("invalid group assignment '%s': must be at least 2 words (group name and user)", s)
@@ -159,9 +131,9 @@ func assignGroupMember(s string) error {
 				log.Println(err)
 				continue
 			}
-			groupRanges = append(groupRanges, rangeToGroup{r, group})
+			c.groupRanges = append(c.groupRanges, rangeToGroup{r, group})
 		} else {
-			whichGroup[user] = group
+			c.whichGroup[user] = group
 		}
 	}
 
@@ -171,7 +143,7 @@ func assignGroupMember(s string) error {
 // assignGroupAction assigns an action to a group/category combination (in s).
 // The category comes first, than a space, then the group. If no group is
 // specified, the default group is used.
-func assignGroupAction(s string, a action) error {
+func (c *config) assignGroupAction(s string, a action) error {
 	group := ""
 	space := strings.Index(s, " ")
 	if space != -1 {
@@ -180,10 +152,10 @@ func assignGroupAction(s string, a action) error {
 	}
 	category := s
 
-	actions := groupActions[group]
+	actions := c.groupActions[group]
 	if actions == nil {
 		actions = make(map[string]action)
-		groupActions[group] = actions
+		c.groupActions[group] = actions
 	}
 
 	actions[category] = a

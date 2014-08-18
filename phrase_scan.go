@@ -14,13 +14,11 @@ import (
 	"code.google.com/p/go.text/transform"
 )
 
-var contentPhraseList = newPhraseList()
-
 // scanContent scans the content of a document for phrases,
 // and updates tally.
-func scanContent(content []byte, contentType, cs string, tally map[rule]int) {
+func (conf *config) scanContent(content []byte, contentType, cs string, tally map[rule]int) {
 	if strings.Contains(contentType, "javascript") {
-		scanJSContent(content, tally)
+		conf.scanJSContent(content, tally)
 		return
 	}
 
@@ -35,7 +33,7 @@ func scanContent(content []byte, contentType, cs string, tally map[rule]int) {
 	}
 	transformers = append(transformers, new(wordTransformer))
 
-	ps := newPhraseScanner(contentPhraseList, func(s string) {
+	ps := newPhraseScanner(conf.ContentPhraseList, func(s string) {
 		tally[rule{t: contentPhrase, content: s}]++
 	})
 	ps.scanByte(' ')
@@ -71,9 +69,9 @@ func scanContent(content []byte, contentType, cs string, tally map[rule]int) {
 
 // scanJSContent scans only the contents of quoted JavaScript strings
 // in the document.
-func scanJSContent(content []byte, tally map[rule]int) {
+func (conf *config) scanJSContent(content []byte, tally map[rule]int) {
 	_, items := lex(string(content))
-	ps := newPhraseScanner(contentPhraseList, func(s string) {
+	ps := newPhraseScanner(conf.ContentPhraseList, func(s string) {
 		tally[rule{t: contentPhrase, content: s}]++
 	})
 

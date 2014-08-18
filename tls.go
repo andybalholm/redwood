@@ -9,7 +9,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -26,18 +25,6 @@ import (
 
 // Intercept TLS (HTTPS) connections.
 
-var certFile = flag.String("tls-cert", "", "path to certificate for serving HTTPS")
-var keyFile = flag.String("tls-key", "", "path to TLS certificate key")
-var sslBypassFile = newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", tlsBypass.Load)
-var sslBumpFile = newActiveFlag("tls-bump-only", "", "path to a list of the only sites that should be SSLBumped", loadTlsBumpOnly)
-
-var tlsCert tls.Certificate
-var parsedTLSCert *x509.Certificate
-var tlsReady bool
-
-var tlsBypass = NewHostList()
-var tlsBumpOnly *HostList
-
 // unverifiedClientConfig is a TLS configuration that doesn't verify server
 // certificates.
 var unverifiedClientConfig = &tls.Config{
@@ -46,23 +33,24 @@ var unverifiedClientConfig = &tls.Config{
 
 // loadCertificate loads the TLS certificate specified by certFile and keyFile
 // into tlsCert.
-func loadCertificate() {
-	if *certFile != "" && *keyFile != "" {
-		cert, err := tls.LoadX509KeyPair(*certFile, *keyFile)
+func (c *config) loadCertificate() {
+	if c.CertFile != "" && c.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
 		if err != nil {
 			log.Println("Error loading TLS certificate:", err)
 			return
 		}
-		tlsCert = cert
+		c.TLSCert = cert
 		parsed, err := x509.ParseCertificate(cert.Certificate[0])
 		if err != nil {
 			log.Println("Error parsing X509 certificate:", err)
 			return
 		}
-		parsedTLSCert = parsed
-		tlsReady = true
+		c.ParsedTLSCert = parsed
+		c.TLSReady = true
 
-		http.HandleFunc("/cert.der", func(w http.ResponseWriter, r *http.Request) {
+		c.ServeMux.HandleFunc("/cert.der", func(w http.ResponseWriter, r *http.Request) {
+			tlsCert := c.TLSCert
 			w.Header().Set("Content-Type", "application/x-x509-ca-cert")
 			w.Write(tlsCert.Certificate[len(tlsCert.Certificate)-1])
 		})
@@ -118,16 +106,18 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		}
 	}()
 
+	conf := getConfig()
+
 	if serverAddr == localServer+":443" {
 		// The internal server gets special treatment, since there is no remote
 		// server to connect to.
 		cert, err := imitateCertificate(&x509.Certificate{
 			Subject:     pkix.Name{CommonName: localServer},
-			NotBefore:   parsedTLSCert.NotBefore,
-			NotAfter:    parsedTLSCert.NotAfter,
+			NotBefore:   conf.ParsedTLSCert.NotBefore,
+			NotAfter:    conf.ParsedTLSCert.NotAfter,
 			KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		}, false)
+		}, false, conf)
 		if err != nil {
 			log.Printf("Error generataing HTTPS certificate for local server (%s): %v", serverAddr, err)
 			conn.Close()
@@ -136,7 +126,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 
 		config := &tls.Config{
 			NextProtos:   []string{"http/1.1"},
-			Certificates: []tls.Certificate{cert, tlsCert},
+			Certificates: []tls.Certificate{cert, conf.TLSCert},
 		}
 		tlsConn := tls.Server(conn, config)
 		err = tlsConn.Handshake()
@@ -178,18 +168,18 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		}
 	}
 
-	if tlsBypass.Contains(serverName) {
+	if conf.TLSBypass.Contains(serverName) {
 		logTLS(user, serverAddr, serverName, errors.New("site bypass"))
 		connectDirect(conn, serverAddr, clientHello)
 		return
 	}
-	if !tlsReady || (tlsBumpOnly != nil && !tlsBumpOnly.Contains(serverName)) {
+	if !conf.TLSReady || (conf.TLSBumpOnly != nil && !conf.TLSBumpOnly.Contains(serverName)) {
 		// Do hostname filtering; if the host is allowed, let the client connect directly.
 		u := &url.URL{Host: serverName}
-		sc := scorecard{tally: URLRules.MatchingRules(u)}
-		sc.calculate(user)
+		sc := scorecard{tally: conf.URLRules.MatchingRules(u)}
+		sc.calculate(user, conf)
 		req, _ := http.NewRequest("CONNECT", u.String(), nil)
-		logAccess(req, nil, sc, "", 0, false, user)
+		conf.logAccess(req, nil, sc, "", 0, false, user)
 		if sc.action == BLOCK {
 			conn.Close()
 		} else {
@@ -216,7 +206,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 	}
 
 	valid := validCert(serverCert, intermediates)
-	cert, err := imitateCertificate(serverCert, !valid)
+	cert, err := imitateCertificate(serverCert, !valid, conf)
 	if err != nil {
 		serverConn.Close()
 		logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err))
@@ -226,7 +216,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 
 	config := &tls.Config{
 		NextProtos:   []string{"http/1.1"},
-		Certificates: []tls.Certificate{cert, tlsCert},
+		Certificates: []tls.Certificate{cert, conf.TLSCert},
 	}
 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, config)
@@ -303,7 +293,7 @@ func (s *singleListener) Addr() net.Addr {
 // imitateCertificate returns a new TLS certificate that has most of the same
 // data as serverCert but is signed by Redwood's root certificate, or
 // self-signed.
-func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls.Certificate, err error) {
+func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *config) (cert tls.Certificate, err error) {
 	template := serverCert
 
 	if selfSigned {
@@ -336,9 +326,9 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls
 
 	var newCertBytes []byte
 	if selfSigned {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, parsedTLSCert.PublicKey, tlsCert.PrivateKey)
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, conf.ParsedTLSCert.PublicKey, conf.TLSCert.PrivateKey)
 	} else {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, parsedTLSCert, parsedTLSCert.PublicKey, tlsCert.PrivateKey)
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, conf.ParsedTLSCert.PublicKey, conf.TLSCert.PrivateKey)
 	}
 	if err != nil {
 		return tls.Certificate{}, err
@@ -346,11 +336,11 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool) (cert tls
 
 	newCert := tls.Certificate{
 		Certificate: [][]byte{newCertBytes},
-		PrivateKey:  tlsCert.PrivateKey,
+		PrivateKey:  conf.TLSCert.PrivateKey,
 	}
 
 	if !selfSigned {
-		newCert.Certificate = append(newCert.Certificate, tlsCert.Certificate...)
+		newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
 	}
 	return newCert, nil
 }
@@ -597,9 +587,9 @@ func getServerNameAtAddress(addr string) string {
 	return serverCert.Subject.CommonName
 }
 
-func loadTlsBumpOnly(filename string) error {
-	if tlsBumpOnly == nil {
-		tlsBumpOnly = NewHostList()
+func (c *config) loadTlsBumpOnly(filename string) error {
+	if c.TLSBumpOnly == nil {
+		c.TLSBumpOnly = NewHostList()
 	}
-	return tlsBumpOnly.Load(filename)
+	return c.TLSBumpOnly.Load(filename)
 }

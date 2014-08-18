@@ -1,9 +1,10 @@
 package main
 
 import (
-	"code.google.com/p/go.text/transform"
 	"unicode"
 	"unicode/utf8"
+
+	"code.google.com/p/go.text/transform"
 )
 
 // wordRune maps c into a reduced set of "word" characters.

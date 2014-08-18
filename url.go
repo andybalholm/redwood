@@ -3,12 +3,13 @@ package main
 // URL matching and regular expressions
 
 import (
-	"code.google.com/p/go.net/idna"
-	"code.google.com/p/go.net/publicsuffix"
 	"log"
 	"net/url"
 	"regexp"
 	"strings"
+
+	"code.google.com/p/go.net/idna"
+	"code.google.com/p/go.net/publicsuffix"
 )
 
 type regexRule struct {

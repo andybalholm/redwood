@@ -3,28 +3,24 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"code.google.com/p/cascadia"
-	"code.google.com/p/go.net/html"
-	"code.google.com/p/go.net/html/charset"
-	"code.google.com/p/go.text/transform"
 	"fmt"
 	"io"
 	"log"
 	"net/url"
 	"os"
 	"strings"
+
+	"code.google.com/p/cascadia"
+	"code.google.com/p/go.net/html"
+	"code.google.com/p/go.net/html/charset"
+	"code.google.com/p/go.text/transform"
 )
 
 // Functions for content pruning (removing specific HTML elements from the page)
 
-var pruneMatcher = newURLMatcher()
-var pruneActions = make(map[rule]cascadia.Selector)
-
-var pruneConfig = newActiveFlag("content-pruning", "", "path to config file for content pruning", loadPruningConfig)
-
 var metaCharsetSelector = cascadia.MustCompile(`meta[charset], meta[http-equiv="Content-Type"]`)
 
-func loadPruningConfig(filename string) error {
+func (c *config) loadPruningConfig(filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("could not open %s: %s\n", filename, err)
@@ -63,13 +59,13 @@ func loadPruningConfig(filename string) error {
 			continue
 		}
 
-		pruneMatcher.AddRule(r)
-		if oldAction, ok := pruneActions[r]; ok {
-			pruneActions[r] = func(n *html.Node) bool {
+		c.PruneMatcher.AddRule(r)
+		if oldAction, ok := c.PruneActions[r]; ok {
+			c.PruneActions[r] = func(n *html.Node) bool {
 				return oldAction(n) || sel(n)
 			}
 		} else {
-			pruneActions[r] = sel
+			c.PruneActions[r] = sel
 		}
 	}
 
@@ -79,8 +75,8 @@ func loadPruningConfig(filename string) error {
 // pruneContent checks the URL to see if it is a site that is calling for
 // content pruning. If so, it parses the HTML, removes the specified tags, and
 // re-renders the HTML. It returns true if the content was changed.
-func pruneContent(URL *url.URL, content *[]byte, cs string) bool {
-	URLMatches := pruneMatcher.MatchingRules(URL)
+func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string) bool {
+	URLMatches := c.PruneMatcher.MatchingRules(URL)
 	if len(URLMatches) == 0 {
 		return false
 	}
@@ -100,7 +96,7 @@ func pruneContent(URL *url.URL, content *[]byte, cs string) bool {
 
 	modified := false
 	for urlRule := range URLMatches {
-		sel := pruneActions[urlRule]
+		sel := c.PruneActions[urlRule]
 		if prune(tree, sel) > 0 {
 			modified = true
 		}

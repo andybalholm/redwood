@@ -5,23 +5,202 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
+
+	"code.google.com/p/cascadia"
 )
 
-var configFile = newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", readConfigFile)
-var _ = newActiveFlag("include", "", "additional config file to read", readConfigFile)
+// A config object holds a complete set of Redwood's configuration settings.
+type config struct {
+	BlockTemplate     *template.Template
+	Categories        map[string]*category
+	CategoriesDir     string
+	ContentPhraseList phraseList
+	CountOnce         bool
+	DisableGZIP       bool
+	MIMEActions       map[string]action
+	Threshold         int
+	URLRules          *URLMatcher
 
-var URLRules = newURLMatcher()
+	PIDFile string
+	TestURL string
+
+	ProxyAddresses       []string
+	TransparentAddresses []string
+
+	CGIBin         string
+	ServeMux       *http.ServeMux
+	StaticFilesDir string
+	VirtualHosts   map[string]string
+
+	PruneActions map[rule]cascadia.Selector
+	PruneMatcher *URLMatcher
+	QueryChanges map[rule]url.Values
+	QueryMatcher *URLMatcher
+
+	CertFile      string
+	KeyFile       string
+	TLSCert       tls.Certificate
+	ParsedTLSCert *x509.Certificate
+	TLSReady      bool
+	TLSBypass     *HostList
+	TLSBumpOnly   *HostList
+
+	Authenticators []func(user, password string) bool
+	Passwords      map[string]string
+	PasswordLock   sync.RWMutex
+	AuthAlways     bool
+	AuthNever      bool
+
+	whichGroup   map[string]string
+	groupRanges  []rangeToGroup
+	groupActions map[string]map[string]action
+
+	AccessLog string
+	TLSLog    string
+
+	flags *flag.FlagSet
+}
+
+var currentConfig *config
+
+func getConfig() *config {
+	return currentConfig
+}
+
+func loadConfiguration() (*config, error) {
+	c := &config{
+		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
+		TLSBypass:         NewHostList(),
+		URLRules:          newURLMatcher(),
+		whichGroup:        map[string]string{},
+		groupActions:      map[string]map[string]action{},
+		MIMEActions:       map[string]action{},
+		PruneActions:      map[rule]cascadia.Selector{},
+		PruneMatcher:      newURLMatcher(),
+		QueryChanges:      map[rule]url.Values{},
+		QueryMatcher:      newURLMatcher(),
+		VirtualHosts:      map[string]string{},
+		ServeMux:          http.NewServeMux(),
+		ContentPhraseList: newPhraseList(),
+		Passwords:         map[string]string{},
+	}
+
+	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
+	c.flags.BoolVar(&c.AuthAlways, "always-require-auth", false, "require authentication even for LAN users")
+	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
+	c.newActiveFlag("blockpage", "/etc/redwood/block.html", "path to template for block page", c.loadBlockPage)
+	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
+	c.flags.StringVar(&c.CategoriesDir, "categories", "/etc/redwood/categories", "path to configuration files for categories")
+	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
+	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
+	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
+	c.flags.BoolVar(&c.AuthNever, "disable-auth", false, "never require authentication")
+	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
+	c.newActiveFlag("group", "", "assign a user to a filter group (--group 'group-name user-name')", c.assignGroupMember)
+	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
+	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
+	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
+	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)
+	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")
+	c.flags.StringVar(&c.TestURL, "test", "", "URL to test instead of running proxy server")
+	c.flags.IntVar(&c.Threshold, "threshold", 0, "minimum score for a blocked category to block a page")
+	c.newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", c.TLSBypass.Load)
+	c.newActiveFlag("tls-bump-only", "", "path to a list of the only sites that should be SSLBumped", c.loadTlsBumpOnly)
+	c.flags.StringVar(&c.CertFile, "tls-cert", "", "path to certificate for serving HTTPS")
+	c.flags.StringVar(&c.KeyFile, "tls-key", "", "path to TLS certificate key")
+	c.flags.StringVar(&c.TLSLog, "tls-log", "", "path to tls log file")
+
+	c.newActiveFlag("block", "", "block a category for a filter group (--block 'category group')", func(s string) error {
+		return c.assignGroupAction(s, BLOCK)
+	})
+	c.newActiveFlag("ignore", "", "ignore a category for a filter group (--ignore 'category group')", func(s string) error {
+		return c.assignGroupAction(s, IGNORE)
+	})
+	c.newActiveFlag("allow", "", "allow a category for a filter group (--allow 'category group')", func(s string) error {
+		return c.assignGroupAction(s, ALLOW)
+	})
+
+	c.newActiveFlag("mime-allow", "", "content type to allow without phrase scan", func(t string) error {
+		c.MIMEActions[t] = ALLOW
+		return nil
+	})
+	c.newActiveFlag("mime-filter", "", "content type to filter", func(t string) error {
+		c.MIMEActions[t] = FILTER
+		return nil
+	})
+	c.newActiveFlag("mime-block", "", "content type to block", func(t string) error {
+		c.MIMEActions[t] = BLOCK
+		return nil
+	})
+
+	c.newActiveFlag("http-proxy", "", "address (host:port) to listen for proxy connections on", func(s string) error {
+		c.ProxyAddresses = append(c.ProxyAddresses, s)
+		return nil
+	})
+	c.newActiveFlag("transparent-https", "", "address to listen for intercepted HTTPS connections on", func(s string) error {
+		c.TransparentAddresses = append(c.TransparentAddresses, s)
+		return nil
+	})
+
+	c.newActiveFlag("virtual-host", "", "a hostname substitution to apply to HTTP requests (e.g. -virtual-host me.local localhost)", func(val string) error {
+		f := strings.Fields(val)
+		if len(f) != 2 {
+			return errors.New("the virtual-host option takes two hostnames (with optional ports), separated by a space: fake.name real.name")
+		}
+		c.VirtualHosts[f[0]] = f[1]
+		return nil
+	})
+
+	// Read the default configuration file if none is specified with -c
+	specified := false
+	for _, arg := range os.Args {
+		if arg == "-c" || arg == "--c" {
+			specified = true
+			break
+		}
+	}
+	if !specified {
+		err := c.readConfigFile("/etc/redwood/redwood.conf")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := c.flags.Parse(os.Args)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.BlockTemplate == nil {
+		err := c.loadBlockPage("/etc/redwood/block.html")
+		if err != nil {
+			log.Println(err)
+		}
+	}
+
+	c.loadCategories()
+	c.loadCertificate()
+
+	return c, nil
+}
 
 // readConfigFile reads the specified configuration file.
 // For each line of the form "key value" or "key = value", it sets the flag
 // variable named key to a value of value.
-func readConfigFile(filename string) error {
+func (c *config) readConfigFile(filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return fmt.Errorf("could not open %s: %s", filename, err)
@@ -73,36 +252,13 @@ func readConfigFile(filename string) error {
 			value = line
 		}
 
-		err = flag.Set(key, value)
+		err = c.flags.Set(key, value)
 		if err != nil {
 			log.Println("Could not set", key, "to", value, ":", err)
 		}
 	}
 
 	return nil
-}
-
-func loadConfiguration() {
-	// Read the default configuration file if none is specified with -c
-	specified := false
-	for _, arg := range os.Args {
-		if arg == "-c" || arg == "--c" {
-			specified = true
-			break
-		}
-	}
-	if !specified {
-		err := readConfigFile("/etc/redwood/redwood.conf")
-		if err != nil {
-			log.Println(err)
-		}
-	}
-
-	flag.Parse()
-
-	loadBlockPage()
-	loadCategories()
-	loadCertificate()
 }
 
 // configReader is a wrapper for reading a configuration file a line at a time,
@@ -165,21 +321,11 @@ func (af *activeFlag) Set(s string) error {
 	return err
 }
 
-func newActiveFlag(name, value, usage string, f func(string) error) flag.Value {
+func (c *config) newActiveFlag(name, value, usage string, f func(string) error) flag.Value {
 	af := &activeFlag{
 		f:     f,
 		value: value,
 	}
-	flag.Var(af, name, usage)
+	c.flags.Var(af, name, usage)
 	return af
-}
-
-// ListFlag collects all values given for a flag into a slice.
-func ListFlag(name, usage string) *[]string {
-	var values []string
-	newActiveFlag(name, "", usage, func(v string) error {
-		values = append(values, v)
-		return nil
-	})
-	return &values
 }

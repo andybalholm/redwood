@@ -1,11 +1,9 @@
 package main
 
 import (
-	"code.google.com/p/go.net/html/charset"
 	"compress/gzip"
 	"crypto/tls"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,9 +12,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
-)
 
-var disableGzip = flag.Bool("disable-gzip", false, "Don't compress HTTP responses with gzip.")
+	"code.google.com/p/go.net/html/charset"
+)
 
 type proxyHandler struct {
 	// TLS is whether this is an HTTPS connection.
@@ -62,6 +60,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
+	conf := getConfig()
+
 	if len(r.URL.String()) > 10000 {
 		http.Error(w, "URL too long", http.StatusRequestURITooLong)
 		return
@@ -76,7 +76,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.user != "" {
 		user = h.user
-	} else if !*authNever && !h.TLS && (*authAlways || !lanAddress(client)) {
+	} else if !conf.AuthNever && !h.TLS && (conf.AuthAlways || !lanAddress(client)) {
 		u := authenticate(w, r)
 		if u == "" {
 			return
@@ -85,24 +85,24 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Host == localServer {
-		http.DefaultServeMux.ServeHTTP(w, r)
+		conf.ServeMux.ServeHTTP(w, r)
 		return
 	}
 
-	if realHost, ok := virtualHosts[r.Host]; ok {
+	if realHost, ok := conf.VirtualHosts[r.Host]; ok {
 		r.Host = realHost
 		r.URL.Host = realHost
 	}
 
 	if r.Method == "CONNECT" {
-		if !tlsReady {
+		if !conf.TLSReady {
 			sc := scorecard{
-				tally: URLRules.MatchingRules(r.URL),
+				tally: conf.URLRules.MatchingRules(r.URL),
 			}
-			sc.calculate(user)
-			logAccess(r, nil, sc, "", 0, false, user)
+			sc.calculate(user, conf)
+			conf.logAccess(r, nil, sc, "", 0, false, user)
 			if sc.action == BLOCK {
-				showBlockPage(w, r, &sc, user)
+				conf.showBlockPage(w, r, &sc, user)
 				return
 			}
 		}
@@ -116,7 +116,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		if tlsReady {
+		if conf.TLSReady {
 			SSLBump(conn, r.URL.Host, user)
 		} else {
 			connectDirect(conn, r.URL.Host, nil)
@@ -132,7 +132,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Add("Via", r.Proto+" Redwood")
 	r.Header.Add("X-Forwarded-For", client)
 
-	gzipOK := !*disableGzip && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 	r.Header.Del("Accept-Encoding")
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
@@ -148,16 +148,16 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sc := scorecard{
-		tally: URLRules.MatchingRules(r.URL),
+		tally: conf.URLRules.MatchingRules(r.URL),
 	}
-	sc.calculate(user)
+	sc.calculate(user, conf)
 	if sc.action == BLOCK {
-		showBlockPage(w, r, &sc, user)
-		logAccess(r, nil, sc, "", 0, false, user)
+		conf.showBlockPage(w, r, &sc, user)
+		conf.logAccess(r, nil, sc, "", 0, false, user)
 		return
 	}
 
-	urlChanged := changeQuery(r.URL)
+	urlChanged := conf.changeQuery(r.URL)
 
 	if !urlChanged {
 		// Rebuild the URL in a way that will preserve which characters are escaped
@@ -203,26 +203,26 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, sc, "", 0, false, user)
+		conf.logAccess(r, nil, sc, "", 0, false, user)
 		return
 	}
 	defer resp.Body.Close()
 
-	contentType, action := checkContentType(resp)
+	contentType, action := conf.checkContentType(resp)
 
 	switch action {
 	case BLOCK:
 		sc.action = BLOCK
 		sc.blocked = []string{"blocked-mime"}
-		showBlockPage(w, r, &sc, user)
-		logAccess(r, resp, sc, contentType, 0, false, user)
+		conf.showBlockPage(w, r, &sc, user)
+		conf.logAccess(r, resp, sc, contentType, 0, false, user)
 		return
 
 	case ALLOW:
 		sc.action = IGNORE
 		copyResponseHeader(w, resp)
 		io.Copy(w, resp.Body)
-		logAccess(r, resp, sc, contentType, 0, false, user)
+		conf.logAccess(r, resp, sc, contentType, 0, false, user)
 		return
 	}
 
@@ -243,26 +243,26 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
 		sc.action = IGNORE
-		logAccess(r, resp, sc, contentType, int(n)+len(content), false, user)
+		conf.logAccess(r, resp, sc, contentType, int(n)+len(content), false, user)
 		return
 	}
 
 	modified := false
 	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "html") {
-		modified = pruneContent(r.URL, &content, cs)
+		modified = conf.pruneContent(r.URL, &content, cs)
 		if modified {
 			resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 			cs = "utf-8"
 		}
 	}
 
-	scanContent(content, contentType, cs, sc.tally)
-	sc.calculate(user)
+	conf.scanContent(content, contentType, cs, sc.tally)
+	sc.calculate(user, conf)
 
 	if sc.action == BLOCK {
-		showBlockPage(w, r, &sc, user)
-		logAccess(r, resp, sc, contentType, len(content), modified, user)
+		conf.showBlockPage(w, r, &sc, user)
+		conf.logAccess(r, resp, sc, contentType, len(content), modified, user)
 		return
 	}
 
@@ -284,7 +284,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(content)
 	}
 
-	logAccess(r, resp, sc, contentType, len(content), modified, user)
+	conf.logAccess(r, resp, sc, contentType, len(content), modified, user)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

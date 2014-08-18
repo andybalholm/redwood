@@ -1,18 +1,21 @@
 package main
 
 import (
-	"code.google.com/p/go.net/html/charset"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"code.google.com/p/go.net/html/charset"
 )
 
 // support for running "redwood -test http://example.com"
 
 // runURLTest prints debugging information about how the URL and its content would be rated.
 func runURLTest(u string) {
+	conf := getConfig()
+
 	URL, err := url.Parse(u)
 	if err != nil {
 		fmt.Println("Could not parse the URL.")
@@ -30,9 +33,9 @@ func runURLTest(u string) {
 	fmt.Println()
 
 	sc := scorecard{
-		tally: URLRules.MatchingRules(URL),
+		tally: conf.URLRules.MatchingRules(URL),
 	}
-	sc.calculate("")
+	sc.calculate("", conf)
 
 	if len(sc.tally) == 0 {
 		fmt.Println("No URL rules match.")
@@ -59,7 +62,7 @@ func runURLTest(u string) {
 		fmt.Println("But we'll check the content too anyway.")
 	}
 
-	if changeQuery(URL) {
+	if conf.changeQuery(URL) {
 		fmt.Println()
 		fmt.Println("URL modified to:", URL)
 	}
@@ -75,7 +78,7 @@ func runURLTest(u string) {
 
 	fmt.Println()
 
-	contentType, action := checkContentType(resp)
+	contentType, action := conf.checkContentType(resp)
 	switch action {
 	case ALLOW:
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
@@ -94,7 +97,7 @@ func runURLTest(u string) {
 	modified := false
 	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "html") {
-		modified = pruneContent(URL, &content, cs)
+		modified = conf.pruneContent(URL, &content, cs)
 	}
 	if modified {
 		cs = "utf-8"
@@ -102,8 +105,8 @@ func runURLTest(u string) {
 		fmt.Println()
 	}
 
-	scanContent(content, contentType, cs, sc.tally)
-	sc.calculate("")
+	conf.scanContent(content, contentType, cs, sc.tally)
+	sc.calculate("", conf)
 
 	if len(sc.tally) == 0 {
 		fmt.Println("No content phrases match.")

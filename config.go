@@ -74,12 +74,6 @@ type config struct {
 	flags *flag.FlagSet
 }
 
-var currentConfig *config
-
-func getConfig() *config {
-	return currentConfig
-}
-
 func loadConfiguration() (*config, error) {
 	c := &config{
 		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
@@ -179,7 +173,7 @@ func loadConfiguration() (*config, error) {
 		}
 	}
 
-	err := c.flags.Parse(os.Args)
+	err := c.flags.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}

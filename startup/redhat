@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# Startup script for redwood
+#
+# chkconfig: 345 85 15
+# description: content-filtering proxy server
+# processname: redwood
+
+. /etc/rc.d/init.d/functions
+
+pidfile="/var/run/redwood.pid"
+
+case "$1" in
+	start)
+		echo -n "Starting redwood: "
+		ulimit -n 65535
+		daemon redwood -pidfile $pidfile '>/dev/null' '2>>/var/log/redwood/errors.log' '&'
+		echo
+		touch /var/lock/subsys/redwood
+		;;
+	stop)
+		echo -n "Shutting down redwood: "
+		if [ -e $pidfile ] && [ ! -e /proc/`cat $pidfile` ]
+		then
+			rm $pidfile
+		fi
+		killproc redwood
+		echo
+		rm -r /var/lock/subsys/redwood
+		;;
+	status)
+		status redwood
+		;;
+	restart)
+		$0 stop
+		$0 start
+		;;
+	reload)
+		echo -n "Reloading redwood configuration: "
+		killproc redwood -HUP
+		echo
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload|status}"
+		exit 1
+esac
+
+exit 0

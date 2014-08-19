@@ -14,11 +14,9 @@ import (
 )
 
 func main() {
-	conf, err := loadConfiguration()
-	if err != nil {
-		log.Fatal(err)
-	}
-	currentConfig = conf
+	go manageConfig()
+
+	conf := getConfig()
 
 	if conf.PIDFile != "" {
 		pid := os.Getpid()
@@ -35,11 +33,6 @@ func main() {
 		runURLTest(conf.TestURL)
 		return
 	}
-
-	go csvLog(conf.AccessLog, accessLogChan)
-	go csvLog(conf.TLSLog, tlsLogChan)
-
-	conf.startWebServer()
 
 	portsListening := 0
 

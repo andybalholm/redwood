@@ -136,7 +136,7 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 			return
 		}
 		listener := &singleListener{conn: tlsConn}
-		server := http.Server{}
+		server := http.Server{Handler: conf.ServeMux}
 		logTLS(user, serverAddr, localServer, nil)
 		server.Serve(listener)
 		return

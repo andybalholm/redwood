@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# PROVIDE: redwood
+
+. /etc/rc.subr
+
+name="redwood"
+rcvar="redwood_enable"
+
+procname="/usr/local/bin/redwood"
+pidfile="/var/run/redwood.pid"
+
+extra_commands="reload"
+
+start_cmd="redwood_start"
+
+redwood_start() {
+	daemon $procname -pidfile $pidfile 2>> /var/log/redwood/errors.log
+	echo Starting redwood.
+}
+
+load_rc_config $name
+run_rc_command "$1"

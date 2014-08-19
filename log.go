@@ -7,9 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -18,45 +16,41 @@ import (
 var accessLogChan = make(chan []string)
 var tlsLogChan = make(chan []string)
 
-// csvLog opens a log file and writes entries to it from logChan.
-// It should be run in its own goroutine.
-func csvLog(filename string, logChan chan []string) {
-	var logfile = os.Stdout
-	actualFile := false
-	var err error
-	var csvWriter *csv.Writer
+type CSVLog struct {
+	file *os.File
+	csv  *csv.Writer
+}
 
-	openLogFile := func() {
-		if filename != "" {
-			logfile, err = os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-			if err != nil {
-				log.Printf("Could not open log file (%s): %s\n Sending access log messages to standard output instead.", filename, err)
-				logfile = os.Stdout
-				actualFile = false
-			} else {
-				actualFile = true
-			}
-		}
-		csvWriter = csv.NewWriter(logfile)
-	}
-	openLogFile()
+func NewCSVLog(filename string) *CSVLog {
+	l := new(CSVLog)
 
-	hupChan := make(chan os.Signal, 1)
-	signal.Notify(hupChan, syscall.SIGHUP)
-
-	for {
-		select {
-		case c := <-logChan:
-			csvWriter.Write(c)
-			csvWriter.Flush()
-		case <-hupChan:
-			// When signaled with SIGHUP, close and reopen the log file.
-			if actualFile {
-				logfile.Close()
-				openLogFile()
-			}
+	if filename != "" {
+		logfile, err := os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		if err != nil {
+			log.Printf("Could not open log file (%s): %s\n Sending access log messages to standard output instead.", filename, err)
+		} else {
+			l.file = logfile
 		}
 	}
+	if l.file == nil {
+		l.file = os.Stdout
+	}
+
+	l.csv = csv.NewWriter(l.file)
+
+	return l
+}
+
+func (l *CSVLog) Log(data []string) {
+	l.csv.Write(data)
+	l.csv.Flush()
+}
+
+func (l *CSVLog) Close() {
+	if l.file == os.Stdout {
+		return
+	}
+	l.file.Close()
 }
 
 // logAccess generates a log entry and sends it on logChan to be written.

@@ -174,24 +174,6 @@ func loadCategory(dirname string) (c *category, err error) {
 // them to URLRules and phraseRules.
 func (cf *config) collectRules() {
 	for _, c := range cf.Categories {
-		allIgnored := c.action == IGNORE
-		if a, ok := cf.groupActions[""][c.name]; ok {
-			allIgnored = a == IGNORE
-		}
-		if allIgnored {
-			for _, actionMap := range cf.groupActions {
-				if a, ok := actionMap[c.name]; ok && a != IGNORE {
-					allIgnored = false
-					break
-				}
-			}
-			if allIgnored {
-				// Don't bother to collect rules in categories that are always ignored.
-				delete(cf.Categories, c.name)
-				continue
-			}
-		}
-
 		for rule, _ := range c.weights {
 			if rule.t == contentPhrase {
 				cf.ContentPhraseList.addPhrase(rule.content)
@@ -288,4 +270,20 @@ func (cf *config) blockedCategories(scores map[string]int, filterGroup string) [
 	}
 
 	return sortedKeys(blocked)
+}
+
+// significantCategories returns a list of categories whose score is over the
+// threshold, sorted from highest to lowest.
+func (cf *config) significantCategories(scores map[string]int) []string {
+	for k, v := range scores {
+		if v < cf.Threshold {
+			delete(scores, k)
+		}
+	}
+
+	if len(scores) == 0 {
+		return nil
+	}
+
+	return sortedKeys(scores)
 }

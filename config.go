@@ -34,6 +34,9 @@ type config struct {
 	Threshold         int
 	URLRules          *URLMatcher
 
+	ACLs       ACLDefinitions
+	ACLActions []ACLActionRule
+
 	PIDFile string
 	TestURL string
 
@@ -61,8 +64,6 @@ type config struct {
 	Authenticators []func(user, password string) bool
 	Passwords      map[string]string
 	PasswordLock   sync.RWMutex
-	AuthAlways     bool
-	AuthNever      bool
 
 	whichGroup   map[string]string
 	groupRanges  []rangeToGroup
@@ -93,7 +94,7 @@ func loadConfiguration() (*config, error) {
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
-	c.flags.BoolVar(&c.AuthAlways, "always-require-auth", false, "require authentication even for LAN users")
+	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.loadACLs)
 	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
 	c.newActiveFlag("blockpage", "/etc/redwood/block.html", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
@@ -101,7 +102,6 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
-	c.flags.BoolVar(&c.AuthNever, "disable-auth", false, "never require authentication")
 	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
 	c.newActiveFlag("group", "", "assign a user to a filter group (--group 'group-name user-name')", c.assignGroupMember)
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)

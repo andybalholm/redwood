@@ -50,13 +50,29 @@ func send407(w http.ResponseWriter) {
 // If so, it returns the username. If not, it generates an HTTP 407 response
 // and returns the empty string.
 func authenticate(w http.ResponseWriter, r *http.Request) string {
-	auth := r.Header.Get("Proxy-Authorization")
-	if auth == "" || !strings.HasPrefix(auth, "Basic ") {
+	user, password := ProxyCredentials(r)
+	if user == "" || password == "" {
 		send407(w)
 		return ""
 	}
 
 	conf := getConfig()
+	if conf.ValidCredentials(user, password) {
+		return user
+	}
+
+	send407(w)
+	return ""
+}
+
+// ProxyCredentials returns the username and password from r's
+// Proxy-Authorization header, or empty strings if the header is missing or
+// invalid.
+func ProxyCredentials(r *http.Request) (user, pass string) {
+	auth := r.Header.Get("Proxy-Authorization")
+	if auth == "" || !strings.HasPrefix(auth, "Basic ") {
+		return "", ""
+	}
 
 	auth = auth[len("Basic "):]
 	auth = strings.TrimSpace(auth)
@@ -64,30 +80,25 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 	buf := make([]byte, enc.DecodedLen(len(auth)))
 	n, err := enc.Decode(buf, []byte(auth))
 	if err != nil {
-		send407(w)
-		return ""
+		return "", ""
 	}
 	auth = string(buf[:n])
 
 	colon := strings.Index(auth, ":")
 	if colon == -1 {
-		send407(w)
-		return ""
+		return "", ""
 	}
 
-	user := auth[:colon]
-	password := auth[colon+1:]
+	return auth[:colon], auth[colon+1:]
+}
 
-	if password == "" {
-		send407(w)
-		return ""
-	}
-
+// ValidCredentials returns whether user and password are a valid combination.
+func (conf *config) ValidCredentials(user, password string) bool {
 	conf.PasswordLock.RLock()
-	ok := password == conf.Passwords[user]
+	ok := password == conf.Passwords[user] && password != ""
 	conf.PasswordLock.RUnlock()
 	if ok {
-		return user
+		return true
 	}
 
 	for _, a := range conf.Authenticators {
@@ -98,12 +109,10 @@ func authenticate(w http.ResponseWriter, r *http.Request) string {
 				conf.Passwords[user] = password
 				conf.PasswordLock.Unlock()
 			}
-			return user
+			return true
 		}
 	}
-
-	send407(w)
-	return ""
+	return false
 }
 
 func (cf *config) startAuthHelper(cmd string) error {

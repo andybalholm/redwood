@@ -110,11 +110,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "block":
 		conf.showBlockPageACL(w, r, user, tally, scores, rule)
-		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
+		logAccessACL(r, nil, 0, false, user, tally, scores, rule)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
+		logAccessACL(r, nil, 0, false, user, tally, scores, rule)
 		return
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
@@ -145,7 +145,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
+		logAccessACL(r, nil, 0, false, user, tally, scores, rule)
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
@@ -204,36 +204,47 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	r.URL.Opaque = ""
 
-	sc := scorecard{
-		tally: tally,
-	}
-	sc.calculate(user, conf)
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		conf.logAccess(r, nil, sc, "", 0, false, user)
+		logAccessACL(r, nil, 0, false, user, tally, scores, rule)
 		return
 	}
 	defer resp.Body.Close()
 
-	contentType, action := conf.checkContentType(resp)
+	fixContentType(resp)
 
-	switch action {
-	case BLOCK:
-		sc.action = BLOCK
-		sc.blocked = []string{"blocked-mime"}
-		conf.showBlockPage(w, r, &sc, user)
-		conf.logAccess(r, resp, sc, contentType, 0, false, user)
-		return
+	respACLs := conf.ACLs.responseACLs(resp)
+	acls := unionACLSets(reqACLs, respACLs)
+	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "phrase-scan")
+	if rule.Action == "" {
+		rule.Action = "allow"
+	}
 
-	case ALLOW:
-		sc.action = IGNORE
+	switch rule.Action {
+	case "allow":
 		copyResponseHeader(w, resp)
-		io.Copy(w, resp.Body)
-		conf.logAccess(r, resp, sc, contentType, 0, false, user)
+		n, err := io.Copy(w, resp.Body)
+		if err != nil {
+			log.Printf("Error while copying response body from %v: %v", r.URL, err)
+		}
+		logAccessACL(r, resp, int(n), false, user, tally, scores, rule)
+		return
+	case "block":
+		conf.showBlockPageACL(w, r, user, tally, scores, rule)
+		logAccessACL(r, resp, 0, false, user, tally, scores, rule)
+		return
+	case "block-invisible":
+		showInvisibleBlock(w)
+		logAccessACL(r, resp, 0, false, user, tally, scores, rule)
 		return
 	}
+
+	sc := scorecard{
+		tally: tally,
+	}
+	sc.calculate(user, conf)
+	contentType := resp.Header.Get("Content-Type")
 
 	lr := &io.LimitedReader{
 		R: resp.Body,

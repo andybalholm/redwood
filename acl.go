@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
+	ContentTypes    map[string][]string
 	Methods         map[string][]string
 	UserIPAddresses map[string][]string
 	UserIPRanges    []rangeToGroup
@@ -34,6 +36,14 @@ func (a *ACLDefinitions) AddRule(acl string, rule []string) error {
 	args := rule[1:]
 
 	switch keyword {
+	case "content-type":
+		if a.ContentTypes == nil {
+			a.ContentTypes = make(map[string][]string)
+		}
+		for _, ct := range args {
+			a.ContentTypes[ct] = append(a.ContentTypes[ct], acl)
+		}
+
 	case "method":
 		if a.Methods == nil {
 			a.Methods = make(map[string][]string)
@@ -112,7 +122,7 @@ func (c *config) loadACLs(filename string) error {
 				log.Printf("Error at %s, line %d: %v", filename, lineNo, err)
 			}
 
-		case "allow", "block", "block-invisible", "ignore-category", "require-auth", "ssl-bump":
+		case "allow", "block", "block-invisible", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
 			r := ACLActionRule{Action: action}
 			for _, a := range args {
 				if strings.HasPrefix(a, "!") {
@@ -156,6 +166,29 @@ func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
 
 	for _, a := range a.Methods[r.Method] {
 		acls[a] = true
+	}
+
+	return acls
+}
+
+// responseACLs returns the set of ACLs that apply to resp.
+func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
+	acls := make(map[string]bool)
+
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		if ct2, _, err := mime.ParseMediaType(ct); err != nil {
+			ct = ct2
+		}
+		for _, acl := range a.ContentTypes[ct] {
+			acls[acl] = true
+		}
+		slash := strings.Index(ct, "/")
+		if slash != -1 {
+			generic := ct[:slash+1] + "*"
+			for _, acl := range a.ContentTypes[generic] {
+				acls[acl] = true
+			}
+		}
 	}
 
 	return acls
@@ -222,6 +255,18 @@ func copyACLSet(a map[string]bool) map[string]bool {
 	for k, v := range a {
 		if v {
 			b[k] = true
+		}
+	}
+	return b
+}
+
+func unionACLSets(sets ...map[string]bool) map[string]bool {
+	b := make(map[string]bool)
+	for _, a := range sets {
+		for k, v := range a {
+			if v {
+				b[k] = true
+			}
 		}
 	}
 	return b

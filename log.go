@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"strings"
@@ -73,7 +74,7 @@ func (c *config) logAccess(req *http.Request, resp *http.Response, sc scorecard,
 }
 
 // logAccessACL is like logAccess, but for requests processed with ACLs.
-func logAccessACL(req *http.Request, resp *http.Response, contentType string, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+func logAccessACL(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	modified := ""
 	if pruned {
 		modified = "pruned"
@@ -86,6 +87,14 @@ func logAccessACL(req *http.Request, resp *http.Response, contentType string, co
 
 	if rule.Action == "" {
 		rule.Action = "allow"
+	}
+
+	var contentType string
+	if resp != nil {
+		contentType = resp.Header.Get("Content-Type")
+	}
+	if ct2, _, err := mime.ParseMediaType(contentType); err != nil {
+		contentType = ct2
 	}
 
 	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions())

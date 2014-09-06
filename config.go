@@ -58,8 +58,6 @@ type config struct {
 	TLSCert       tls.Certificate
 	ParsedTLSCert *x509.Certificate
 	TLSReady      bool
-	TLSBypass     *HostList
-	TLSBumpOnly   *HostList
 
 	Authenticators []func(user, password string) bool
 	Passwords      map[string]string
@@ -78,7 +76,6 @@ type config struct {
 func loadConfiguration() (*config, error) {
 	c := &config{
 		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
-		TLSBypass:         NewHostList(),
 		URLRules:          newURLMatcher(),
 		whichGroup:        map[string]string{},
 		groupActions:      map[string]map[string]action{},
@@ -111,8 +108,6 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")
 	c.flags.StringVar(&c.TestURL, "test", "", "URL to test instead of running proxy server")
 	c.flags.IntVar(&c.Threshold, "threshold", 0, "minimum score for a blocked category to block a page")
-	c.newActiveFlag("tls-bypass", "", "path to list of sites that bypass SSLBump", c.TLSBypass.Load)
-	c.newActiveFlag("tls-bump-only", "", "path to a list of the only sites that should be SSLBumped", c.loadTlsBumpOnly)
 	c.flags.StringVar(&c.CertFile, "tls-cert", "", "path to certificate for serving HTTPS")
 	c.flags.StringVar(&c.KeyFile, "tls-key", "", "path to TLS certificate key")
 	c.flags.StringVar(&c.TLSLog, "tls-log", "", "path to tls log file")

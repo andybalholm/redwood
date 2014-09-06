@@ -84,6 +84,10 @@ func logAccessACL(req *http.Request, resp *http.Response, contentType string, co
 		status = resp.StatusCode
 	}
 
+	if rule.Action == "" {
+		rule.Action = "allow"
+	}
+
 	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions())
 }
 

@@ -223,55 +223,6 @@ func (cf *config) categoryScores(tally map[rule]int) map[string]int {
 	return scores
 }
 
-// blockedCategories returns a list of categories that would cause a page to be blocked.
-// The keys of scores are category names, and the values are the number of points scored.
-func (cf *config) blockedCategories(scores map[string]int, filterGroup string) []string {
-	if len(scores) == 0 {
-		return nil
-	}
-
-	blocked := make(map[string]int)
-	maxAllowed := 0 // highest score of any category with action ALLOW
-	for name, s := range scores {
-		c := cf.Categories[name]
-		if s > 0 {
-			a := c.action
-			if a1, ok := cf.groupActions[""][name]; ok {
-				// Apply the default rules first.
-				a = a1
-			}
-			if a1, ok := cf.groupActions[filterGroup][name]; ok {
-				// Then override with the ones specific to the group.
-				a = a1
-			}
-			switch a {
-			case ALLOW:
-				if s > maxAllowed {
-					maxAllowed = s
-
-					// If any categories on the blocked list have lower scores, remove them.
-					for bn, bs := range blocked {
-						if bs <= s {
-							delete(blocked, bn)
-						}
-					}
-				}
-
-			case BLOCK:
-				if s > maxAllowed && s > cf.Threshold {
-					blocked[name] = s
-				}
-			}
-		}
-	}
-
-	if len(blocked) == 0 {
-		return nil
-	}
-
-	return sortedKeys(blocked)
-}
-
 // significantCategories returns a list of categories whose score is over the
 // threshold, sorted from highest to lowest.
 func (cf *config) significantCategories(scores map[string]int) []string {

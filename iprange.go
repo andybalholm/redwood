@@ -2,33 +2,10 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"strings"
 )
-
-// Filter groups—different rules for different groups of users.
-
-// WhichGroup returns the group name for a username or IP address.
-func (c *config) WhichGroup(user string) string {
-	if g, ok := c.whichGroup[user]; ok {
-		return g
-	}
-
-	ip := net.ParseIP(user)
-	if ip == nil {
-		return ""
-	}
-
-	for _, gr := range c.groupRanges {
-		if gr.r.Contains(ip) {
-			return gr.group
-		}
-	}
-
-	return ""
-}
 
 // An IPRange represents a range of IP addresses.
 type IPRange struct {
@@ -124,55 +101,4 @@ func (r IPRange) Contains(addr net.IP) bool {
 type rangeToGroup struct {
 	r     IPRange
 	group string
-}
-
-// assignGroupMember assigns users to a filter group. s contains the group name and a
-// space-separated list of users (either IP addresses or usernames).
-func (c *config) assignGroupMember(s string) error {
-	space := strings.Index(s, " ")
-	if space == -1 {
-		return fmt.Errorf("invalid group assignment '%s': must be at least 2 words (group name and user)", s)
-	}
-	group := s[:space]
-	s = strings.TrimSpace(s[space:])
-
-	for _, user := range strings.Split(s, " ") {
-		if user == "" {
-			continue
-		}
-		if strings.ContainsAny(user, "/-") {
-			r, err := ParseIPRange(user)
-			if err != nil {
-				log.Println(err)
-				continue
-			}
-			c.groupRanges = append(c.groupRanges, rangeToGroup{r, group})
-		} else {
-			c.whichGroup[user] = group
-		}
-	}
-
-	return nil
-}
-
-// assignGroupAction assigns an action to a group/category combination (in s).
-// The category comes first, than a space, then the group. If no group is
-// specified, the default group is used.
-func (c *config) assignGroupAction(s string, a action) error {
-	group := ""
-	space := strings.Index(s, " ")
-	if space != -1 {
-		group = strings.TrimSpace(s[space:])
-		s = s[:space]
-	}
-	category := s
-
-	actions := c.groupActions[group]
-	if actions == nil {
-		actions = make(map[string]action)
-		c.groupActions[group] = actions
-	}
-
-	actions[category] = a
-	return nil
 }

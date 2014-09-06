@@ -194,7 +194,7 @@ func SSLBump(conn net.Conn, serverAddr, user, credentials string) {
 	}
 
 	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
-	logAccessACL(cr, nil, "", 0, false, user, tally, scores, rule)
+	logAccessACL(cr, nil, 0, false, user, tally, scores, rule)
 	switch rule.Action {
 	case "allow", "":
 		connectDirect(conn, serverAddr, clientHello)

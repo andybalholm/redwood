@@ -30,7 +30,6 @@ type config struct {
 	ContentPhraseList phraseList
 	CountOnce         bool
 	DisableGZIP       bool
-	MIMEActions       map[string]action
 	Threshold         int
 	URLRules          *URLMatcher
 
@@ -79,7 +78,6 @@ func loadConfiguration() (*config, error) {
 		URLRules:          newURLMatcher(),
 		whichGroup:        map[string]string{},
 		groupActions:      map[string]map[string]action{},
-		MIMEActions:       map[string]action{},
 		PruneActions:      map[rule]cascadia.Selector{},
 		PruneMatcher:      newURLMatcher(),
 		QueryChanges:      map[rule]url.Values{},
@@ -120,19 +118,6 @@ func loadConfiguration() (*config, error) {
 	})
 	c.newActiveFlag("allow", "", "allow a category for a filter group (--allow 'category group')", func(s string) error {
 		return c.assignGroupAction(s, ALLOW)
-	})
-
-	c.newActiveFlag("mime-allow", "", "content type to allow without phrase scan", func(t string) error {
-		c.MIMEActions[t] = ALLOW
-		return nil
-	})
-	c.newActiveFlag("mime-filter", "", "content type to filter", func(t string) error {
-		c.MIMEActions[t] = FILTER
-		return nil
-	})
-	c.newActiveFlag("mime-block", "", "content type to block", func(t string) error {
-		c.MIMEActions[t] = BLOCK
-		return nil
 	})
 
 	c.newActiveFlag("http-proxy", "", "address (host:port) to listen for proxy connections on", func(s string) error {

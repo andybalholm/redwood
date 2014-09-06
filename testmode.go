@@ -78,7 +78,7 @@ func runURLTest(u string) {
 
 	fmt.Println()
 
-	contentType, action := conf.checkContentType(resp)
+	/*contentType, action := conf.checkContentType(resp)
 	switch action {
 	case ALLOW:
 		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
@@ -86,7 +86,8 @@ func runURLTest(u string) {
 	case BLOCK:
 		fmt.Println("The content has a banned MIME type:", contentType)
 		return
-	}
+	}*/
+	contentType := resp.Header.Get("Content-Type")
 
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {

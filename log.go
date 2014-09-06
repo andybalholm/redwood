@@ -72,6 +72,21 @@ func (c *config) logAccess(req *http.Request, resp *http.Response, sc scorecard,
 	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, sc.action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(sc.tally)), listTally(sc.scores), strings.Join(sc.blocked, ", "))
 }
 
+// logAccessACL is like logAccess, but for requests processed with ACLs.
+func logAccessACL(req *http.Request, resp *http.Response, contentType string, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+	modified := ""
+	if pruned {
+		modified = "pruned"
+	}
+
+	status := 0
+	if resp != nil {
+		status = resp.StatusCode
+	}
+
+	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions())
+}
+
 func logTLS(user, serverAddr, serverName string, err error) {
 	errStr := ""
 	if err != nil {

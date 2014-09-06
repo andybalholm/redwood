@@ -31,31 +31,6 @@ type proxyHandler struct {
 	rt http.RoundTripper
 }
 
-// lanAddress returns whether addr is in one of the LAN address ranges.
-func lanAddress(addr string) bool {
-	ip := net.ParseIP(addr)
-	if ip4 := ip.To4(); ip4 != nil {
-		switch ip4[0] {
-		case 10, 127:
-			return true
-		case 172:
-			return ip4[1]&0xf0 == 16
-		case 192:
-			return ip4[1] == 168
-		}
-		return false
-	}
-
-	if ip[0]&0xfe == 0xfc {
-		return true
-	}
-	if ip[0] == 0xfe && (ip[1]&0xfc) == 0x80 {
-		return true
-	}
-
-	return false
-}
-
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
@@ -67,6 +42,25 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Header.Get("Proxy-Authorization") != "" {
+		if !conf.ValidCredentials(ProxyCredentials(r)) {
+			send407(w)
+			return
+		}
+	}
+
+	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
+	if r.URL.Host == "" {
+		r.URL.Host = r.Host
+	}
+	if r.URL.Scheme == "" {
+		if h.TLS {
+			r.URL.Scheme = "https"
+		} else {
+			r.URL.Scheme = "http"
+		}
+	}
+
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {
@@ -76,12 +70,38 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.user != "" {
 		user = h.user
-	} else if !conf.AuthNever && !h.TLS && (conf.AuthAlways || !lanAddress(client)) {
-		u := authenticate(w, r)
-		if u == "" {
-			return
-		}
+	} else if u, _ := ProxyCredentials(r); u != "" {
 		user = u
+	}
+
+	tally := conf.URLRules.MatchingRules(r.URL)
+	scores := conf.categoryScores(tally)
+	categories := conf.significantCategories(scores)
+
+	reqACLs := conf.ACLs.requestACLs(r)
+
+	possibleActions := []string{
+		"allow",
+		"block",
+		"block-invisible",
+	}
+	if r.Header.Get("Proxy-Authorization") == "" && !h.TLS {
+		possibleActions = append(possibleActions, "require-auth")
+	}
+
+	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	switch rule.Action {
+	case "require-auth":
+		send407(w)
+		return
+	case "block":
+		conf.showBlockPageACL(w, r, user, tally, scores, rule)
+		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
+		return
+	case "block-invisible":
+		showInvisibleBlock(w)
+		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
+		return
 	}
 
 	if r.Host == localServer {
@@ -134,18 +154,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 	r.Header.Del("Accept-Encoding")
-
-	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
-	if r.URL.Host == "" {
-		r.URL.Host = r.Host
-	}
-	if r.URL.Scheme == "" {
-		if h.TLS {
-			r.URL.Scheme = "https"
-		} else {
-			r.URL.Scheme = "http"
-		}
-	}
 
 	sc := scorecard{
 		tally: conf.URLRules.MatchingRules(r.URL),

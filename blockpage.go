@@ -73,3 +73,28 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, sc *score
 		log.Println("Error filling in block page template:", err)
 	}
 }
+
+// showBlockPageACL shows a block page for a page that was blocked by an ACL.
+func (c *config) showBlockPageACL(w http.ResponseWriter, r *http.Request, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+	data := blockData{
+		URL:        r.URL.String(),
+		Categories: rule.Conditions(),
+		User:       user,
+		Tally:      listTally(stringTally(tally)),
+		Scores:     listTally(scores),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+
+	err := c.BlockTemplate.Execute(w, data)
+	if err != nil {
+		log.Println("Error filling in block page template:", err)
+	}
+}
+
+// showInvisibleBlock blocks the request with an invisible image.
+func showInvisibleBlock(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "image/gif")
+	w.WriteHeader(http.StatusForbidden)
+	fmt.Fprint(w, transparent1x1)
+}

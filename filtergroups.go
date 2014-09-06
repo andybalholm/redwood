@@ -42,6 +42,18 @@ func (r IPRange) String() string {
 // ParseIPRange parses s as an IP address range. It accepts ranges in the following forms:
 // "10.1.10.0-10.1.10.255", "10.1.10.0-255", and "10.1.10.0/24".
 func ParseIPRange(s string) (r IPRange, err error) {
+	defer func() {
+		// Make sure the IPv4 addresses are in 4-byte form.
+		if r.first != nil && r.last != nil {
+			if f4 := r.first.To4(); f4 != nil {
+				r.first = f4
+			}
+			if f4 := r.last.To4(); f4 != nil {
+				r.last = f4
+			}
+		}
+	}()
+
 	_, n, err := net.ParseCIDR(s)
 	if err == nil {
 		r.first = n.IP
@@ -84,6 +96,9 @@ func ParseIPRange(s string) (r IPRange, err error) {
 }
 
 func (r IPRange) Contains(addr net.IP) bool {
+	if a4 := addr.To4(); a4 != nil {
+		addr = a4
+	}
 	if len(addr) != len(r.first) {
 		return false
 	}

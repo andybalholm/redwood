@@ -1,0 +1,258 @@
+package main
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+)
+
+// Access Control Lists (ACLs)
+
+// An ACLDefinitions object contains information about how to assign ACLs to a
+// request.
+type ACLDefinitions struct {
+	UserIPAddresses map[string][]string
+	UserIPRanges    []rangeToGroup
+	UserNames       map[string][]string
+}
+
+var errEmptyACLRule = errors.New("empty ACL rule")
+
+// AddRule adds a rule to an ACL.
+func (a *ACLDefinitions) AddRule(acl string, rule []string) error {
+	if len(rule) == 0 {
+		return errEmptyACLRule
+	}
+
+	keyword := rule[0]
+	args := rule[1:]
+
+	switch keyword {
+	case "user-ip":
+		if a.UserIPAddresses == nil {
+			a.UserIPAddresses = make(map[string][]string)
+		}
+		for _, addr := range args {
+			if ip := net.ParseIP(addr); ip != nil {
+				s := ip.String()
+				a.UserIPAddresses[s] = append(a.UserIPAddresses[s], acl)
+				continue
+			}
+			r, err := ParseIPRange(addr)
+			if err != nil {
+				return fmt.Errorf("invalid IP address or range: %s", addr)
+			}
+			a.UserIPRanges = append(a.UserIPRanges, rangeToGroup{r, acl})
+		}
+
+	case "user-name":
+		if a.UserNames == nil {
+			a.UserNames = make(map[string][]string)
+		}
+		for _, name := range args {
+			a.UserNames[name] = append(a.UserNames[name], acl)
+		}
+
+	default:
+		return fmt.Errorf("unknown ACL rule keyword: %s", keyword)
+	}
+
+	return nil
+}
+
+// loadACLs loads ACL definitions and actions from a file.
+func (c *config) loadACLs(filename string) error {
+	f, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := scanner.Text()
+		words := strings.Fields(line)
+		for i, w := range words {
+			if strings.HasPrefix(w, "#") {
+				words = words[:i]
+				break
+			}
+		}
+		if len(words) == 0 {
+			continue
+		}
+		action := words[0]
+		args := words[1:]
+
+		switch action {
+		case "acl":
+			// Define an ACL.
+			if len(args) < 2 {
+				log.Printf("Incomplete ACL definition at %s, line %d", filename, lineNo)
+				continue
+			}
+			err = c.ACLs.AddRule(args[0], args[1:])
+			if err != nil {
+				log.Printf("Error at %s, line %d: %v", filename, lineNo, err)
+			}
+
+		case "allow", "block", "block-invisible", "ignore-category", "require-auth":
+			r := ACLActionRule{Action: action}
+			for _, a := range args {
+				if strings.HasPrefix(a, "!") {
+					r.Disallowed = append(r.Disallowed, a[1:])
+				} else {
+					r.Needed = append(r.Needed, a)
+				}
+			}
+			c.ACLActions = append(c.ACLActions, r)
+
+		default:
+			log.Printf("Invalid ACL action at %s, line %d: %s", filename, lineNo, action)
+		}
+	}
+
+	return scanner.Err()
+}
+
+// requestACLs returns the set of ACLs that apply to r.
+func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
+	acls := make(map[string]bool)
+
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		if ip := net.ParseIP(host); ip != nil {
+			for _, a := range a.UserIPAddresses[ip.String()] {
+				acls[a] = true
+			}
+			for _, r := range a.UserIPRanges {
+				if r.r.Contains(ip) {
+					acls[r.group] = true
+				}
+			}
+		}
+	}
+
+	if user, _ := ProxyCredentials(r); user != "" {
+		for _, a := range a.UserNames[user] {
+			acls[a] = true
+		}
+	}
+
+	return acls
+}
+
+// An ACLActionRule specifies an action that will be performed if a request
+// belongs to a certain set of ACLs.
+type ACLActionRule struct {
+	// Action is the name of the action that will be taken.
+	Action string
+
+	// Needed is a list of ACLs that the request must belong to.
+	Needed []string
+
+	// Disallowed is a list of ACLs that the request must not belong to.
+	Disallowed []string
+}
+
+// Conditions returns a string summarizing r's conditions.
+func (r ACLActionRule) Conditions() string {
+	var desc []string
+	for _, a := range r.Needed {
+		desc = append(desc, a)
+	}
+	for _, a := range r.Disallowed {
+		desc = append(desc, "!"+a)
+	}
+	return strings.Join(desc, " ")
+}
+
+// ChooseACLAction returns the first ACL action rule that
+// matches acls and has an action in actions. If no rule matches, it returns
+// a blank rule.
+func (c *config) ChooseACLAction(acls map[string]bool, actions ...string) ACLActionRule {
+	choices := make(map[string]bool, len(actions))
+	for _, a := range actions {
+		choices[a] = true
+	}
+
+ruleLoop:
+	for _, r := range c.ACLActions {
+		if !choices[r.Action] {
+			continue ruleLoop
+		}
+
+		for _, a := range r.Needed {
+			if !acls[a] {
+				continue ruleLoop
+			}
+		}
+		for _, a := range r.Disallowed {
+			if acls[a] {
+				continue ruleLoop
+			}
+		}
+		return r
+	}
+
+	return ACLActionRule{}
+}
+
+func copyACLSet(a map[string]bool) map[string]bool {
+	b := make(map[string]bool)
+	for k, v := range a {
+		if v {
+			b[k] = true
+		}
+	}
+	return b
+}
+
+// ChooseACLCategoryAction is like ChooseACLAction, except that it also takes
+// a list of categories. The first category in the list is added to the set of
+// ACLs. If the result is empty, the default action for that category will be
+// used. Then if the result is "ignore-category", the process will be repeated
+// with the next category in the list. Finally, if all categories are ignored,
+// the process is repeated with just the original set of ACLs.
+func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []string, actions ...string) ACLActionRule {
+	actionsPlus := append(actions, "ignore-category")
+	choices := make(map[string]bool, len(actions))
+	for _, a := range actions {
+		choices[a] = true
+	}
+
+	for _, cat := range categories {
+		aclsPlus := copyACLSet(acls)
+		aclsPlus[cat] = true
+		r := c.ChooseACLAction(aclsPlus, actionsPlus...)
+		if r.Action == "" {
+			cg := c.Categories[cat]
+			r.Needed = []string{cat}
+			switch cg.action {
+			case BLOCK:
+				if cg.invisible && choices["block-invisible"] {
+					r.Action = "block-invisible"
+				} else if choices["block"] {
+					r.Action = "block"
+				}
+			case IGNORE:
+				r.Action = "ignore-category"
+			case ALLOW:
+				if choices["allow"] {
+					r.Action = "allow"
+				}
+			}
+		}
+		if r.Action != "ignore-category" {
+			return r
+		}
+	}
+
+	return c.ChooseACLAction(acls, actions...)
+}

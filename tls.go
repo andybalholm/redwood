@@ -94,8 +94,9 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
-// trying to connect to. user is the name of an already-authenticated user.
-func SSLBump(conn net.Conn, serverAddr, user string) {
+// trying to connect to. user is the username to use for logging. credentials
+// is the user credentials (if any) from the Proxy-Authorization header.
+func SSLBump(conn net.Conn, serverAddr, user, credentials string) {
 	defer func() {
 		if err := recover(); err != nil {
 			buf := make([]byte, 4096)
@@ -169,9 +170,14 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 
 	// Filter a virtual CONNECT request.
 	cr := &http.Request{
-		Method: "CONNECT",
-		Host:   serverName,
-		URL:    &url.URL{Host: serverName},
+		Method:     "CONNECT",
+		Header:     make(http.Header),
+		Host:       serverName,
+		URL:        &url.URL{Host: serverName},
+		RemoteAddr: conn.RemoteAddr().String(),
+	}
+	if credentials != "" {
+		cr.Header.Set("Proxy-Authorization", credentials)
 	}
 
 	tally := conf.URLRules.MatchingRules(cr.URL)

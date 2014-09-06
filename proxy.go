@@ -98,6 +98,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	if r.Method == "CONNECT" && conf.TLSReady && rule.Action == "" {
+		// If the result is unclear, go ahead and start to bump the connection.
+		// The ACLs will be checked one more time anyway.
+		rule.Action = "ssl-bump"
+	}
+
 	switch rule.Action {
 	case "require-auth":
 		send407(w)
@@ -120,7 +126,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		SSLBump(conn, r.URL.Host, user)
+		SSLBump(conn, r.URL.Host, user, r.Header.Get("Proxy-Authorization"))
 		return
 	}
 

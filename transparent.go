@@ -66,7 +66,7 @@ func runTransparentServer(addr string) error {
 			continue
 		}
 
-		go SSLBump(conn, serverAddr.String(), user)
+		go SSLBump(conn, serverAddr.String(), user, "")
 	}
 
 	panic("unreachable")

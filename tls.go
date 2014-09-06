@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -168,23 +167,34 @@ func SSLBump(conn net.Conn, serverAddr, user string) {
 		}
 	}
 
-	if conf.TLSBypass.Contains(serverName) {
-		logTLS(user, serverAddr, serverName, errors.New("site bypass"))
+	// Filter a virtual CONNECT request.
+	cr := &http.Request{
+		Method: "CONNECT",
+		Host:   serverName,
+		URL:    &url.URL{Host: serverName},
+	}
+
+	tally := conf.URLRules.MatchingRules(cr.URL)
+	scores := conf.categoryScores(tally)
+	categories := conf.significantCategories(scores)
+	reqACLs := conf.ACLs.requestACLs(cr)
+
+	possibleActions := []string{
+		"allow",
+		"block",
+	}
+	if conf.TLSReady {
+		possibleActions = append(possibleActions, "ssl-bump")
+	}
+
+	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	logAccessACL(cr, nil, "", 0, false, user, tally, scores, rule)
+	switch rule.Action {
+	case "allow", "":
 		connectDirect(conn, serverAddr, clientHello)
 		return
-	}
-	if !conf.TLSReady || (conf.TLSBumpOnly != nil && !conf.TLSBumpOnly.Contains(serverName)) {
-		// Do hostname filtering; if the host is allowed, let the client connect directly.
-		u := &url.URL{Host: serverName}
-		sc := scorecard{tally: conf.URLRules.MatchingRules(u)}
-		sc.calculate(user, conf)
-		req, _ := http.NewRequest("CONNECT", u.String(), nil)
-		conf.logAccess(req, nil, sc, "", 0, false, user)
-		if sc.action == BLOCK {
-			conn.Close()
-		} else {
-			connectDirect(conn, serverAddr, clientHello)
-		}
+	case "block":
+		conn.Close()
 		return
 	}
 
@@ -585,11 +595,4 @@ func getServerNameAtAddress(addr string) string {
 	state := conn.ConnectionState()
 	serverCert := state.PeerCertificates[0]
 	return serverCert.Subject.CommonName
-}
-
-func (c *config) loadTlsBumpOnly(filename string) error {
-	if c.TLSBumpOnly == nil {
-		c.TLSBumpOnly = NewHostList()
-	}
-	return c.TLSBumpOnly.Load(filename)
 }

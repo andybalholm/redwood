@@ -16,6 +16,7 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
+	Methods         map[string][]string
 	UserIPAddresses map[string][]string
 	UserIPRanges    []rangeToGroup
 	UserNames       map[string][]string
@@ -33,6 +34,14 @@ func (a *ACLDefinitions) AddRule(acl string, rule []string) error {
 	args := rule[1:]
 
 	switch keyword {
+	case "method":
+		if a.Methods == nil {
+			a.Methods = make(map[string][]string)
+		}
+		for _, m := range args {
+			a.Methods[m] = append(a.Methods[m], acl)
+		}
+
 	case "user-ip":
 		if a.UserIPAddresses == nil {
 			a.UserIPAddresses = make(map[string][]string)
@@ -103,7 +112,7 @@ func (c *config) loadACLs(filename string) error {
 				log.Printf("Error at %s, line %d: %v", filename, lineNo, err)
 			}
 
-		case "allow", "block", "block-invisible", "ignore-category", "require-auth":
+		case "allow", "block", "block-invisible", "ignore-category", "require-auth", "ssl-bump":
 			r := ACLActionRule{Action: action}
 			for _, a := range args {
 				if strings.HasPrefix(a, "!") {
@@ -143,6 +152,10 @@ func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
 		for _, a := range a.UserNames[user] {
 			acls[a] = true
 		}
+	}
+
+	for _, a := range a.Methods[r.Method] {
+		acls[a] = true
 	}
 
 	return acls

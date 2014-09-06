@@ -61,6 +61,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if realHost, ok := conf.VirtualHosts[r.Host]; ok {
+		r.Host = realHost
+		r.URL.Host = realHost
+	}
+
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {
@@ -88,6 +93,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Proxy-Authorization") == "" && !h.TLS {
 		possibleActions = append(possibleActions, "require-auth")
 	}
+	if r.Method == "CONNECT" && conf.TLSReady {
+		possibleActions = append(possibleActions, "ssl-bump")
+	}
 
 	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
 	switch rule.Action {
@@ -102,31 +110,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		showInvisibleBlock(w)
 		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
 		return
-	}
-
-	if r.Host == localServer {
-		conf.ServeMux.ServeHTTP(w, r)
-		return
-	}
-
-	if realHost, ok := conf.VirtualHosts[r.Host]; ok {
-		r.Host = realHost
-		r.URL.Host = realHost
-	}
-
-	if r.Method == "CONNECT" {
-		if !conf.TLSReady {
-			sc := scorecard{
-				tally: conf.URLRules.MatchingRules(r.URL),
-			}
-			sc.calculate(user, conf)
-			conf.logAccess(r, nil, sc, "", 0, false, user)
-			if sc.action == BLOCK {
-				conf.showBlockPage(w, r, &sc, user)
-				return
-			}
-		}
-
+	case "ssl-bump":
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			fmt.Fprintln(conn, "HTTP/1.1 500 Internal Server Error")
@@ -136,11 +120,27 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		if conf.TLSReady {
-			SSLBump(conn, r.URL.Host, user)
-		} else {
-			connectDirect(conn, r.URL.Host, nil)
+		SSLBump(conn, r.URL.Host, user)
+		return
+	}
+
+	if r.Host == localServer {
+		conf.ServeMux.ServeHTTP(w, r)
+		return
+	}
+
+	if r.Method == "CONNECT" {
+		conn, err := newHijackedConn(w)
+		if err != nil {
+			fmt.Fprintln(conn, "HTTP/1.1 500 Internal Server Error")
+			fmt.Fprintln(conn)
+			fmt.Fprintln(conn, err)
+			conn.Close()
+			return
 		}
+		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		logAccessACL(r, nil, "", 0, false, user, tally, scores, rule)
+		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
 
@@ -154,16 +154,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 	r.Header.Del("Accept-Encoding")
-
-	sc := scorecard{
-		tally: conf.URLRules.MatchingRules(r.URL),
-	}
-	sc.calculate(user, conf)
-	if sc.action == BLOCK {
-		conf.showBlockPage(w, r, &sc, user)
-		conf.logAccess(r, nil, sc, "", 0, false, user)
-		return
-	}
 
 	urlChanged := conf.changeQuery(r.URL)
 
@@ -207,6 +197,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	r.URL.Opaque = ""
+
+	sc := scorecard{
+		tally: tally,
+	}
+	sc.calculate(user, conf)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)

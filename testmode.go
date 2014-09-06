@@ -32,34 +32,45 @@ func runURLTest(u string) {
 	fmt.Println("URL:", URL)
 	fmt.Println()
 
-	sc := scorecard{
-		tally: conf.URLRules.MatchingRules(URL),
-	}
-	sc.calculate("", conf)
+	tally := conf.URLRules.MatchingRules(URL)
+	scores := conf.categoryScores(tally)
+	categories := conf.significantCategories(scores)
 
-	if len(sc.tally) == 0 {
+	if len(tally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
 		fmt.Println("The following URL rules match:")
-		for s, _ := range sc.tally {
+		for s, _ := range tally {
 			fmt.Println(s)
 		}
 	}
 
-	if len(sc.scores) > 0 {
+	if len(scores) > 0 {
 		fmt.Println()
 		fmt.Println("The request has the following category scores:")
-		printSortedTally(sc.scores)
+		printSortedTally(scores)
 	}
 
-	if len(sc.blocked) > 0 {
+	req := &http.Request{
+		Method: "GET",
+		URL:    URL,
+		Header: make(http.Header),
+	}
+	reqACLs := conf.ACLs.requestACLs(req)
+	if len(reqACLs) > 0 {
 		fmt.Println()
-		fmt.Println("The request is blocked by the following categories:")
-		for _, c := range sc.blocked {
-			fmt.Println(c)
+		fmt.Println("The request matches the following ACLs:")
+		for acl := range reqACLs {
+			fmt.Println(acl)
 		}
-		fmt.Println()
-		fmt.Println("But we'll check the content too anyway.")
+	}
+
+	rule := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "block", "block-invisible")
+	fmt.Println()
+	if rule.Action == "" {
+		fmt.Println("No ACL rule was triggered.")
+	} else {
+		fmt.Println("Triggered rule:", rule.Action, rule.Conditions())
 	}
 
 	if conf.changeQuery(URL) {
@@ -69,24 +80,41 @@ func runURLTest(u string) {
 
 	fmt.Println()
 	fmt.Println("Downloading content...")
-	resp, err := http.Get(URL.String())
+	resp, err := http.DefaultTransport.RoundTrip(req)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	defer resp.Body.Close()
 
+	fmt.Println(resp.Status)
 	fmt.Println()
 
-	/*contentType, action := conf.checkContentType(resp)
-	switch action {
-	case ALLOW:
-		fmt.Println("The content doesn't seem to be text, so not running a phrase scan.")
+	fixContentType(resp)
+	respACLs := conf.ACLs.responseACLs(resp)
+	acls := unionACLSets(reqACLs, respACLs)
+
+	if len(respACLs) > 0 {
+		fmt.Println("The response matches the following ACLs:")
+		for acl := range respACLs {
+			fmt.Println(acl)
+		}
+		fmt.Println()
+	}
+
+	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "phrase-scan")
+
+	if rule.Action == "" {
+		fmt.Println("No ACL rule was triggered.")
+	} else {
+		fmt.Println("Triggered rule:", rule.Action, rule.Conditions())
+	}
+
+	if rule.Action != "phrase-scan" {
 		return
-	case BLOCK:
-		fmt.Println("The content has a banned MIME type:", contentType)
-		return
-	}*/
+	}
+	fmt.Println()
+
 	contentType := resp.Header.Get("Content-Type")
 
 	content, err := ioutil.ReadAll(resp.Body)
@@ -106,28 +134,30 @@ func runURLTest(u string) {
 		fmt.Println()
 	}
 
-	conf.scanContent(content, contentType, cs, sc.tally)
-	sc.calculate("", conf)
+	conf.scanContent(content, contentType, cs, tally)
+	scores = conf.categoryScores(tally)
+	categories = conf.significantCategories(scores)
 
-	if len(sc.tally) == 0 {
+	if len(tally) == 0 {
 		fmt.Println("No content phrases match.")
 	} else {
 		fmt.Println("The following rules match:")
-		printSortedTally(stringTally(sc.tally))
+		printSortedTally(stringTally(tally))
 	}
 
-	if len(sc.scores) > 0 {
+	if len(scores) > 0 {
 		fmt.Println()
 		fmt.Println("The response has the following category scores:")
-		printSortedTally(sc.scores)
+		printSortedTally(scores)
 	}
+	fmt.Println()
 
-	if len(sc.blocked) > 0 {
-		fmt.Println()
-		fmt.Println("The page is blocked by the following categories:")
-		for _, c := range sc.blocked {
-			fmt.Println(c)
-		}
+	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+
+	if rule.Action == "" {
+		fmt.Println("No ACL rule was triggered.")
+	} else {
+		fmt.Println("Triggered rule:", rule.Action, rule.Conditions())
 	}
 }
 

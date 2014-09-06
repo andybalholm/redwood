@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strings"
 )
 
 // Functions for displaying block pages.
@@ -43,39 +42,8 @@ type blockData struct {
 	Scores     string
 }
 
-// showBlockPage sends a page showing that the request was blocked.
-func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, sc *scorecard, user string) {
-	if c.Categories[sc.blocked[0]].invisible {
-		// Serve an invisible image instead of the usual block page.
-		w.Header().Set("Content-Type", "image/gif")
-		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, transparent1x1)
-		return
-	}
-
-	blockDesc := make([]string, len(sc.blocked))
-	for i, name := range sc.blocked {
-		blockDesc[i] = c.Categories[name].description
-	}
-	data := blockData{
-		URL:        r.URL.String(),
-		Categories: strings.Join(blockDesc, ", "),
-		User:       user,
-		Group:      c.WhichGroup(user),
-		Tally:      listTally(stringTally(sc.tally)),
-		Scores:     listTally(sc.scores),
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusForbidden)
-
-	err := c.BlockTemplate.Execute(w, data)
-	if err != nil {
-		log.Println("Error filling in block page template:", err)
-	}
-}
-
-// showBlockPageACL shows a block page for a page that was blocked by an ACL.
-func (c *config) showBlockPageACL(w http.ResponseWriter, r *http.Request, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+// showBlockPage shows a block page for a page that was blocked by an ACL.
+func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	data := blockData{
 		URL:        r.URL.String(),
 		Categories: rule.Conditions(),

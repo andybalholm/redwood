@@ -8,7 +8,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -54,27 +53,7 @@ func (l *CSVLog) Close() {
 	l.file.Close()
 }
 
-// logAccess generates a log entry and sends it on logChan to be written.
-func (c *config) logAccess(req *http.Request, resp *http.Response, sc scorecard, contentType string, contentLength int, pruned bool, user string) {
-	modified := ""
-	if pruned {
-		modified = "pruned"
-	}
-
-	if group := c.WhichGroup(user); group != "" {
-		user = fmt.Sprintf("%s(%s)", user, group)
-	}
-
-	status := 0
-	if resp != nil {
-		status = resp.StatusCode
-	}
-
-	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, sc.action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(sc.tally)), listTally(sc.scores), strings.Join(sc.blocked, ", "))
-}
-
-// logAccessACL is like logAccess, but for requests processed with ACLs.
-func logAccessACL(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	modified := ""
 	if pruned {
 		modified = "pruned"

@@ -194,7 +194,7 @@ func SSLBump(conn net.Conn, serverAddr, user, credentials string) {
 	}
 
 	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
-	logAccessACL(cr, nil, 0, false, user, tally, scores, rule)
+	logAccess(cr, nil, 0, false, user, tally, scores, rule)
 	switch rule.Action {
 	case "allow", "":
 		connectDirect(conn, serverAddr, clientHello)
@@ -562,43 +562,4 @@ func clientHelloServerName(data []byte) (name string, ok bool) {
 	}
 
 	return "", true
-}
-
-// addressToServerName is a cache of the CN names returned by the HTTPS servers
-// at various addresses.
-var addressToServerName = make(map[string]string)
-var addressToServerNameLock sync.RWMutex
-
-func serverNameAtAddress(addr string) string {
-	addressToServerNameLock.RLock()
-	name, ok := addressToServerName[addr]
-	addressToServerNameLock.RUnlock()
-	if ok {
-		return name
-	}
-
-	name = getServerNameAtAddress(addr)
-	addressToServerNameLock.Lock()
-	addressToServerName[addr] = name
-	addressToServerNameLock.Unlock()
-
-	return name
-}
-
-// getServerNameAtAddress attempts to connect to the server at addr and return
-// the Common Name of its TLS certificate.
-func getServerNameAtAddress(addr string) string {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
-	if err != nil {
-		host, _, err := net.SplitHostPort(addr)
-		if err == nil {
-			return host
-		} else {
-			return addr
-		}
-	}
-	defer conn.Close()
-	state := conn.ConnectionState()
-	serverCert := state.PeerCertificates[0]
-	return serverCert.Subject.CommonName
 }

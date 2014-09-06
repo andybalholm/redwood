@@ -3,11 +3,7 @@ package main
 // scanning an HTTP response for phrases
 
 import (
-	"bytes"
-	"compress/gzip"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"strings"
 
 	"code.google.com/p/go.net/html/charset"
@@ -83,36 +79,4 @@ func (conf *config) scanJSContent(content []byte, tally map[rule]int) {
 		}
 		ps.scanByte(' ')
 	}
-}
-
-// responseContent reads the body of an HTTP response into a slice of bytes.
-// It decompresses gzip-encoded responses.
-func responseContent(res *http.Response) []byte {
-	r := res.Body
-	defer r.Close()
-
-	if res.Header.Get("Content-Encoding") == "gzip" {
-		gzContent, err := ioutil.ReadAll(r)
-		if err != nil {
-			log.Printf("error reading gzipped content for %s: %s", res.Request.URL, err)
-			return nil
-		}
-		if len(gzContent) == 0 {
-			// If the compressed content is empty, decompress it to empty content.
-			return nil
-		}
-		gz, err := gzip.NewReader(bytes.NewBuffer(gzContent))
-		if err != nil {
-			log.Printf("could not create gzip decoder for %s: %s", res.Request.URL, err)
-			return nil
-		}
-		defer gz.Close()
-		r = gz
-		res.Header.Del("Content-Encoding")
-	}
-
-	content, _ := ioutil.ReadAll(r)
-	// Deliberately ignore the error. ebay.com searches produce errors, but work.
-
-	return content
 }

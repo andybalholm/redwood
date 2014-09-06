@@ -62,10 +62,6 @@ type config struct {
 	Passwords      map[string]string
 	PasswordLock   sync.RWMutex
 
-	whichGroup   map[string]string
-	groupRanges  []rangeToGroup
-	groupActions map[string]map[string]action
-
 	AccessLog string
 	TLSLog    string
 
@@ -76,8 +72,6 @@ func loadConfiguration() (*config, error) {
 	c := &config{
 		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
 		URLRules:          newURLMatcher(),
-		whichGroup:        map[string]string{},
-		groupActions:      map[string]map[string]action{},
 		PruneActions:      map[rule]cascadia.Selector{},
 		PruneMatcher:      newURLMatcher(),
 		QueryChanges:      map[rule]url.Values{},
@@ -98,7 +92,6 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
-	c.newActiveFlag("group", "", "assign a user to a filter group (--group 'group-name user-name')", c.assignGroupMember)
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
@@ -109,16 +102,6 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.CertFile, "tls-cert", "", "path to certificate for serving HTTPS")
 	c.flags.StringVar(&c.KeyFile, "tls-key", "", "path to TLS certificate key")
 	c.flags.StringVar(&c.TLSLog, "tls-log", "", "path to tls log file")
-
-	c.newActiveFlag("block", "", "block a category for a filter group (--block 'category group')", func(s string) error {
-		return c.assignGroupAction(s, BLOCK)
-	})
-	c.newActiveFlag("ignore", "", "ignore a category for a filter group (--ignore 'category group')", func(s string) error {
-		return c.assignGroupAction(s, IGNORE)
-	})
-	c.newActiveFlag("allow", "", "allow a category for a filter group (--allow 'category group')", func(s string) error {
-		return c.assignGroupAction(s, ALLOW)
-	})
 
 	c.newActiveFlag("http-proxy", "", "address (host:port) to listen for proxy connections on", func(s string) error {
 		c.ProxyAddresses = append(c.ProxyAddresses, s)

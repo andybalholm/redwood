@@ -275,15 +275,17 @@ func (cf *config) blockedCategories(scores map[string]int, filterGroup string) [
 // significantCategories returns a list of categories whose score is over the
 // threshold, sorted from highest to lowest.
 func (cf *config) significantCategories(scores map[string]int) []string {
+	significantScores := make(map[string]int)
+
 	for k, v := range scores {
-		if v < cf.Threshold {
-			delete(scores, k)
+		if v >= cf.Threshold {
+			significantScores[k] = v
 		}
 	}
 
-	if len(scores) == 0 {
+	if len(significantScores) == 0 {
 		return nil
 	}
 
-	return sortedKeys(scores)
+	return sortedKeys(significantScores)
 }

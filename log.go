@@ -93,7 +93,7 @@ func logAccessACL(req *http.Request, resp *http.Response, contentLength int, pru
 	if resp != nil {
 		contentType = resp.Header.Get("Content-Type")
 	}
-	if ct2, _, err := mime.ParseMediaType(contentType); err != nil {
+	if ct2, _, err := mime.ParseMediaType(contentType); err == nil {
 		contentType = ct2
 	}
 

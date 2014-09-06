@@ -212,6 +212,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	originalContentType := resp.Header.Get("Content-Type")
 	fixContentType(resp)
 
 	respACLs := conf.ACLs.responseACLs(resp)
@@ -223,10 +224,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch rule.Action {
 	case "allow":
+		resp.Header.Set("Content-Type", originalContentType)
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
 		if err != nil {
-			log.Printf("Error while copying response body from %v: %v", r.URL, err)
+			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
 		logAccessACL(r, resp, int(n), false, user, tally, scores, rule)
 		return
@@ -240,12 +242,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sc := scorecard{
-		tally: tally,
-	}
-	sc.calculate(user, conf)
-	contentType := resp.Header.Get("Content-Type")
-
 	lr := &io.LimitedReader{
 		R: resp.Body,
 		N: 1e7,
@@ -256,19 +252,20 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)
+		resp.Header.Set("Content-Type", originalContentType)
 		copyResponseHeader(w, resp)
 		w.Write(content)
 		n, err := io.Copy(w, resp.Body)
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		sc.action = IGNORE
-		conf.logAccess(r, resp, sc, contentType, int(n)+len(content), false, user)
+		logAccessACL(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}})
 		return
 	}
 
+	contentType := resp.Header.Get("Content-Type")
 	modified := false
-	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
+	_, cs, _ := charset.DetermineEncoding(content, contentType)
 	if strings.Contains(contentType, "html") {
 		modified = conf.pruneContent(r.URL, &content, cs)
 		if modified {
@@ -277,19 +274,27 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	conf.scanContent(content, contentType, cs, sc.tally)
-	sc.calculate(user, conf)
+	conf.scanContent(content, contentType, cs, tally)
+	scores = conf.categoryScores(tally)
+	categories = conf.significantCategories(scores)
+	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+	if rule.Action == "" {
+		rule.Action = "allow"
+	}
 
-	if sc.action == BLOCK {
-		conf.showBlockPage(w, r, &sc, user)
-		conf.logAccess(r, resp, sc, contentType, len(content), modified, user)
+	switch rule.Action {
+	case "block":
+		conf.showBlockPageACL(w, r, user, tally, scores, rule)
+		logAccessACL(r, resp, len(content), modified, user, tally, scores, rule)
+		return
+	case "block-invisible":
+		showInvisibleBlock(w)
+		logAccessACL(r, resp, len(content), modified, user, tally, scores, rule)
 		return
 	}
 
-	if resp.Header.Get("Content-Type") == "" {
-		// If the server didn't specify a content type, don't let the http
-		// package add one by doing MIME sniffing.
-		resp.Header.Set("Content-Type", "")
+	if !modified {
+		resp.Header.Set("Content-Type", originalContentType)
 	}
 
 	if gzipOK && len(content) > 1000 {
@@ -304,7 +309,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(content)
 	}
 
-	conf.logAccess(r, resp, sc, contentType, len(content), modified, user)
+	logAccessACL(r, resp, len(content), modified, user, tally, scores, rule)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

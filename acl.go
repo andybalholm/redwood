@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -120,6 +121,17 @@ func (c *config) loadACLs(filename string) error {
 			err = c.ACLs.AddRule(args[0], args[1:])
 			if err != nil {
 				log.Printf("Error at %s, line %d: %v", filename, lineNo, err)
+			}
+
+		case "include":
+			for _, file := range args {
+				if !filepath.IsAbs(file) {
+					file = filepath.Join(filepath.Dir(filename), file)
+				}
+				err = c.loadACLs(file)
+				if err != nil {
+					log.Printf("Error including acl file %s: %v", file, err)
+				}
 			}
 
 		case "allow", "block", "block-invisible", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":

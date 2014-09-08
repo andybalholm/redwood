@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 )
 
 // Functions for displaying block pages.
@@ -36,8 +37,8 @@ func (c *config) loadBlockPage(path string) error {
 type blockData struct {
 	URL        string
 	Categories string
+	Conditions string
 	User       string
-	Group      string
 	Tally      string
 	Scores     string
 }
@@ -46,13 +47,26 @@ type blockData struct {
 func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	data := blockData{
 		URL:        r.URL.String(),
-		Categories: rule.Conditions(),
+		Conditions: rule.Conditions(),
 		User:       user,
 		Tally:      listTally(stringTally(tally)),
 		Scores:     listTally(scores),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
+
+	// Convert rule conditions into category descriptions as much as possible.
+	var categories []string
+	for _, acl := range rule.Needed {
+		cat, ok := c.Categories[acl]
+		if !ok {
+			continue
+		}
+		categories = append(categories, cat.description)
+	}
+	if len(categories) > 0 {
+		data.Categories = strings.Join(categories, ", ")
+	}
 
 	err := c.BlockTemplate.Execute(w, data)
 	if err != nil {

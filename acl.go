@@ -93,6 +93,8 @@ func (c *config) loadACLs(filename string) error {
 	}
 	defer f.Close()
 
+	c.ACLsLoaded = true
+
 	scanner := bufio.NewScanner(f)
 	lineNo := 0
 	for scanner.Scan() {

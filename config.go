@@ -35,6 +35,7 @@ type config struct {
 
 	ACLs       ACLDefinitions
 	ACLActions []ACLActionRule
+	ACLsLoaded bool
 
 	PIDFile string
 	TestURL string

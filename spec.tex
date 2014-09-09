@@ -60,6 +60,9 @@ cgi-bin /etc/redwood/cgi
 # the directory containing the category information
 categories /etc/redwood/categories
 
+# the file containing the Access Control List configuration
+acls /etc/redwood/acls.conf
+
 # the minimum total score from a blocked category needed 
 # to block a page
 threshold 275
@@ -72,13 +75,6 @@ query-changes /etc/redwood/safesearch.conf
 
 # path to the access log
 access-log /var/log/redwood/access.log
-
-# Customize which MIME types get filtered.
-mime-allow text/css # Don't filter CSS files.
-mime-filter application/javascript # Filter JS
-mime-filter application/x-javascript
-mime-filter application/json
-mime-block video/x-ms-wmv # Block Windows Media Player video.
 \end{verbatim}
 
 \section{Categories}
@@ -93,7 +89,7 @@ Each category is a assigned an action: allow, block, or ignore.
 A page will be blocked if the score for any category listed as \verb"block" 
 is higher than the highest score for any category listed as \verb"allow". 
 If a category is listed as \verb"ignore", its score does not affect whether a page 
-is blocked or not. (This is the default for a category that is not listed.) 
+is blocked or not. 
 However, a page is not blocked unless the score for the highest \verb"block" category
 is greater than a certain configurable threshold. This prevents overblocks 
 of pages with almost no textual content.
@@ -177,6 +173,8 @@ for each time the phrase is found on the page. But if the phrase has a second we
 no more than that amount will be added no matter how many times the phrase occurs. 
 (In the example, if ``oil filter'' occurred more than four times, the additional occurrences wouldn't count.)
 
+The content of the page is scanned for phrases only if phrase scanning is selected with the \verb"phrase-scan" ACL action.
+
 \end{description}
 
 There is also a \verb"default" rule. It specifies what weight will be assigned to rules that don't specify a weight. 
@@ -193,6 +191,111 @@ with long, more-specific ones, e.g.:
 
 If a page is blocked based on its URL (i.e. by URL matching and/or URL regular expressions), 
 its content will not be evaluated because the page will not be downloaded.
+
+\section{Access Control Lists (ACLs)}
+
+Much of Redwood's functionality is configured with Access Control Lists (ACLs).
+Each request is assigned a number of ACL tags, and then an action is chosen based on those tags.
+For example:
+
+\begin{verbatim}
+acl no-web user-ip 192.168.1.25
+block no-web
+\end{verbatim}
+
+The first line creates an ACL tag \verb"no-web", and assigns it to all requests coming from IP address 192.168.1.25.
+The second line causes all requests with that tag to be blocked.
+
+ACLs are checked at several points during the processing of a request:
+before sending the request to the origin server, after receiving a response,
+and after scanning the content for phrases. 
+Each time, the request may have different ACL tags, since more information is available.
+Each stage also has a different set of possible actions, 
+although there is some overlap.
+(The \verb"allow", \verb"block", and \verb"block-invisible" actions are always available.)
+
+Any number of ACL files can be loaded with the \verb"acl" directive in the configuration file.
+An ACL file can load other ACL files with a line that contains \verb"include" and the filename.
+
+\subsection{Assigning ACL Tags}
+
+ACL tags are assigned by lines starting with \verb"acl". 
+These lines have the format:
+
+\begin{verbatim}
+acl tag-name attribute values
+\end{verbatim}
+
+The \verb"tag-name" can be any name that does not include spaces.
+The \verb"attribute" refers to some property of the request or response (listed below).
+The \verb"values" are a space-separated list; if any of them matches the attribute's value, the tag will be assigned.
+If there is more than one \verb"acl" line with the same tag name, the tag will be applied if any of them matches (logical OR).
+
+In addition to the tags assigned by \verb"acl" lines, a request is assigned a tag for its highest-scoring category
+(if the score is above the threshold).
+
+The following attributes are available:
+
+\begin{description}
+
+	\item[content-type] (response only) The response's media type, usually taken from the Content-Type header.
+		This can also be a generic type, with an asterisk after the slash:
+
+		\begin{verbatim}
+		acl images content-type image/*
+		\end{verbatim}
+
+	\item[method] The HTTP request method, such as \verb"GET" or \verb"POST".
+
+	\item[user-ip] The user's IP address, or a range of addresses (in CIDR format, or with a dash).
+
+		\begin{verbatim}
+		acl managers 10.0.2.5 10.0.1.0/24 10.0.2.18-25
+		\end{verbatim}
+
+	\item[user-name] The username from HTTP proxy authentication.
+	
+\end{description}
+
+\subsection{ACL Actions}
+
+After the ACL tags are assigned, Redwood goes through the ACL files looking for an action to perform.
+An action will be selected only if it has all the tags specified in the action line.
+(And none of the negated tags; if a tag in an action line is preceded by an exclamation point, 
+the request must not have that tag.)
+Since it goes through the files in order, earlier action lines take precedence over later ones.
+If it gets to the end of the file without finding a matching rule,
+it will use the default action of the highest-scoring category.
+If there is no category that scores over the threshold, the default action is \verb"allow".
+
+\begin{description}
+
+	\item[allow] Allow the request to proceed.
+
+	\item[block] Respond with an HTTP status code of 403, and send the standard block page.
+
+	\item[block-invisible] Respond with HTTP 403, and send an invisible 1-pixel image instead of a block page.
+
+	\item[ignore-category] Drop the highest-scoring category off the list of categories,
+		and go through the ACL files again.
+
+	\item[phrase-scan] (response only) Run a phrase scan on the page content.
+		Normally this will be configured to depend on the content type:
+
+		\begin{verbatim}
+		acl text content-type text/* application/xhtml+xml
+		acl css content-type text/css
+		phrase-scan text !css
+		\end{verbatim}
+
+	\item[require-auth] (request only) Send an HTTP 407 response if the request doesn't have a
+		Proxy-Authorization header.
+
+	\item[ssl-bump] (CONNECT requests only) Activate the SSLBump feature, to filter HTTPS connections.
+		(Transparently intercepted HTTPS connections produce a virtual CONNECT request inside Redwood,
+		so they can be filtered too.)
+
+\end{description}
 
 \section{URL Query Modification}
 
@@ -246,8 +349,8 @@ to be replaced by the appropriate information when the block page is sent:
 
 \item[\{\{.URL\}\}] the URL of the page that was blocked
 \item[\{\{.Categories\}\}] the names of the categories that caused the page to be blocked
+\item[\{\{.Conditions\}\}] the conditions of the ACL rule that caused the page to be blocked
 \item[\{\{.User\}\}] the user's IP address or username
-\item[\{\{.Group\}\}] the group the user belongs to, or an empty string
 \item[\{\{.Tally\}\}] a list of the rules that matched, and how many times each one matched
 \item[\{\{.Scores\}\}] a list of categories, and how many points the page scored in each category
 
@@ -261,7 +364,8 @@ for documentation.
 
 There is one custom function defined for the templates to use, \verb"eq", 
 which tests its parameters for equality.
-For example, \verb[{{if eq .Group "admin"}}You're an administrator!{{end}}[
+
+\section{Virtual Web Servers}
 
 Since the block page may need to refer to external resources
 (such as images, stylesheets, and scripts),
@@ -316,38 +420,10 @@ The TLS log has the following fields:
 time, username or client IP address, server name, server address, 
 and any error that was encountered.
 
-\section{Filter Groups}
-
-Users may be divided into groups, with each group having access to different categories of sites.
-A user is assigned to a group with the \verb"group" directive in the configuration file.
-For example, \verb"group admin 10.1.10.203" would assign the user at IP address 10.1.10.203
-to the group named ``admin.'' 
-If a user authenticates with the proxy using a username and password, 
-his username would be used instead of his IP address.
-
-In addition to IP addresses and usernames, IP address ranges may be used. 
-The following formats are accepted: \verb"10.1.10.1/24", \verb"10.1.10.0-10.1.10.255",
-and \verb"10.1.10.0-255".
-Individual IP address assignments take precedence over ranges.
-If multiple ranges match, the first one will be used.
-
-The filtering for a filter group is configured with the \verb"block", \verb"allow", and \verb"ignore"
-directives. These directives override the \verb"action" line in the \verb"category.conf" file,
-but only for users that belong to a specific filter group.
-For example, \verb"allow proxies admin" would allow users in the ``admin'' group
-to access sites in the ``proxies'' category even if they were normally blocked.
-
-When the \verb"block", \verb"allow", and \verb"ignore" directives are used without a group name,
-they apply to all users---except that groups may override them with different actions.
-
 \section{Authentication}
 
-When a client connects to Redwood's HTTP proxy server from outside the local network,
-Redwood requires HTTP basic proxy authentication, with a username and password.
-If the \verb"--always-require-auth" option is specified, 
-authentication will be required for all users, even those on the local network.
-But if the \verb"--disable-auth" option is specified, 
-authentication will not be required for any users, local or remote.
+Redwood can be configured (using the \verb"require-auth" ACL action) to require HTTP basic proxy authentication,
+with a username and password.
 The usernames and passwords can come from a file that is specified by the \verb"--password-file"
 configuration directive. Each line in the file consists of a username,
 a space or a tab, and a password.
@@ -355,11 +431,10 @@ Alternatively, a program can be specified to perform authentication with \verb"-
 Each line of the program's input will be a username and a password, separated by a space.
 It should respond with \verb"OK" if the password is correct, or \verb"ERR" if it is not.
 One such program is \verb"basic_pam_auth", which is included with Squid.
-If no password file or authentication helper is specified, no connections from outside the LAN will be accepted.
 
 \section{SSLBump}
 
-Redwood can be configured to perform Man-in-the-Middle filtering of HTTPS traffic.
+Redwood can be configured (using the \verb"ssl-bump" ACL action) to perform Man-in-the-Middle filtering of HTTPS traffic.
 This feature is called SSLBump after the corresponding feature in Squid.
 
 For SSLBump to work, Redwood must be configured with a root certificate that is trusted
@@ -367,15 +442,6 @@ by the users' browsers.
 Paths to the certificate and its private key are specified with the \verb"tls-cert" and \verb"tls-key"
 options.
 The certificate and key should be in PEM format.
-
-If you want to intercept SSL only for certain sites, 
-specify a file listing the sites with the \verb"tls-bump-only" option.
-The sites should be listed one per line.
-If the name of the site starts with a period, it will match subdomains as well.
-
-To exempt certain sites from SSLBump,
-list them in a file specified with \verb"tls-bypass".
-It has the same format as the \verb"tls-bump-only" file.
 
 \end{document}
 

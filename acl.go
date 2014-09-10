@@ -21,6 +21,8 @@ import (
 type ACLDefinitions struct {
 	ContentTypes    map[string][]string
 	Methods         map[string][]string
+	URLs            *URLMatcher
+	URLTags         map[string][]string
 	UserIPAddresses map[string][]string
 	UserIPRanges    []rangeToGroup
 	UserNames       map[string][]string
@@ -34,13 +36,13 @@ type ACLDefinitions struct {
 var errEmptyACLRule = errors.New("empty ACL rule")
 
 // AddRule adds a rule to an ACL.
-func (a *ACLDefinitions) AddRule(acl string, rule []string) error {
-	if len(rule) == 0 {
+func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
+	if len(newRule) == 0 {
 		return errEmptyACLRule
 	}
 
-	keyword := rule[0]
-	args := rule[1:]
+	keyword := newRule[0]
+	args := newRule[1:]
 
 	switch keyword {
 	case "content-type":
@@ -68,6 +70,19 @@ func (a *ACLDefinitions) AddRule(acl string, rule []string) error {
 			schedule WeeklySchedule
 			acl      string
 		}{s, acl})
+
+	case "url":
+		if a.URLs == nil {
+			a.URLs = newURLMatcher()
+		}
+		if a.URLTags == nil {
+			a.URLTags = make(map[string][]string)
+		}
+		for _, u := range args {
+			u = strings.ToLower(u)
+			a.URLs.AddRule(rule{t: urlMatch, content: u})
+			a.URLTags[u] = append(a.URLTags[u], acl)
+		}
 
 	case "user-ip":
 		if a.UserIPAddresses == nil {
@@ -202,6 +217,14 @@ func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
 	for _, t := range a.Times {
 		if t.schedule.Contains(now) {
 			acls[t.acl] = true
+		}
+	}
+
+	if a.URLs != nil {
+		for match := range a.URLs.MatchingRules(r.URL) {
+			for _, acl := range a.URLTags[match.content] {
+				acls[acl] = true
+			}
 		}
 	}
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Access Control Lists (ACLs)
@@ -23,6 +24,11 @@ type ACLDefinitions struct {
 	UserIPAddresses map[string][]string
 	UserIPRanges    []rangeToGroup
 	UserNames       map[string][]string
+
+	Times []struct {
+		schedule WeeklySchedule
+		acl      string
+	}
 }
 
 var errEmptyACLRule = errors.New("empty ACL rule")
@@ -52,6 +58,16 @@ func (a *ACLDefinitions) AddRule(acl string, rule []string) error {
 		for _, m := range args {
 			a.Methods[m] = append(a.Methods[m], acl)
 		}
+
+	case "time":
+		s, err := ParseWeeklySchedule(args)
+		if err != nil {
+			return err
+		}
+		a.Times = append(a.Times, struct {
+			schedule WeeklySchedule
+			acl      string
+		}{s, acl})
 
 	case "user-ip":
 		if a.UserIPAddresses == nil {
@@ -180,6 +196,13 @@ func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
 
 	for _, a := range a.Methods[r.Method] {
 		acls[a] = true
+	}
+
+	now := time.Now()
+	for _, t := range a.Times {
+		if t.schedule.Contains(now) {
+			acls[t.acl] = true
+		}
 	}
 
 	return acls

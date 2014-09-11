@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,7 @@ import (
 type ACLDefinitions struct {
 	ContentTypes    map[string][]string
 	Methods         map[string][]string
+	Referers        map[string][]string
 	URLs            *URLMatcher
 	URLTags         map[string][]string
 	UserIPAddresses map[string][]string
@@ -59,6 +61,19 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 		}
 		for _, m := range args {
 			a.Methods[m] = append(a.Methods[m], acl)
+		}
+
+	case "referer", "referrer":
+		if a.URLs == nil {
+			a.URLs = newURLMatcher()
+		}
+		if a.Referers == nil {
+			a.Referers = make(map[string][]string)
+		}
+		for _, u := range args {
+			u = strings.ToLower(u)
+			a.URLs.AddRule(rule{t: urlMatch, content: u})
+			a.Referers[u] = append(a.Referers[u], acl)
 		}
 
 	case "time":
@@ -224,6 +239,17 @@ func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
 		for match := range a.URLs.MatchingRules(r.URL) {
 			for _, acl := range a.URLTags[match.content] {
 				acls[acl] = true
+			}
+		}
+
+		if referer := r.Header.Get("Referer"); referer != "" {
+			refURL, err := url.Parse(referer)
+			if err == nil {
+				for match := range a.URLs.MatchingRules(refURL) {
+					for _, acl := range a.Referers[match.content] {
+						acls[acl] = true
+					}
+				}
 			}
 		}
 	}

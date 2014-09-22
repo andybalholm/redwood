@@ -65,6 +65,7 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 	serverConn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
 		log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
+		conn.Close()
 		return
 	}
 

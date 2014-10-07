@@ -54,3 +54,6 @@ func (entityDecoder) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int, err
 	}
 	return
 }
+
+func (entityDecoder) Reset() {
+}

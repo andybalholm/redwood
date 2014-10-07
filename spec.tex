@@ -230,6 +230,7 @@ The \verb"tag-name" can be any name that does not include spaces.
 The \verb"attribute" refers to some property of the request or response (listed below).
 The \verb"values" are a space-separated list; if any of them matches the attribute's value, the tag will be assigned.
 If there is more than one \verb"acl" line with the same tag name, the tag will be applied if any of them matches (logical OR).
+An ACL may have a description associated with it with a line like \verb"describe tag-name A long description".
 
 In addition to the tags assigned by \verb"acl" lines, a request is assigned a tag for its highest-scoring category
 (if the score is above the threshold).

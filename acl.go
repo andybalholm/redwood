@@ -33,6 +33,8 @@ type ACLDefinitions struct {
 		schedule WeeklySchedule
 		acl      string
 	}
+
+	Descriptions map[string]string
 }
 
 var errEmptyACLRule = errors.New("empty ACL rule")
@@ -170,6 +172,17 @@ func (c *config) loadACLs(filename string) error {
 			if err != nil {
 				log.Printf("Error at %s, line %d: %v", filename, lineNo, err)
 			}
+
+		case "describe":
+			// Give an acl a description for the block page.
+			if len(args) < 2 {
+				log.Printf("Incomplete ACL description at %s, line %d", filename, lineNo)
+				continue
+			}
+			if c.ACLs.Descriptions == nil {
+				c.ACLs.Descriptions = make(map[string]string)
+			}
+			c.ACLs.Descriptions[args[0]] = strings.Join(args[1:], " ")
 
 		case "include":
 			for _, file := range args {

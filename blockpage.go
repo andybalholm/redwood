@@ -43,6 +43,20 @@ type blockData struct {
 	Scores     string
 }
 
+func (c *config) aclDescription(name string) string {
+	cat, ok := c.Categories[name]
+	if ok {
+		return cat.description
+	}
+
+	d, ok := c.ACLs.Descriptions[name]
+	if ok {
+		return d
+	}
+
+	return name
+}
+
 // showBlockPage shows a block page for a page that was blocked by an ACL.
 func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	data := blockData{
@@ -58,15 +72,12 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, user stri
 	// Convert rule conditions into category descriptions as much as possible.
 	var categories []string
 	for _, acl := range rule.Needed {
-		cat, ok := c.Categories[acl]
-		if !ok {
-			continue
-		}
-		categories = append(categories, cat.description)
+		categories = append(categories, c.aclDescription(acl))
 	}
-	if len(categories) > 0 {
-		data.Categories = strings.Join(categories, ", ")
+	for _, acl := range rule.Disallowed {
+		categories = append(categories, "not "+c.aclDescription(acl))
 	}
+	data.Categories = strings.Join(categories, ", ")
 
 	err := c.BlockTemplate.Execute(w, data)
 	if err != nil {

@@ -134,7 +134,8 @@ func loadCategory(dirname string) (c *category, err error) {
 	for _, list := range ruleFiles {
 		r, err := os.Open(list)
 		if err != nil {
-			return nil, err
+			log.Println(err)
+			continue
 		}
 		defer r.Close()
 		cr := newConfigReader(r)

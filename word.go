@@ -73,3 +73,7 @@ func (t *wordTransformer) Transform(dst, src []byte, atEOF bool) (nDst, nSrc int
 	}
 	return
 }
+
+func (t *wordTransformer) Reset() {
+	t.prevRune = 0
+}

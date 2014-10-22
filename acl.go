@@ -275,7 +275,7 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 	acls := make(map[string]bool)
 
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		if ct2, _, err := mime.ParseMediaType(ct); err != nil {
+		if ct2, _, err := mime.ParseMediaType(ct); err == nil {
 			ct = ct2
 		}
 		for _, acl := range a.ContentTypes[ct] {

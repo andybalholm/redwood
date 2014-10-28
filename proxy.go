@@ -31,6 +31,31 @@ type proxyHandler struct {
 	rt http.RoundTripper
 }
 
+// lanAddress returns whether addr is in one of the LAN address ranges.
+func lanAddress(addr string) bool {
+	ip := net.ParseIP(addr)
+	if ip4 := ip.To4(); ip4 != nil {
+		switch ip4[0] {
+		case 10, 127:
+			return true
+		case 172:
+			return ip4[1]&0xf0 == 16
+		case 192:
+			return ip4[1] == 168
+		}
+		return false
+	}
+
+	if ip[0]&0xfe == 0xfc {
+		return true
+	}
+	if ip[0] == 0xfe && (ip[1]&0xfc) == 0x80 {
+		return true
+	}
+
+	return false
+}
+
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
@@ -163,7 +188,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Header.Add("Via", r.Proto+" Redwood")
 	r.Header.Add("X-Forwarded-For", client)
 
-	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
+	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && !lanAddress(client)
 	r.Header.Del("Accept-Encoding")
 
 	urlChanged := conf.changeQuery(r.URL)

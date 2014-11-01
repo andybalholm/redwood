@@ -26,7 +26,6 @@ import (
 type config struct {
 	BlockTemplate     *template.Template
 	Categories        map[string]*category
-	CategoriesDir     string
 	ContentPhraseList phraseList
 	CountOnce         bool
 	DisableGZIP       bool
@@ -88,7 +87,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
 	c.newActiveFlag("blockpage", "/etc/redwood/block.html", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
-	c.flags.StringVar(&c.CategoriesDir, "categories", "/etc/redwood/categories", "path to configuration files for categories")
+	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
@@ -149,7 +148,14 @@ func loadConfiguration() (*config, error) {
 		}
 	}
 
-	c.loadCategories()
+	if c.Categories == nil {
+		err := c.loadCategories("/etc/redwood/categories")
+		if err != nil {
+			log.Println(err)
+		}
+	}
+	c.collectRules()
+
 	c.loadCertificate()
 
 	return c, nil

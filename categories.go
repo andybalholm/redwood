@@ -50,7 +50,7 @@ type category struct {
 }
 
 // loadCategories loads the category configuration files
-func (cf *config) loadCategories() {
+func (cf *config) loadCategories(dirName string) error {
 	if cf.Categories == nil {
 		cf.Categories = map[string]*category{
 			"blocked-mime": &category{ // a fake category for pages blocked by MIME type
@@ -61,22 +61,20 @@ func (cf *config) loadCategories() {
 		}
 	}
 
-	dir, err := os.Open(cf.CategoriesDir)
+	dir, err := os.Open(dirName)
 	if err != nil {
-		log.Print("Could not open category directory: ", err)
-		return
+		return fmt.Errorf("Could not open category directory: %v", err)
 	}
 	defer dir.Close()
 
 	info, err := dir.Readdir(0)
 	if err != nil {
-		log.Print("Could not read category directory: ", err)
-		return
+		return fmt.Errorf("Could not read category directory: %v", err)
 	}
 
 	for _, fi := range info {
 		if name := fi.Name(); fi.IsDir() && name[0] != '.' {
-			categoryPath := filepath.Join(cf.CategoriesDir, name)
+			categoryPath := filepath.Join(dirName, name)
 			c, err := loadCategory(categoryPath)
 			if err == nil {
 				cf.Categories[c.name] = c
@@ -86,7 +84,7 @@ func (cf *config) loadCategories() {
 		}
 	}
 
-	cf.collectRules()
+	return nil
 }
 
 // loadCategory loads the configuration for one category

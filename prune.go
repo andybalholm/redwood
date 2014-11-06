@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"code.google.com/p/cascadia"
-	"code.google.com/p/go.net/html"
-	"code.google.com/p/go.net/html/charset"
-	"code.google.com/p/go.text/transform"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/transform"
 )
 
 // Functions for content pruning (removing specific HTML elements from the page)

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"code.google.com/p/go.net/html/charset"
+	"golang.org/x/net/html/charset"
 )
 
 // support for running "redwood -test http://example.com"

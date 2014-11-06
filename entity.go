@@ -1,8 +1,8 @@
 package main
 
 import (
-	"code.google.com/p/go.net/html"
-	"code.google.com/p/go.text/transform"
+	"golang.org/x/net/html"
+	"golang.org/x/text/transform"
 )
 
 // An entityDecoder is a Transformer that decodes HTML character entities.

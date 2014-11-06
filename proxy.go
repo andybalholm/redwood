@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"code.google.com/p/go.net/html/charset"
+	"golang.org/x/net/html/charset"
 )
 
 type proxyHandler struct {

@@ -4,7 +4,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"code.google.com/p/go.text/transform"
+	"golang.org/x/text/transform"
 )
 
 // wordRune maps c into a reduced set of "word" characters.

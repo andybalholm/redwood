@@ -6,8 +6,8 @@ import (
 	"log"
 	"strings"
 
-	"code.google.com/p/go.net/html/charset"
-	"code.google.com/p/go.text/transform"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/transform"
 )
 
 // scanContent scans the content of a document for phrases,

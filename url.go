@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"code.google.com/p/go.net/idna"
-	"code.google.com/p/go.net/publicsuffix"
+	"golang.org/x/net/idna"
+	"golang.org/x/net/publicsuffix"
 )
 
 type regexRule struct {

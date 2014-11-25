@@ -103,17 +103,21 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	user := client
 
+	var authUser string
 	if h.user != "" {
-		user = h.user
+		authUser = h.user
 	} else if u, _ := ProxyCredentials(r); u != "" {
-		user = u
+		authUser = u
+	}
+	if authUser != "" {
+		user = authUser
 	}
 
 	tally := conf.URLRules.MatchingRules(r.URL)
 	scores := conf.categoryScores(tally)
 	categories := conf.significantCategories(scores)
 
-	reqACLs := conf.ACLs.requestACLs(r)
+	reqACLs := conf.ACLs.requestACLs(r, authUser)
 
 	possibleActions := []string{
 		"allow",
@@ -156,7 +160,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		SSLBump(conn, r.URL.Host, user, r.Header.Get("Proxy-Authorization"))
+		SSLBump(conn, r.URL.Host, user, authUser)
 		return
 	}
 

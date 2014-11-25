@@ -56,7 +56,7 @@ func runURLTest(u string) {
 		URL:    URL,
 		Header: make(http.Header),
 	}
-	reqACLs := conf.ACLs.requestACLs(req)
+	reqACLs := conf.ACLs.requestACLs(req, "")
 	if len(reqACLs) > 0 {
 		fmt.Println()
 		fmt.Println("The request matches the following ACLs:")

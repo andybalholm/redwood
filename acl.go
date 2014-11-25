@@ -215,7 +215,7 @@ func (c *config) loadACLs(filename string) error {
 }
 
 // requestACLs returns the set of ACLs that apply to r.
-func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
+func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bool {
 	acls := make(map[string]bool)
 
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
@@ -231,7 +231,7 @@ func (a *ACLDefinitions) requestACLs(r *http.Request) map[string]bool {
 		}
 	}
 
-	if user, _ := ProxyCredentials(r); user != "" {
+	if user != "" {
 		for _, a := range a.UserNames[user] {
 			acls[a] = true
 		}

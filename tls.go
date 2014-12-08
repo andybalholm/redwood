@@ -219,7 +219,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 		intermediates.AddCert(ic)
 	}
 
-	valid := validCert(serverCert, intermediates)
+	valid := conf.validCert(serverCert, intermediates)
 	cert, err := imitateCertificate(serverCert, !valid, conf)
 	if err != nil {
 		serverConn.Close()
@@ -359,7 +359,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 	return newCert, nil
 }
 
-func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
+func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 	_, err := cert.Verify(x509.VerifyOptions{Intermediates: intermediates})
 	if err == nil {
 		return true
@@ -369,6 +369,16 @@ func validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
 		// by a recognized CA. So we go ahead and use the cert and let
 		// the client experience the same error.
 		return true
+	}
+
+	if conf.ExtraRootCerts != nil {
+		_, err = cert.Verify(x509.VerifyOptions{Roots: conf.ExtraRootCerts, Intermediates: intermediates})
+		if err == nil {
+			return true
+		}
+		if _, ok := err.(x509.UnknownAuthorityError); ok {
+			return true
+		}
 	}
 
 	// Before we give up, we'll try fetching some intermediate certificates.
@@ -560,4 +570,20 @@ func clientHelloServerName(data []byte) (name string, ok bool) {
 	}
 
 	return "", true
+}
+
+func (c *config) addTrustedRoots(certPath string) error {
+	if c.ExtraRootCerts == nil {
+		c.ExtraRootCerts = x509.NewCertPool()
+	}
+
+	pem, err := ioutil.ReadFile(certPath)
+	if err != nil {
+		return err
+	}
+
+	if !c.ExtraRootCerts.AppendCertsFromPEM(pem) {
+		return fmt.Errorf("no certificates found in %s", certPath)
+	}
+	return nil
 }

@@ -52,11 +52,12 @@ type config struct {
 	QueryChanges map[rule]url.Values
 	QueryMatcher *URLMatcher
 
-	CertFile      string
-	KeyFile       string
-	TLSCert       tls.Certificate
-	ParsedTLSCert *x509.Certificate
-	TLSReady      bool
+	CertFile       string
+	KeyFile        string
+	TLSCert        tls.Certificate
+	ParsedTLSCert  *x509.Certificate
+	TLSReady       bool
+	ExtraRootCerts *x509.CertPool
 
 	Authenticators []func(user, password string) bool
 	Passwords      map[string]string
@@ -102,6 +103,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.CertFile, "tls-cert", "", "path to certificate for serving HTTPS")
 	c.flags.StringVar(&c.KeyFile, "tls-key", "", "path to TLS certificate key")
 	c.flags.StringVar(&c.TLSLog, "tls-log", "", "path to tls log file")
+	c.newActiveFlag("trusted-root", "", "path to file of additional trusted root certificates (in PEM format)", c.addTrustedRoots)
 
 	c.newActiveFlag("http-proxy", "", "address (host:port) to listen for proxy connections on", func(s string) error {
 		c.ProxyAddresses = append(c.ProxyAddresses, s)

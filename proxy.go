@@ -222,20 +222,26 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Opaque = rawURL
 	}
 
-	var resp *http.Response
+	proxied := false
+	var rt http.RoundTripper
 	if h.rt == nil {
 		if r.URL.Opaque != "" && transport.Proxy != nil {
 			if p, _ := transport.Proxy(r); p != nil {
 				// If the request is going through a proxy, the host needs to be
 				// included in the opaque element.
 				r.URL.Opaque = "//" + r.URL.Host + r.URL.Opaque
+				proxied = true
 			}
 		}
-		resp, err = transport.RoundTrip(r)
+		rt = &transport
 	} else {
-		resp, err = h.rt.RoundTrip(r)
+		rt = h.rt
 	}
 
+	if !proxied {
+		r.Header.Del("Proxy-Authorization")
+	}
+	resp, err := rt.RoundTrip(r)
 	r.URL.Opaque = ""
 
 	if err != nil {

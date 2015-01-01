@@ -1,0 +1,11 @@
+This is a sample, basic configuration for Redwood, based on the standard configuration of DansGuardian. 
+
+Put the contents of this directory in /etc/redwood.
+
+Create a self-signed root certificate to use for filtering HTTPS sites. Put the certificate in /etc/redwood/root.pem and the key in /etc/redwood/root_key.pem. Keep the key safe, since all your users will need to add the certificate to their list of trusted root certificates!
+
+Start Redwood, either manually or by installing the appropriate startup script from the startup directory.
+
+If you want transparent filtering, add firewall rules to redirect HTTP traffic to port 6502 and HTTPS traffic to port 6510.
+
+Configure proxy settings on users' computers (port 6502 on the system running Redwood), and install the root certificate. Once they are using Redwood, the root certificate can be downloaded from http://203.0.113.1/cert.der.

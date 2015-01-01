@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Blocked Page</title>
+</head>
+<body>
+	<h1>This Page Is Blocked</h1>
+
+	<h2>URL</h2>
+	<a href="{{.URL}}">{{.URL}}</a>
+
+	<h2>Category</h2>
+	{{.Categories}}
+
+	<h3>Conditions</h3>
+	{{.Conditions}}
+
+	<h3>Rules</h3>
+	{{.Tally}}
+
+	<h3>Scores</h3>
+	{{.Scores}}
+
+	<p>If this page should not be blocked, contact your network administrator.</p>
+	<p>To install the root certificate for HTTPS filtering, download it <a href="//203.0.113.1/cert.der">here.</a></p>
+</body>
+</html>

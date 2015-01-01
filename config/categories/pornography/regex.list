@@ -1,0 +1,15 @@
+default 500
+
+/(big|cyber|hard|huge|mega|small|soft|super|tiny|bare|naked|nude|anal|oral|topp?les|sex|phone).*(anal|babe|bharath|boob|breast|busen|busty|clit|cum|cunt|dick|fetish|fuck|girl|hooter|lez|lust|naked|nude|oral|orgy|penis|porn|porno|pupper|pussy|rotten|sex|shit|smutpump|teen|tit|topp?les|xxx)/
+/(anal|babe|bharath|boob|breast|busen|busty|clit|cum|cunt|dick|fetish|fuck|girl|hooter|lez|lust|naked|nude|oral|orgy|penis|porn|porno|pupper|pussy|rotten|sex|shit|smutpump|teen|tit|topp?les|xxx).*(big|cyber|hard|huge|mega|small|soft|super|tiny|bare|naked|nude|anal|oral|topp?les|sex)/
+
+/adultsight|adultsite|adultsonly|adultweb|blowjob|bondage|centerfold|cumshot|cyberlust|cybercore|hardcore|masturbat/
+/bangbros|pussylip|playmate|pornstar|sexdream|showgirl|softcore|striptease/
+/incest|obscene|pedophil|pedofil/
+/(male|m[ae]n|boy|girl|beaut|agen[ct]|glam).*(model|talent)/
+
+# The following will help to block explicit media files (images and video)
+/(sex|fuck|boob|cunt|fetish|tits|anal|hooter|asses|shemale|submission|porn|xxx|busty|knockers|slut|nude|naked|pussy).*(\.jpg|\.wmv|\.mpg|\.mpeg|\.gif|\.mov)/
+/(girls|babes|bikini|model).*(\.jpg|\.wmv|\.mpg|\.mpeg|\.gif|\.mov)/
+
+/naturism|naturist|nude|nudist|nudism|nekkid|nakt|naakt/

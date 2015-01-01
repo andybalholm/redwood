@@ -1,0 +1,43 @@
+# Phraselists to block gaming websites 
+# Originally created by Fernand Jonker
+
+< games> 10 
+< puzzles> 10 
+<online game> 40 
+<multiplayer> 30 
+<multi-player> 30 
+<arcade> 20 
+
+#game names
+<poker> 30 
+<solitaire> 30 
+<mahjong> 30 
+<mah jong> 30 
+<backgammon> 30 
+<wheel of fortune> 30 
+<scrabble> 30 
+<bejeweled> 30 
+<bingo> 10 
+<jewel quest> 30 
+<zuma> 30 
+<texttwist> 30 
+<bespelled> 30 
+<cubis> 30 
+
+<close combat> 30 
+<combat task force> 30 
+<doom> 30 
+<delta force> 30 
+<mortal kombat> 30 
+
+#game companies
+<popcap> 30 
+<xbox> 10 
+<gamecube> 10 
+<playstation> 10 
+<game boy> 20 
+<nintendo> 20 
+<dreamcast> 20 
+<bradygames> 20 
+<capcom> 20 
+<realarcade> 20 

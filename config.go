@@ -86,7 +86,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.loadACLs)
 	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
-	c.newActiveFlag("blockpage", "/etc/redwood/block.html", "path to template for block page", c.loadBlockPage)
+	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
@@ -141,13 +141,6 @@ func loadConfiguration() (*config, error) {
 	err := c.flags.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
-	}
-
-	if c.BlockTemplate == nil {
-		err := c.loadBlockPage("/etc/redwood/block.html")
-		if err != nil {
-			log.Println(err)
-		}
 	}
 
 	if c.Categories == nil {

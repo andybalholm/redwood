@@ -46,7 +46,7 @@ func runTransparentServer(addr string) error {
 
 		serverAddr, err := realServerAddress(conn)
 		if err != nil {
-			log.Println("Error getting original address for intercepted connection:", err)
+			log.Printf("Error getting original address for intercepted connection from %v: %v", conn.RemoteAddr(), err)
 			continue
 		}
 		user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())

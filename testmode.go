@@ -126,7 +126,7 @@ func runURLTest(u string) {
 	modified := false
 	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
 	if strings.Contains(contentType, "html") {
-		modified = conf.pruneContent(URL, &content, cs)
+		modified = conf.pruneContent(URL, &content, cs, acls)
 	}
 	if modified {
 		cs = "utf-8"

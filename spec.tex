@@ -342,6 +342,10 @@ Content pruning is controlled by a configuration file.
 Each line of the file contains a URL-matching or URL-regular-expression rule
 to specify what site or page the pruning applies to, 
 and a CSS selector to specify what elements to delete.
+Between the two, there may be a threshold value. 
+If a threshold is specified, the element is phrase-scanned before deleting.
+It is deleted only if the score from the phrases found in a blocked category
+is at least the threshold.
 
 \begin{verbatim}
 # Craigslist personals and discussion forums
@@ -349,6 +353,9 @@ craigslist.org div#ppp, div#forums, option[value=ppp]
 
 # Bing ad sidebar
 bing.com div.sb_adsNv2
+
+# Delete questionable forum topics.
+talk.newagtalk.com/forums 50 td.messagecellbody > ul
 \end{verbatim}
 
 \section{Block Pages}

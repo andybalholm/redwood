@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"code.google.com/p/cascadia"
@@ -19,6 +20,13 @@ import (
 // Functions for content pruning (removing specific HTML elements from the page)
 
 var metaCharsetSelector = cascadia.MustCompile(`meta[charset], meta[http-equiv="Content-Type"]`)
+
+// A filteredPruningRule represents an HTML element that should be removed from
+// the page if its score in a blocked category exceeds Threshold.
+type filteredPruningRule struct {
+	Threshold int
+	Selector  cascadia.Selector
+}
 
 func (c *config) loadPruningConfig(filename string) error {
 	f, err := os.Open(filename)
@@ -53,6 +61,16 @@ func (c *config) loadPruningConfig(filename string) error {
 			continue
 		}
 
+		// See if there is a threshold value between the rule and the selector.
+		threshold := 0
+		line = strings.TrimSpace(line)
+		if space := strings.Index(line, " "); space != -1 {
+			if t, err := strconv.Atoi(line[:space]); err == nil {
+				threshold = t
+				line = line[space+1:]
+			}
+		}
+
 		sel, err := cascadia.Compile(line)
 		if err != nil {
 			log.Printf("Invalid CSS selector %q in %s: %s", line, filename, err)
@@ -60,12 +78,17 @@ func (c *config) loadPruningConfig(filename string) error {
 		}
 
 		c.PruneMatcher.AddRule(r)
-		if oldAction, ok := c.PruneActions[r]; ok {
-			c.PruneActions[r] = func(n *html.Node) bool {
-				return oldAction(n) || sel(n)
+
+		if threshold == 0 {
+			if oldAction, ok := c.PruneActions[r]; ok {
+				c.PruneActions[r] = func(n *html.Node) bool {
+					return oldAction(n) || sel(n)
+				}
+			} else {
+				c.PruneActions[r] = sel
 			}
 		} else {
-			c.PruneActions[r] = sel
+			c.FilteredPruning[r] = append(c.FilteredPruning[r], filteredPruningRule{threshold, sel})
 		}
 	}
 
@@ -75,7 +98,7 @@ func (c *config) loadPruningConfig(filename string) error {
 // pruneContent checks the URL to see if it is a site that is calling for
 // content pruning. If so, it parses the HTML, removes the specified tags, and
 // re-renders the HTML. It returns true if the content was changed.
-func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string) bool {
+func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map[string]bool) bool {
 	URLMatches := c.PruneMatcher.MatchingRules(URL)
 	if len(URLMatches) == 0 {
 		return false
@@ -96,9 +119,14 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string) bool {
 
 	modified := false
 	for urlRule := range URLMatches {
-		sel := c.PruneActions[urlRule]
-		if prune(tree, sel) > 0 {
+		sel, ok := c.PruneActions[urlRule]
+		if ok && prune(tree, sel) > 0 {
 			modified = true
+		}
+		for _, fpr := range c.FilteredPruning[urlRule] {
+			if c.pruneFiltered(tree, fpr, acls) > 0 {
+				modified = true
+			}
 		}
 	}
 
@@ -136,5 +164,38 @@ func prune(n *html.Node, sel cascadia.Selector) int {
 			child = child.NextSibling
 		}
 	}
+	return count
+}
+
+// pruneFiltered phrase-scans children of n that match fpr.Selector, deletes
+// those that should be removed according to fpr.Threshold and acls, and
+// returns how many were deleted.
+func (c *config) pruneFiltered(n *html.Node, fpr filteredPruningRule, acls map[string]bool) int {
+	count := 0
+	child := n.FirstChild
+	for child != nil {
+		remove := false
+		if fpr.Selector(child) {
+			buf := new(bytes.Buffer)
+			html.Render(buf, child)
+			tally := make(map[rule]int)
+			c.scanContent(buf.Bytes(), "text/html", "utf-8", tally)
+			scores := c.categoryScores(tally)
+			categories := significantCategories(scores, fpr.Threshold)
+			rule := c.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+			remove = rule.Action == "block" || rule.Action == "block-invisible"
+		}
+
+		if remove {
+			nextChild := child.NextSibling
+			n.RemoveChild(child)
+			child = nextChild
+			count++
+		} else {
+			count += c.pruneFiltered(child, fpr, acls)
+			child = child.NextSibling
+		}
+	}
+
 	return count
 }

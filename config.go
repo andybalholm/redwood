@@ -47,10 +47,11 @@ type config struct {
 	StaticFilesDir string
 	VirtualHosts   map[string]string
 
-	PruneActions map[rule]cascadia.Selector
-	PruneMatcher *URLMatcher
-	QueryChanges map[rule]url.Values
-	QueryMatcher *URLMatcher
+	PruneActions    map[rule]cascadia.Selector
+	FilteredPruning map[rule][]filteredPruningRule
+	PruneMatcher    *URLMatcher
+	QueryChanges    map[rule]url.Values
+	QueryMatcher    *URLMatcher
 
 	CertFile       string
 	KeyFile        string
@@ -74,6 +75,7 @@ func loadConfiguration() (*config, error) {
 		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
 		URLRules:          newURLMatcher(),
 		PruneActions:      map[rule]cascadia.Selector{},
+		FilteredPruning:   map[rule][]filteredPruningRule{},
 		PruneMatcher:      newURLMatcher(),
 		QueryChanges:      map[rule]url.Values{},
 		QueryMatcher:      newURLMatcher(),

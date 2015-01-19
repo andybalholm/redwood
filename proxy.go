@@ -307,10 +307,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	modified := false
 	_, cs, _ := charset.DetermineEncoding(content, contentType)
 	if strings.Contains(contentType, "html") {
-		modified = conf.pruneContent(r.URL, &content, cs)
+		modified = conf.pruneContent(r.URL, &content, cs, acls)
 		if modified {
 			resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 			cs = "utf-8"
+			resp.Header.Del("Content-Length")
 		}
 	}
 

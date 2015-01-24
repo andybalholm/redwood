@@ -9,6 +9,16 @@ import (
 
 // Transparently intercept HTTPS connections.
 
+var localAddresses map[string]bool
+
+func init() {
+	var err error
+	localAddresses, err = getLocalAddresses()
+	if err != nil {
+		log.Println("Error getting list of this server's IP addresses:", err)
+	}
+}
+
 // runTransparentServer transparently intercepts connections, listening at addr.
 func runTransparentServer(addr string) error {
 	ln, err := net.Listen("tcp", addr)
@@ -16,12 +26,6 @@ func runTransparentServer(addr string) error {
 		return err
 	}
 	listenerChan <- ln
-
-	localAddresses, err := getLocalAddresses()
-	if err != nil {
-		log.Println("Error getting list of this server's IP addresses:", err)
-		// Continue, but without protection against infinite redirect loops.
-	}
 
 	var tempDelay time.Duration
 
@@ -51,13 +55,7 @@ func runTransparentServer(addr string) error {
 		}
 		user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
-		var server string
-		if tcpAddr, ok := serverAddr.(*net.TCPAddr); ok {
-			server = tcpAddr.IP.String()
-		} else {
-			server = serverAddr.String()
-		}
-		if localAddresses[server] {
+		if isLocalAddress(serverAddr) {
 			// This is not an intercepted connection; it is a direct connection to
 			// our transparent port. If we bump it, we will end up with an infinite
 			// loop of redirects.
@@ -96,4 +94,15 @@ func getLocalAddresses() (map[string]bool, error) {
 	}
 
 	return res, nil
+}
+
+// isLocalAddress returns whether addr is an address on this machine.
+func isLocalAddress(addr net.Addr) bool {
+	var host string
+	if tcpAddr, ok := addr.(*net.TCPAddr); ok {
+		host = tcpAddr.IP.String()
+	} else {
+		host = addr.String()
+	}
+	return localAddresses[host]
 }

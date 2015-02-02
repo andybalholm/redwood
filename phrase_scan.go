@@ -3,6 +3,8 @@ package main
 // scanning an HTTP response for phrases
 
 import (
+	"bytes"
+	"io"
 	"log"
 	"strings"
 
@@ -41,23 +43,20 @@ func (conf *config) scanContent(content []byte, contentType, cs string, tally ma
 		t = transform.Chain(transformers...)
 	}
 
+	r := transform.NewReader(bytes.NewReader(content), t)
+
 	buf := make([]byte, 4096)
-	for len(content) > 0 {
-		nDst, nSrc, err := t.Transform(buf, content, true)
-		if nSrc == 0 && nDst == 0 {
-			if err == transform.ErrShortSrc {
-				log.Printf("Encountered ErrShortSrc while decoding page content; remaining content: %q", content)
-			} else {
-				log.Println("Error decoding page content:", err)
-			}
-			nSrc = len(content)
-			nDst = nSrc
-			copy(buf, content)
-		}
-		for _, c := range buf[:nDst] {
+	for {
+		n, err := r.Read(buf)
+		for _, c := range buf[:n] {
 			ps.scanByte(c)
 		}
-		content = content[nSrc:]
+		if err != nil {
+			if err != io.EOF {
+				log.Println("Error decoding page content:", err)
+			}
+			break
+		}
 	}
 
 	ps.scanByte(' ')

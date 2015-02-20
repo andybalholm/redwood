@@ -376,7 +376,7 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPo
 		if err == nil {
 			return true
 		}
-		if _, ok := err.(x509.UnknownAuthorityError); ok {
+		if _, ok := err.(x509.UnknownAuthorityError); !ok {
 			return true
 		}
 	}

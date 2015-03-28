@@ -1,9 +1,3 @@
----
-author:
-- Andy Balholm
-title: Specification for Redwood
-...
-
 Redwood is an internet content-filtering program. It is designed to
 replace and improve on DansGuardian as the core of the Security
 Appliance internet filter. It adds flexibility and granularity to the
@@ -131,9 +125,9 @@ is an example of a rule-list file that might be in the directory for the
 
 There are three kinds of filter rules:
 
-URL matching
+- URL matching
 
-:   A URL matching rule consists of a domain name, optionally followed
+    A URL matching rule consists of a domain name, optionally followed
     by a path. After it, separated by a space, is the weight—the number
     of points that get added to this category’s score for sites that
     match the rule.
@@ -149,9 +143,9 @@ URL matching
     and `support.xerox.com` were listed with 50 points,
     `support.xerox.com` would actually get a score of 150 points.
 
-URL regular expressions
+- URL regular expressions
 
-:   A regular expression to match the URL is listed between slashes. The
+    A regular expression to match the URL is listed between slashes. The
     points are added to the category score for each page whose URL
     matches the regular expression. The URL is converted to lower case
     before comparing it to the regular expressions. The regular
@@ -163,9 +157,9 @@ URL regular expressions
     `d` matches the base domain name (e.g. `google`), `p` matches the
     path, and `q` matches the query.
 
-Content phrases
+- Content phrases
 
-:   Unlike the other two kinds of rules, these apply to the content of
+    Unlike the other two kinds of rules, these apply to the content of
     the page, not the URL. Phrases are enclosed between angle brackets.
     Before testing to see if a phrase matches, both the phrase and the
     page are simplified: capital letters are converted to lowercase, all
@@ -246,27 +240,27 @@ threshold).
 
 The following attributes are available:
 
-content-type
+- content-type
 
-:   (response only) The response’s media type, usually taken from the
+    (response only) The response’s media type, usually taken from the
     Content-Type header. This can also be a generic type, with an
     asterisk after the slash:
 
                 acl images content-type image/*
                 
 
-method
+- method
 
-:   The HTTP request method, such as `GET` or `POST`.
+    The HTTP request method, such as `GET` or `POST`.
 
-referer
+- referer
 
-:   The request’s Referer header. (This matches the same way as regular
+    The request’s Referer header. (This matches the same way as regular
     URL matching rules.)
 
-time
+- time
 
-:   The current time.
+    The current time.
 
                 acl work-hours time MTWHF 9:00-17:00
                 
@@ -277,22 +271,22 @@ time
     time ranges may be specified; the rule will match if the current
     time falls within any of them. Times must be in 24-hour format.
 
-url
+- url
 
-:   The URL requested. (This matches the same way as regular URL
+    The URL requested. (This matches the same way as regular URL
     matching rules.)
 
-user-ip
+- user-ip
 
-:   The user’s IP address, or a range of addresses (in CIDR format, or
+    The user’s IP address, or a range of addresses (in CIDR format, or
     with a dash).
 
                 acl managers 10.0.2.5 10.0.1.0/24 10.0.2.18-25
                 
 
-user-name
+- user-name
 
-:   The username from HTTP proxy authentication.
+    The username from HTTP proxy authentication.
 
 ACL Actions
 -----------
@@ -307,28 +301,28 @@ to the end of the file without finding a matching rule, it will use the
 default action of the highest-scoring category. If there is no category
 that scores over the threshold, the default action is `allow`.
 
-allow
+- allow
 
-:   Allow the request to proceed.
+    Allow the request to proceed.
 
-block
+- block
 
-:   Respond with an HTTP status code of 403, and send the standard block
+    Respond with an HTTP status code of 403, and send the standard block
     page.
 
-block-invisible
+- block-invisible
 
-:   Respond with HTTP 403, and send an invisible 1-pixel image instead
+    Respond with HTTP 403, and send an invisible 1-pixel image instead
     of a block page.
 
-ignore-category
+- ignore-category
 
-:   Drop the highest-scoring category off the list of categories, and go
+    Drop the highest-scoring category off the list of categories, and go
     through the ACL files again.
 
-phrase-scan
+- phrase-scan
 
-:   (response only) Run a phrase scan on the page content. Normally this
+    (response only) Run a phrase scan on the page content. Normally this
     will be configured to depend on the content type:
 
                 acl text content-type text/* application/xhtml+xml
@@ -336,14 +330,14 @@ phrase-scan
                 phrase-scan text !css
                 
 
-require-auth
+- require-auth
 
-:   (request only) Send an HTTP 407 response if the request doesn’t have
+    (request only) Send an HTTP 407 response if the request doesn’t have
     a Proxy-Authorization header.
 
-ssl-bump
+- ssl-bump
 
-:   (CONNECT requests only) Activate the SSLBump feature, to filter
+    (CONNECT requests only) Activate the SSLBump feature, to filter
     HTTPS connections. (Transparently intercepted HTTPS connections
     produce a virtual CONNECT request inside Redwood, so they can be
     filtered too.)
@@ -402,30 +396,30 @@ specified with the `blockpage` configuration directive. The following
 placeholders may be used in the template file, to be replaced by the
 appropriate information when the block page is sent:
 
-{{.URL}}
+- {{.URL}}
 
-:   the URL of the page that was blocked
+    the URL of the page that was blocked
 
-{{.Categories}}
+- {{.Categories}}
 
-:   the names of the categories that caused the page to be blocked
+    the names of the categories that caused the page to be blocked
 
-{{.Conditions}}
+- {{.Conditions}}
 
-:   the conditions of the ACL rule that caused the page to be blocked
+    the conditions of the ACL rule that caused the page to be blocked
 
-{{.User}}
+- {{.User}}
 
-:   the user’s IP address or username
+    the user’s IP address or username
 
-{{.Tally}}
+- {{.Tally}}
 
-:   a list of the rules that matched, and how many times each one
+    a list of the rules that matched, and how many times each one
     matched
 
-{{.Scores}}
+- {{.Scores}}
 
-:   a list of categories, and how many points the page scored in each
+    a list of categories, and how many points the page scored in each
     category
 
 The block page is generated using the Go template package; see

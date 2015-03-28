@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	"code.google.com/p/cascadia"
+	"github.com/andybalholm/cascadia"
 )
 
 // A config object holds a complete set of Redwood's configuration settings.

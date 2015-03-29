@@ -252,6 +252,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Prevent switching to QUIC.
+	resp.Header.Del("Alternate-Protocol")
+
 	originalContentType := resp.Header.Get("Content-Type")
 	fixContentType(resp)
 

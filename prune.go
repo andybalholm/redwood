@@ -117,25 +117,28 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 		return false
 	}
 
-	modified := false
+	toDelete := map[*html.Node]bool{}
+
 	for urlRule := range URLMatches {
-		sel, ok := c.PruneActions[urlRule]
-		if ok && prune(tree, sel) > 0 {
-			modified = true
+		if sel, ok := c.PruneActions[urlRule]; ok {
+			prune(tree, sel, toDelete)
 		}
 		for _, fpr := range c.FilteredPruning[urlRule] {
-			if c.pruneFiltered(tree, fpr, acls) > 0 {
-				modified = true
-			}
+			c.pruneFiltered(tree, fpr, acls, toDelete)
 		}
 	}
 
-	if !modified {
+	if len(toDelete) == 0 {
 		return false
 	}
 
 	// Mark the new content as having a charset of UTF-8.
-	prune(tree, metaCharsetSelector)
+	prune(tree, metaCharsetSelector, toDelete)
+
+	// Actually delete the nodes that are to be removed.
+	for n := range toDelete {
+		n.Parent.RemoveChild(n)
+	}
 
 	b := new(bytes.Buffer)
 	err = html.Render(b, tree)
@@ -148,32 +151,28 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 	return true
 }
 
-// prune deletes children of n that match sel, and returns how many were
-// deleted.
-func prune(n *html.Node, sel cascadia.Selector) int {
-	count := 0
-	child := n.FirstChild
-	for child != nil {
-		if sel(child) {
-			nextChild := child.NextSibling
-			n.RemoveChild(child)
-			child = nextChild
-			count++
-		} else {
-			count += prune(child, sel)
-			child = child.NextSibling
+// prune finds children of n that match sel, and adds them to toDelete.
+func prune(n *html.Node, sel cascadia.Selector, toDelete map[*html.Node]bool) {
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		switch {
+		case toDelete[child]:
+			// Ignore it.
+		case sel(child):
+			toDelete[child] = true
+		default:
+			prune(child, sel, toDelete)
 		}
 	}
-	return count
 }
 
-// pruneFiltered phrase-scans children of n that match fpr.Selector, deletes
-// those that should be removed according to fpr.Threshold and acls, and
-// returns how many were deleted.
-func (c *config) pruneFiltered(n *html.Node, fpr filteredPruningRule, acls map[string]bool) int {
-	count := 0
-	child := n.FirstChild
-	for child != nil {
+// pruneFiltered phrase-scans children of n that match fpr.Selector, and adds
+// to toDelete those that should be removed according to fpr.Threshold and acls.
+func (c *config) pruneFiltered(n *html.Node, fpr filteredPruningRule, acls map[string]bool, toDelete map[*html.Node]bool) {
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if toDelete[child] {
+			continue
+		}
+
 		remove := false
 		if fpr.Selector(child) {
 			buf := new(bytes.Buffer)
@@ -187,15 +186,9 @@ func (c *config) pruneFiltered(n *html.Node, fpr filteredPruningRule, acls map[s
 		}
 
 		if remove {
-			nextChild := child.NextSibling
-			n.RemoveChild(child)
-			child = nextChild
-			count++
+			toDelete[child] = true
 		} else {
-			count += c.pruneFiltered(child, fpr, acls)
-			child = child.NextSibling
+			c.pruneFiltered(child, fpr, acls, toDelete)
 		}
 	}
-
-	return count
 }

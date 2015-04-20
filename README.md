@@ -246,7 +246,7 @@ The following attributes are available:
     Content-Type header. This can also be a generic type, with an
     asterisk after the slash:
 
-                acl images content-type image/*
+		acl images content-type image/*
                 
 
 - method
@@ -262,7 +262,7 @@ The following attributes are available:
 
     The current time.
 
-                acl work-hours time MTWHF 9:00-17:00
+		acl work-hours time MTWHF 9:00-17:00
                 
 
     This attribute lets you select certain days of the week and/or
@@ -281,7 +281,7 @@ The following attributes are available:
     The user’s IP address, or a range of addresses (in CIDR format, or
     with a dash).
 
-                acl managers 10.0.2.5 10.0.1.0/24 10.0.2.18-25
+		acl managers 10.0.2.5 10.0.1.0/24 10.0.2.18-25
                 
 
 - user-name
@@ -325,10 +325,10 @@ that scores over the threshold, the default action is `allow`.
     (response only) Run a phrase scan on the page content. Normally this
     will be configured to depend on the content type:
 
-                acl text content-type text/* application/xhtml+xml
-                acl css content-type text/css
-                phrase-scan text !css
-                
+		acl text content-type text/* application/xhtml+xml
+		acl css content-type text/css
+		phrase-scan text !css
+			
 
 - require-auth
 
@@ -516,3 +516,35 @@ certificate and key should be in PEM format.
 Redwood uses the system root certificates to verify the identity of the
 sites it bumps. Other trusted root certificates can be specified with
 the `trusted-root` option.
+
+Transparent Proxy
+=================
+
+With the proper firewall setup, Redwood can transparently intercept 
+connections to web servers and filter them without needing to configure
+proxy settings on the client computers.
+Intercepted HTTP connections can use the same proxy port as is used
+for manually-configured proxy connections.
+For HTTPS connections, Redwood must be configured to listen for
+intercepted connections on a separate port, with the `transparent-https`
+directive.
+
+The following configuration lines will set Redwood to listen on 
+ports 6502 and 6510:
+
+	http-proxy :6502
+	transparent-https :6510
+
+If Redwood is running on a Linux gateway/router system,
+the following iptables rules will enable transparent
+filtering for the computers on the LAN:
+
+	iptables -A PREROUTING --dport 80 -j REDIRECT --to-ports 6502
+	iptables -A PREROUTING --dport 443 -j REDIRECT --to-ports 6510
+
+To do the same thing with pf on a FreeBSD gateway
+(assuming that the LAN interface is `re0`):
+
+	table <filtered> { re0:network }
+	rdr pass inet proto tcp from <filtered> to any port 80 -> re0 port 6502
+	rdr pass inet proto tcp from <filtered> to any port 443 -> re0 port 6510

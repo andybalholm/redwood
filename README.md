@@ -123,7 +123,9 @@ is an example of a rule-list file that might be in the directory for the
     <grease gun> 25 # 25 points for each occurrence of "grease gun" in the content
     <oil filter> 25 100 # 25 points for each occurrence, but no more than 100 total
 
-There are three kinds of filter rules:
+    %909841dcf4d4c000ff7f00fe30820000 100 # A hash of an image from napaonline.com
+
+There are four kinds of filter rules:
 
 - URL matching
 
@@ -174,6 +176,16 @@ There are three kinds of filter rules:
 
     The content of the page is scanned for phrases only if phrase
     scanning is selected with the `phrase-scan` ACL action.
+
+- Image Hashes
+
+	Redwood can hash images using the library at 
+	https://github.com/andybalholm/dhash.
+    The rule consists of a percent sign (`%`) followed by the
+    32-character hash calculated by the dhash program.
+
+	Images are hashed only if hashing is selected with the
+    `hash-image` ACL action.
 
 There is also a `default` rule. It specifies what weight will be
 assigned to rules that don’t specify a weight. It applies to all rules
@@ -314,6 +326,18 @@ that scores over the threshold, the default action is `allow`.
 
     Respond with HTTP 403, and send an invisible 1-pixel image instead
     of a block page.
+
+- hash-image
+
+    (response only) Calculate a hash of the image, and compare it to the
+    hash rules. If the difference between this hash and the one in the rule
+    is less than the number of bits specified with `--dhash-threshold`,
+	it matches.
+
+    This action should only be applied when the content is an image:
+
+        acl image content-type image/jpeg image/gif image/png
+        hash-image image
 
 - ignore-category
 

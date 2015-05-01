@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/andybalholm/dhash"
 	"golang.org/x/net/html/charset"
 )
 
@@ -65,12 +68,12 @@ func runURLTest(u string) {
 		}
 	}
 
-	rule := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "block", "block-invisible")
+	thisRule := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "block", "block-invisible")
 	fmt.Println()
-	if rule.Action == "" {
+	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
-		fmt.Println("Triggered rule:", rule.Action, rule.Conditions())
+		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
 	}
 
 	if conf.changeQuery(URL) {
@@ -102,15 +105,15 @@ func runURLTest(u string) {
 		fmt.Println()
 	}
 
-	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "phrase-scan")
+	thisRule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
 
-	if rule.Action == "" {
+	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
-		fmt.Println("Triggered rule:", rule.Action, rule.Conditions())
+		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
 	}
 
-	if rule.Action != "phrase-scan" {
+	if thisRule.Action != "phrase-scan" && thisRule.Action != "hash-image" {
 		return
 	}
 	fmt.Println()
@@ -123,27 +126,45 @@ func runURLTest(u string) {
 		return
 	}
 
-	modified := false
-	_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
-	if strings.Contains(contentType, "html") {
-		modified = conf.pruneContent(URL, &content, cs, acls)
-	}
-	if modified {
-		cs = "utf-8"
-		fmt.Println("Performed content pruning.")
-		fmt.Println()
+	switch thisRule.Action {
+	case "phrase-scan":
+		modified := false
+		_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
+		if strings.Contains(contentType, "html") {
+			modified = conf.pruneContent(URL, &content, cs, acls)
+		}
+		if modified {
+			cs = "utf-8"
+			fmt.Println("Performed content pruning.")
+			fmt.Println()
+		}
+
+		conf.scanContent(content, contentType, cs, tally)
+		if len(tally) == 0 {
+			fmt.Println("No content phrases match.")
+		} else {
+			fmt.Println("The following rules match:")
+			printSortedTally(stringTally(tally))
+		}
+
+	case "hash-image":
+		img, _, err := image.Decode(bytes.NewReader(content))
+		if err != nil {
+			fmt.Printf("Error decoding image: %v\n", err)
+			return
+		}
+		hash := dhash.New(img)
+
+		for _, h := range conf.ImageHashes {
+			if dhash.Distance(hash, h) <= conf.DhashThreshold {
+				tally[rule{imageHash, h.String()}]++
+				fmt.Printf("matching image hash found: %v (%d bits difference)\n", h, dhash.Distance(hash, h))
+			}
+		}
 	}
 
-	conf.scanContent(content, contentType, cs, tally)
 	scores = conf.categoryScores(tally)
 	categories = conf.significantCategories(scores)
-
-	if len(tally) == 0 {
-		fmt.Println("No content phrases match.")
-	} else {
-		fmt.Println("The following rules match:")
-		printSortedTally(stringTally(tally))
-	}
 
 	if len(scores) > 0 {
 		fmt.Println()
@@ -152,12 +173,12 @@ func runURLTest(u string) {
 	}
 	fmt.Println()
 
-	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+	thisRule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
 
-	if rule.Action == "" {
+	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
-		fmt.Println("Triggered rule:", rule.Action, rule.Conditions())
+		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
 	}
 }
 

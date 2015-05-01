@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/andybalholm/dhash"
 	"github.com/kylelemons/go-gypsy/yaml"
 )
 
@@ -52,13 +53,7 @@ type category struct {
 // loadCategories loads the category configuration files
 func (cf *config) loadCategories(dirName string) error {
 	if cf.Categories == nil {
-		cf.Categories = map[string]*category{
-			"blocked-mime": &category{ // a fake category for pages blocked by MIME type
-				name:        "blocked-mime",
-				description: "Blocked MIME Type",
-				action:      BLOCK,
-			},
-		}
+		cf.Categories = map[string]*category{}
 	}
 
 	dir, err := os.Open(dirName)
@@ -174,9 +169,17 @@ func loadCategory(dirname string) (c *category, err error) {
 func (cf *config) collectRules() {
 	for _, c := range cf.Categories {
 		for rule, _ := range c.weights {
-			if rule.t == contentPhrase {
+			switch rule.t {
+			case contentPhrase:
 				cf.ContentPhraseList.addPhrase(rule.content)
-			} else {
+			case imageHash:
+				h, err := dhash.Parse(rule.content)
+				if err != nil {
+					log.Printf("%v: %v", rule, err)
+					continue
+				}
+				cf.ImageHashes = append(cf.ImageHashes, h)
+			default:
 				cf.URLRules.AddRule(rule)
 			}
 		}

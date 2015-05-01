@@ -24,6 +24,7 @@ const (
 	pathRegex
 	queryRegex
 	contentPhrase
+	imageHash
 )
 
 func (r rule) String() string {
@@ -45,6 +46,8 @@ func (r rule) String() string {
 		return "/" + r.content + "/" + suffix
 	case contentPhrase:
 		return "<" + r.content + ">"
+	case imageHash:
+		return "%" + r.content
 	}
 	panic(fmt.Errorf("invalid rule type: %d", r.t))
 }
@@ -90,6 +93,17 @@ func parseRule(s string) (r rule, leftover string, err error) {
 		}
 		r.content = wordString(s[1:bracket])
 		s = s[bracket+1:]
+	case '%':
+		r.t = imageHash
+		space := strings.Index(s, " ")
+		if space == -1 {
+			r.content = s[1:]
+			s = ""
+		} else {
+			r.content = s[1:space]
+			s = s[space:]
+		}
+		r.content = strings.ToLower(r.content)
 	default:
 		r.t = urlMatch
 		space := strings.Index(s, " ")

@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/andybalholm/cascadia"
+	"github.com/andybalholm/dhash"
 )
 
 // A config object holds a complete set of Redwood's configuration settings.
@@ -31,6 +32,9 @@ type config struct {
 	DisableGZIP       bool
 	Threshold         int
 	URLRules          *URLMatcher
+
+	ImageHashes    []dhash.Hash
+	DhashThreshold int
 
 	ACLs       ACLDefinitions
 	ACLActions []ACLActionRule
@@ -94,6 +98,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
+	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
 	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)

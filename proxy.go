@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"io/ioutil"
 	"log"
@@ -13,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andybalholm/dhash"
 	"golang.org/x/net/html/charset"
 )
 
@@ -133,25 +139,25 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		possibleActions = append(possibleActions, "ssl-bump")
 	}
 
-	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
-	if r.Method == "CONNECT" && conf.TLSReady && rule.Action == "" {
+	thisRule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	if r.Method == "CONNECT" && conf.TLSReady && thisRule.Action == "" {
 		// If the result is unclear, go ahead and start to bump the connection.
 		// The ACLs will be checked one more time anyway.
-		rule.Action = "ssl-bump"
+		thisRule.Action = "ssl-bump"
 	}
 
-	switch rule.Action {
+	switch thisRule.Action {
 	case "require-auth":
 		send407(w)
 		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
 		return
 	case "block":
-		conf.showBlockPage(w, r, user, tally, scores, rule)
-		logAccess(r, nil, 0, false, user, tally, scores, rule)
+		conf.showBlockPage(w, r, user, tally, scores, thisRule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, tally, scores, rule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
 		return
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
@@ -182,7 +188,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, tally, scores, rule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
@@ -250,7 +256,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, tally, scores, rule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
 		return
 	}
 	defer resp.Body.Close()
@@ -263,12 +269,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)
-	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "phrase-scan")
-	if rule.Action == "" {
-		rule.Action = "allow"
+	thisRule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+	if thisRule.Action == "" {
+		thisRule.Action = "allow"
 	}
 
-	switch rule.Action {
+	switch thisRule.Action {
 	case "allow":
 		resp.Header.Set("Content-Type", originalContentType)
 		copyResponseHeader(w, resp)
@@ -276,15 +282,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n), false, user, tally, scores, rule)
+		logAccess(r, resp, int(n), false, user, tally, scores, thisRule)
 		return
 	case "block":
-		conf.showBlockPage(w, r, user, tally, scores, rule)
-		logAccess(r, resp, 0, false, user, tally, scores, rule)
+		conf.showBlockPage(w, r, user, tally, scores, thisRule)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, tally, scores, rule)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule)
 		return
 	}
 
@@ -309,34 +315,53 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contentType := resp.Header.Get("Content-Type")
 	modified := false
-	_, cs, _ := charset.DetermineEncoding(content, contentType)
-	if strings.Contains(contentType, "html") {
-		modified = conf.pruneContent(r.URL, &content, cs, acls)
-		if modified {
-			resp.Header.Set("Content-Type", "text/html; charset=utf-8")
-			cs = "utf-8"
-			resp.Header.Del("Content-Length")
+
+	switch thisRule.Action {
+	case "phrase-scan":
+		contentType := resp.Header.Get("Content-Type")
+		_, cs, _ := charset.DetermineEncoding(content, contentType)
+		if strings.Contains(contentType, "html") {
+			modified = conf.pruneContent(r.URL, &content, cs, acls)
+			if modified {
+				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+				cs = "utf-8"
+				resp.Header.Del("Content-Length")
+			}
+		}
+
+		conf.scanContent(content, contentType, cs, tally)
+
+	case "hash-image":
+		img, _, err := image.Decode(bytes.NewReader(content))
+		if err != nil {
+			log.Printf("Error decoding image from %v: %v", r.URL, err)
+			break
+		}
+		hash := dhash.New(img)
+
+		for _, h := range conf.ImageHashes {
+			if dhash.Distance(hash, h) <= conf.DhashThreshold {
+				tally[rule{imageHash, h.String()}]++
+			}
 		}
 	}
 
-	conf.scanContent(content, contentType, cs, tally)
 	scores = conf.categoryScores(tally)
 	categories = conf.significantCategories(scores)
-	rule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
-	if rule.Action == "" {
-		rule.Action = "allow"
+	thisRule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+	if thisRule.Action == "" {
+		thisRule.Action = "allow"
 	}
 
-	switch rule.Action {
+	switch thisRule.Action {
 	case "block":
-		conf.showBlockPage(w, r, user, tally, scores, rule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, rule)
+		conf.showBlockPage(w, r, user, tally, scores, thisRule)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, rule)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule)
 		return
 	}
 
@@ -356,7 +381,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(content)
 	}
 
-	logAccess(r, resp, len(content), modified, user, tally, scores, rule)
+	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

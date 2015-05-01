@@ -154,11 +154,12 @@ func runURLTest(u string) {
 			return
 		}
 		hash := dhash.New(img)
+		fmt.Println("The image's hash is", hash)
 
 		for _, h := range conf.ImageHashes {
 			if dhash.Distance(hash, h) <= conf.DhashThreshold {
 				tally[rule{imageHash, h.String()}]++
-				fmt.Printf("matching image hash found: %v (%d bits difference)\n", h, dhash.Distance(hash, h))
+				fmt.Printf("Matching image hash found: %v (%d bits difference)\n", h, dhash.Distance(hash, h))
 			}
 		}
 	}

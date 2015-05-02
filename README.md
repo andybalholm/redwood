@@ -396,7 +396,8 @@ Content pruning is controlled by a configuration file. Each line of the
 file contains a URL-matching or URL-regular-expression rule to specify
 what site or page the pruning applies to, and a CSS selector to specify
 what elements to delete. Between the two, there may be a threshold
-value. If a threshold is specified, the element is phrase-scanned before
+value. If a threshold is specified, the element and its children are 
+phrase-scanned before
 deleting. It is deleted only if the score from the phrases found in a
 blocked category is at least the threshold.
 

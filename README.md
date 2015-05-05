@@ -562,10 +562,11 @@ ports 6502 and 6510:
 
 If Redwood is running on a Linux gateway/router system,
 the following iptables rules will enable transparent
-filtering for the computers on the LAN:
+filtering for the computers on the LAN
+(assuming that the LAN interface is `eth1`):
 
-	iptables -A PREROUTING --dport 80 -j REDIRECT --to-ports 6502
-	iptables -A PREROUTING --dport 443 -j REDIRECT --to-ports 6510
+	iptables -A PREROUTING -i eth1 -p tcp --dport 80 -j REDIRECT --to-ports 6502
+	iptables -A PREROUTING -i eth1 -p tcp --dport 443 -j REDIRECT --to-ports 6510
 
 To do the same thing with pf on a FreeBSD gateway
 (assuming that the LAN interface is `re0`):

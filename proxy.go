@@ -81,7 +81,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Proxy-Authorization") != "" {
 		user, pass := ProxyCredentials(r)
 		if !conf.ValidCredentials(user, pass) {
-			send407(w)
+			conf.send407(w)
 			log.Printf("Incorrect username or password from %v: %q:%q", r.RemoteAddr, user, pass)
 			return
 		}
@@ -148,7 +148,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch thisRule.Action {
 	case "require-auth":
-		send407(w)
+		conf.send407(w)
 		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
 		return
 	case "block":

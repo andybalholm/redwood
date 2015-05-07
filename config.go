@@ -67,6 +67,7 @@ type config struct {
 	Authenticators []func(user, password string) bool
 	Passwords      map[string]string
 	PasswordLock   sync.RWMutex
+	AuthRealm      string
 
 	AccessLog string
 	TLSLog    string
@@ -92,6 +93,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.loadACLs)
 	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
+	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)

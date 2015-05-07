@@ -41,28 +41,9 @@ func (c *config) readPasswordFile(filename string) error {
 	return nil
 }
 
-func send407(w http.ResponseWriter) {
-	w.Header().Set("Proxy-Authenticate", "Basic realm=Redwood")
+func (c *config) send407(w http.ResponseWriter) {
+	w.Header().Set("Proxy-Authenticate", "Basic realm="+c.AuthRealm)
 	http.Error(w, "Proxy authentication required", http.StatusProxyAuthRequired)
-}
-
-// authenticate checks if the client has a valid username and password.
-// If so, it returns the username. If not, it generates an HTTP 407 response
-// and returns the empty string.
-func authenticate(w http.ResponseWriter, r *http.Request) string {
-	user, password := ProxyCredentials(r)
-	if user == "" || password == "" {
-		send407(w)
-		return ""
-	}
-
-	conf := getConfig()
-	if conf.ValidCredentials(user, password) {
-		return user
-	}
-
-	send407(w)
-	return ""
 }
 
 // ProxyCredentials returns the username and password from r's

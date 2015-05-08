@@ -57,12 +57,13 @@ type config struct {
 	QueryChanges    map[rule]url.Values
 	QueryMatcher    *URLMatcher
 
-	CertFile       string
-	KeyFile        string
-	TLSCert        tls.Certificate
-	ParsedTLSCert  *x509.Certificate
-	TLSReady       bool
-	ExtraRootCerts *x509.CertPool
+	CertFile         string
+	KeyFile          string
+	TLSCert          tls.Certificate
+	ParsedTLSCert    *x509.Certificate
+	TLSReady         bool
+	ExtraRootCerts   *x509.CertPool
+	BlockObsoleteSSL bool
 
 	Authenticators []func(user, password string) bool
 	Passwords      map[string]string
@@ -94,6 +95,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.loadACLs)
 	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
+	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)

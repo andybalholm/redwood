@@ -542,6 +542,10 @@ Redwood uses the system root certificates to verify the identity of the
 sites it bumps. Other trusted root certificates can be specified with
 the `trusted-root` option.
 
+The SSLBump feature only works with SSL version 3 and newer (including all TLS versions).
+By default, earlier versions are passed through unfiltered.
+It can be configured to block them instead with the `block-obsolete-ssl` option.
+
 Transparent Proxy
 =================
 

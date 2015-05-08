@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -148,7 +149,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	clientHello, err := readClientHello(conn)
 	if err != nil {
 		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err))
-		connectDirect(conn, serverAddr, clientHello)
+		if conf.BlockObsoleteSSL {
+			conn.Close()
+		} else {
+			connectDirect(conn, serverAddr, clientHello)
+		}
 		return
 	}
 
@@ -449,6 +454,8 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPo
 	return false
 }
 
+var ErrObsoleteSSLVersion = errors.New("obsolete SSL protocol version")
+
 func readClientHello(conn net.Conn) (hello []byte, err error) {
 	var header [5]byte
 	n, err := io.ReadFull(conn, header[:])
@@ -458,6 +465,9 @@ func readClientHello(conn net.Conn) (hello []byte, err error) {
 	}
 
 	if header[0] != 22 {
+		if header[0] == 128 {
+			return hello, ErrObsoleteSSLVersion
+		}
 		return hello, fmt.Errorf("expected content type of 22, got %d", header[0])
 	}
 	if header[1] != 3 {

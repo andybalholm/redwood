@@ -144,21 +144,30 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 		return
 	}
 
+	obsoleteVersion := false
 	// Read the client hello so that we can find out the name of the server (not
 	// just the address).
 	clientHello, err := readClientHello(conn)
 	if err != nil {
 		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err))
-		if conf.BlockObsoleteSSL {
-			conn.Close()
+		if err == ErrObsoleteSSLVersion {
+			obsoleteVersion = true
+			if conf.BlockObsoleteSSL {
+				conn.Close()
+				return
+			}
 		} else {
 			connectDirect(conn, serverAddr, clientHello)
 		}
-		return
 	}
 
-	serverName, ok := clientHelloServerName(clientHello)
-	if !ok || serverName == "" {
+	serverName := ""
+	if !obsoleteVersion {
+		if sn, ok := clientHelloServerName(clientHello); ok {
+			serverName = sn
+		}
+	}
+	if serverName == "" {
 		serverName, _, err = net.SplitHostPort(serverAddr)
 		if err != nil {
 			serverName = serverAddr
@@ -192,7 +201,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 		"allow",
 		"block",
 	}
-	if conf.TLSReady {
+	if conf.TLSReady && !obsoleteVersion {
 		possibleActions = append(possibleActions, "ssl-bump")
 	}
 

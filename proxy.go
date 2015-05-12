@@ -78,6 +78,31 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client := r.RemoteAddr
+	host, _, err := net.SplitHostPort(client)
+	if err == nil {
+		client = host
+	}
+
+	if conf.AuthCacheTime > 0 {
+		auth := r.Header.Get("Proxy-Authorization")
+		if auth == "" {
+			authCacheLock.RLock()
+			ar, ok := authCache[client]
+			authCacheLock.RUnlock()
+			if ok && time.Now().Sub(ar.Time) < time.Duration(conf.AuthCacheTime)*time.Second {
+				r.Header.Set("Proxy-Authorization", ar.ProxyAuthorization)
+			}
+		} else {
+			authCacheLock.Lock()
+			authCache[client] = authRecord{
+				ProxyAuthorization: auth,
+				Time:               time.Now(),
+			}
+			authCacheLock.Unlock()
+		}
+	}
+
 	if r.Header.Get("Proxy-Authorization") != "" {
 		user, pass := ProxyCredentials(r)
 		if !conf.ValidCredentials(user, pass) {
@@ -104,13 +129,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Host = realHost
 	}
 
-	client := r.RemoteAddr
-	host, _, err := net.SplitHostPort(client)
-	if err == nil {
-		client = host
-	}
 	user := client
-
 	var authUser string
 	if h.user != "" {
 		authUser = h.user

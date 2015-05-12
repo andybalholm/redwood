@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 // HTTP proxy authentication.
@@ -126,3 +127,11 @@ func (cf *config) startAuthHelper(cmd string) error {
 
 	return nil
 }
+
+type authRecord struct {
+	ProxyAuthorization string
+	Time               time.Time
+}
+
+var authCache = map[string]authRecord{}
+var authCacheLock sync.RWMutex

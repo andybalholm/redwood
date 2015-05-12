@@ -526,6 +526,16 @@ a password, separated by a space. It should respond with `OK` if the
 password is correct, or `ERR` if it is not. One such program is
 `basic_pam_auth`, which is included with Squid.
 
+Some software does not support proxy authentication.
+To work around this, Redwood has the `cache-auth` configuration directive.
+This lets programs that don't support authentication reuse the credentials
+from those that do running on the same device.
+For example, if `cache-auth` is set to 3600, 
+credentials will be saved for one hour (3600 seconds).
+So if the user connects to the proxy with a program that supports authentication,
+all requests from that IP address within the next hour will be authenticated
+with the same credentials.
+
 SSLBump
 =======
 

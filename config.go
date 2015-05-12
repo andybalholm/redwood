@@ -69,6 +69,7 @@ type config struct {
 	Passwords      map[string]string
 	PasswordLock   sync.RWMutex
 	AuthRealm      string
+	AuthCacheTime  int
 
 	AccessLog string
 	TLSLog    string
@@ -98,6 +99,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
+	c.flags.IntVar(&c.AuthCacheTime, "cache-auth", 0, "time (in seconds) to cache a device's proxy authentication")
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)

@@ -95,26 +95,34 @@ func (c *config) loadPruningConfig(filename string) error {
 	return nil
 }
 
-// pruneContent checks the URL to see if it is a site that is calling for
-// content pruning. If so, it parses the HTML, removes the specified tags, and
-// re-renders the HTML. It returns true if the content was changed.
-func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map[string]bool) bool {
-	URLMatches := c.PruneMatcher.MatchingRules(URL)
-	if len(URLMatches) == 0 {
-		return false
-	}
-
-	var r io.Reader = bytes.NewReader(*content)
+func parseHTML(content []byte, cs string) (*html.Node, error) {
+	var r io.Reader = bytes.NewReader(content)
 
 	if cs != "utf-8" {
 		e, _ := charset.Lookup(cs)
 		r = transform.NewReader(r, e.NewDecoder())
 	}
 
-	tree, err := html.Parse(r)
-	if err != nil {
-		log.Printf("Error parsing html from %s: %s", URL, err)
+	return html.Parse(r)
+}
+
+// pruneContent checks the URL to see if it is a site that is calling for
+// content pruning. If so, it parses the HTML, removes the specified tags, and
+// re-renders the HTML. It returns true if the content was changed. The content
+// may be pre-parsed and passed in as tree.
+func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map[string]bool, tree *html.Node) bool {
+	URLMatches := c.PruneMatcher.MatchingRules(URL)
+	if len(URLMatches) == 0 {
 		return false
+	}
+
+	if tree == nil {
+		doc, err := parseHTML(*content, cs)
+		if err != nil {
+			log.Printf("Error parsing html from %s: %s", URL, err)
+			return false
+		}
+		tree = doc
 	}
 
 	toDelete := map[*html.Node]bool{}
@@ -141,7 +149,7 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 	}
 
 	b := new(bytes.Buffer)
-	err = html.Render(b, tree)
+	err := html.Render(b, tree)
 	if err != nil {
 		log.Printf("Error rendering modified content from %s: %s", URL, err)
 		return false

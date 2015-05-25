@@ -502,9 +502,13 @@ The access log has the following fields: time, username or IP address,
 action (allow, block, or ignore), URL, HTTP method (GET, PUT, etc.),
 HTTP response status (if an HTTP response was being processed), content
 type, content-length, whether the content was modified by Redwood, which
-rules matched (and how many times), the score for each category, and the
-list of categories that caused the page to be blocked (if it was). The
-content length is meaningful only if a phrase scan was performed.
+rules matched (and how many times), the score for each category, the
+list of categories that caused the page to be blocked (if it was),
+and the page title (if `log-title` is enabled). 
+The content length is meaningful only if a phrase scan was performed.
+The page title is available only if a phrase scan was performed and
+`log-title` was enabled in the configuration (logging the page title
+requires parsing the HTML, so it is disabled by default).
 
 The TLS log has a line for each HTTPS connection that was intercepted.
 Like the access log, it goes to standard output by default, and it can

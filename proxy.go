@@ -18,7 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
+	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
 
@@ -61,6 +63,8 @@ func lanAddress(addr string) bool {
 
 	return false
 }
+
+var titleSelector = cascadia.MustCompile("title")
 
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
@@ -172,11 +176,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "block":
 		conf.showBlockPage(w, r, user, tally, scores, thisRule)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "")
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "")
 		return
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
@@ -207,7 +211,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "")
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
@@ -275,7 +279,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "")
 		return
 	}
 	defer resp.Body.Close()
@@ -301,15 +305,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule)
+		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "")
 		return
 	case "block":
 		conf.showBlockPage(w, r, user, tally, scores, thisRule)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "")
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "")
 		return
 	}
 
@@ -330,18 +334,34 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}})
+		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "")
 		return
 	}
 
 	modified := false
+	pageTitle := ""
 
 	switch thisRule.Action {
 	case "phrase-scan":
 		contentType := resp.Header.Get("Content-Type")
 		_, cs, _ := charset.DetermineEncoding(content, contentType)
 		if strings.Contains(contentType, "html") {
-			modified = conf.pruneContent(r.URL, &content, cs, acls)
+			var doc *html.Node
+			if conf.LogTitle {
+				doc, err = parseHTML(content, cs)
+				if err != nil {
+					log.Printf("Error parsing HTML from %s: %s", r.URL, err)
+				} else {
+					t := titleSelector.MatchFirst(doc)
+					if t != nil {
+						if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
+							pageTitle = titleText.Data
+						}
+					}
+				}
+			}
+
+			modified = conf.pruneContent(r.URL, &content, cs, acls, doc)
 			if modified {
 				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 				cs = "utf-8"
@@ -376,11 +396,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch thisRule.Action {
 	case "block":
 		conf.showBlockPage(w, r, user, tally, scores, thisRule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle)
 		return
 	}
 
@@ -400,7 +420,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(content)
 	}
 
-	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule)
+	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

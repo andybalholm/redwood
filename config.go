@@ -72,6 +72,7 @@ type config struct {
 	AuthCacheTime  int
 
 	AccessLog string
+	LogTitle  bool
 	TLSLog    string
 
 	flags *flag.FlagSet
@@ -107,6 +108,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
 	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
+	c.flags.BoolVar(&c.LogTitle, "log-title", false, "Include page title in access log.")
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)

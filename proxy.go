@@ -110,9 +110,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Proxy-Authorization") != "" {
 		user, pass := ProxyCredentials(r)
 		if !conf.ValidCredentials(user, pass) {
-			conf.send407(w)
 			log.Printf("Incorrect username or password from %v: %q:%q", r.RemoteAddr, user, pass)
-			return
+			r.Header.Del("Proxy-Authorization")
 		}
 	}
 

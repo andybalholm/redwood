@@ -350,6 +350,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 		template.CRLDistributionPoints = nil
 		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
 		template.BasicConstraintsValid = false
+		template.SignatureAlgorithm = x509.UnknownSignatureAlgorithm
 	}
 
 	var newCertBytes []byte

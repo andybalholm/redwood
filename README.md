@@ -499,12 +499,14 @@ The access log has a line for each request processed. It is in CSV
 format and goes to standard output by default. It can be sent to a file
 by including the `access-log` directive in Redwood’s configuration file.
 The access log has the following fields: time, username or IP address,
-action (allow, block, or ignore), URL, HTTP method (GET, PUT, etc.),
+action (allow or block), URL, HTTP method (GET, PUT, etc.),
 HTTP response status (if an HTTP response was being processed), content
 type, content-length, whether the content was modified by Redwood, which
 rules matched (and how many times), the score for each category, the
 list of categories that caused the page to be blocked (if it was),
-and the page title (if `log-title` is enabled). 
+the page title (if `log-title` is enabled),
+and a list of the categories that were ignored even though they had higher
+scores than the one that determined the action. 
 The content length is meaningful only if a phrase scan was performed.
 The page title is available only if a phrase scan was performed and
 `log-title` was enabled in the configuration (logging the page title

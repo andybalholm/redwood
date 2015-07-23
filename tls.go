@@ -205,8 +205,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 		possibleActions = append(possibleActions, "ssl-bump")
 	}
 
-	rule := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
-	logAccess(cr, nil, 0, false, user, tally, scores, rule, "")
+	rule, ignored := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored)
 	switch rule.Action {
 	case "allow", "":
 		connectDirect(conn, serverAddr, clientHello)

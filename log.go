@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -53,7 +54,7 @@ func (l *CSVLog) Close() {
 	l.file.Close()
 }
 
-func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string) {
+func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string) {
 	modified := ""
 	if pruned {
 		modified = "pruned"
@@ -76,7 +77,7 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 		contentType = ct2
 	}
 
-	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title)
+	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","))
 }
 
 func logTLS(user, serverAddr, serverName string, err error) {

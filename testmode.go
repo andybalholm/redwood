@@ -68,12 +68,15 @@ func runURLTest(u string) {
 		}
 	}
 
-	thisRule := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "block", "block-invisible")
+	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "block", "block-invisible")
 	fmt.Println()
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
 		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
+		if len(ignored) > 0 {
+			fmt.Println("Ignored categories:", strings.Join(ignored, ", "))
+		}
 	}
 
 	if conf.changeQuery(URL) {
@@ -105,12 +108,15 @@ func runURLTest(u string) {
 		fmt.Println()
 	}
 
-	thisRule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+	thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
 
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
 		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
+		if len(ignored) > 0 {
+			fmt.Println("Ignored categories:", strings.Join(ignored, ", "))
+		}
 	}
 
 	if thisRule.Action != "phrase-scan" && thisRule.Action != "hash-image" {
@@ -174,12 +180,15 @@ func runURLTest(u string) {
 	}
 	fmt.Println()
 
-	thisRule = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+	thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
 
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
 		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
+		if len(ignored) > 0 {
+			fmt.Println("Ignored categories:", strings.Join(ignored, ", "))
+		}
 	}
 }
 

@@ -376,8 +376,9 @@ func unionACLSets(sets ...map[string]bool) map[string]bool {
 // ACLs. If the result is empty, the default action for that category will be
 // used. Then if the result is "ignore-category", the process will be repeated
 // with the next category in the list. Finally, if all categories are ignored,
-// the process is repeated with just the original set of ACLs.
-func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []string, actions ...string) ACLActionRule {
+// the process is repeated with just the original set of ACLs. The second
+// return value is a list of the categories that were ignored.
+func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []string, actions ...string) (ar ACLActionRule, ignored []string) {
 	actionsPlus := append(actions, "ignore-category")
 	choices := make(map[string]bool, len(actions))
 	for _, a := range actions {
@@ -406,10 +407,12 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []stri
 				}
 			}
 		}
-		if r.Action != "ignore-category" {
-			return r
+		if r.Action == "ignore-category" {
+			ignored = append(ignored, cat)
+		} else {
+			return r, ignored
 		}
 	}
 
-	return c.ChooseACLAction(acls, actions...)
+	return c.ChooseACLAction(acls, actions...), ignored
 }

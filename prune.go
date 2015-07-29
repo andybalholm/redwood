@@ -19,13 +19,59 @@ import (
 
 // Functions for content pruning (removing specific HTML elements from the page)
 
-var metaCharsetSelector = cascadia.MustCompile(`meta[charset], meta[http-equiv="Content-Type"]`)
+var metaCharsetSelector selector
+
+func init() {
+	var err error
+	metaCharsetSelector, err = newSelector(`meta[charset], meta[http-equiv="Content-Type"]`)
+	if err != nil {
+		panic(err)
+	}
+}
 
 // A filteredPruningRule represents an HTML element that should be removed from
 // the page if its score in a blocked category exceeds Threshold.
 type filteredPruningRule struct {
 	Threshold int
-	Selector  cascadia.Selector
+	Selector  selector
+}
+
+// A selector is a CSS selector that remembers the original text it was parsed
+// from.
+type selector struct {
+	cascadia.Selector
+	s string
+}
+
+func newSelector(s string) (selector, error) {
+	cs, err := cascadia.Compile(s)
+	if err != nil {
+		return selector{}, err
+	}
+	return selector{
+		Selector: cs,
+		s:        s,
+	}, nil
+}
+
+func (s selector) String() string {
+	return s.s
+}
+
+// combineSelectors returns a selector that will match wherever a or b matches.
+func combineSelectors(a, b selector) selector {
+	s := selector{
+		Selector: func(n *html.Node) bool { return a.Selector(n) || b.Selector(n) },
+		s:        a.s + ", " + b.s,
+	}
+	// :contains selectors don't work in browser CSS, just in jQuery and Cascadia.
+	// So leave those out of the string version.
+	if strings.Contains(a.s, ":contains") {
+		s.s = b.s
+	} else if strings.Contains(b.s, ":contains") {
+		s.s = a.s
+	}
+	return s
 }
 
 func (c *config) loadPruningConfig(filename string) error {
@@ -71,7 +117,7 @@ func (c *config) loadPruningConfig(filename string) error {
 			}
 		}
 
-		sel, err := cascadia.Compile(line)
+		sel, err := newSelector(line)
 		if err != nil {
 			log.Printf("Invalid CSS selector %q in %s: %s", line, filename, err)
 			continue
@@ -81,9 +127,7 @@ func (c *config) loadPruningConfig(filename string) error {
 
 		if threshold == 0 {
 			if oldAction, ok := c.PruneActions[r]; ok {
-				c.PruneActions[r] = func(n *html.Node) bool {
-					return oldAction(n) || sel(n)
-				}
+				c.PruneActions[r] = combineSelectors(oldAction, sel)
 			} else {
 				c.PruneActions[r] = sel
 			}
@@ -106,6 +150,8 @@ func parseHTML(content []byte, cs string) (*html.Node, error) {
 	return html.Parse(r)
 }
 
+var headSelector = cascadia.MustCompile("head")
+
 // pruneContent checks the URL to see if it is a site that is calling for
 // content pruning. If so, it parses the HTML, removes the specified tags, and
 // re-renders the HTML. It returns true if the content was changed. The content
@@ -126,10 +172,12 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 	}
 
 	toDelete := map[*html.Node]bool{}
+	var selectors []selector
 
 	for urlRule := range URLMatches {
 		if sel, ok := c.PruneActions[urlRule]; ok {
 			prune(tree, sel, toDelete)
+			selectors = append(selectors, sel)
 		}
 		for _, fpr := range c.FilteredPruning[urlRule] {
 			c.pruneFiltered(tree, fpr, acls, toDelete)
@@ -148,6 +196,25 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 		n.Parent.RemoveChild(n)
 	}
 
+	// Add a style element to hide nodes that match the pruned selectors, in case they
+	// get added by Ajax.
+	css := new(bytes.Buffer)
+	for _, sel := range selectors {
+		fmt.Fprintf(css, "%s { display: none !important }\n", sel)
+	}
+	style := &html.Node{
+		Type: html.ElementNode,
+		Data: "style",
+	}
+	style.AppendChild(&html.Node{
+		Type: html.TextNode,
+		Data: string(css.Bytes()),
+	})
+	head := headSelector.MatchFirst(tree)
+	if head != nil {
+		head.AppendChild(style)
+	}
+
 	b := new(bytes.Buffer)
 	err := html.Render(b, tree)
 	if err != nil {
@@ -160,12 +227,12 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 }
 
 // prune finds children of n that match sel, and adds them to toDelete.
-func prune(n *html.Node, sel cascadia.Selector, toDelete map[*html.Node]bool) {
+func prune(n *html.Node, sel selector, toDelete map[*html.Node]bool) {
 	for child := n.FirstChild; child != nil; child = child.NextSibling {
 		switch {
 		case toDelete[child]:
 			// Ignore it.
-		case sel(child):
+		case sel.Selector(child):
 			toDelete[child] = true
 		default:
 			prune(child, sel, toDelete)
@@ -182,7 +249,7 @@ func (c *config) pruneFiltered(n *html.Node, fpr filteredPruningRule, acls map[s
 		}
 
 		remove := false
-		if fpr.Selector(child) {
+		if fpr.Selector.Selector(child) {
 			buf := new(bytes.Buffer)
 			html.Render(buf, child)
 			tally := make(map[rule]int)

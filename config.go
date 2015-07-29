@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
 )
 
@@ -51,7 +50,7 @@ type config struct {
 	StaticFilesDir string
 	VirtualHosts   map[string]string
 
-	PruneActions    map[rule]cascadia.Selector
+	PruneActions    map[rule]selector
 	FilteredPruning map[rule][]filteredPruningRule
 	PruneMatcher    *URLMatcher
 	QueryChanges    map[rule]url.Values
@@ -82,7 +81,7 @@ func loadConfiguration() (*config, error) {
 	c := &config{
 		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
 		URLRules:          newURLMatcher(),
-		PruneActions:      map[rule]cascadia.Selector{},
+		PruneActions:      map[rule]selector{},
 		FilteredPruning:   map[rule][]filteredPruningRule{},
 		PruneMatcher:      newURLMatcher(),
 		QueryChanges:      map[rule]url.Values{},

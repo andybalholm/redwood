@@ -127,6 +127,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var userAgent string
+	if conf.LogUserAgent {
+		userAgent = r.Header.Get("User-Agent")
+	}
+
 	if realHost, ok := conf.VirtualHosts[r.Host]; ok {
 		r.Host = realHost
 		r.URL.Host = realHost
@@ -175,11 +180,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "block":
 		conf.showBlockPage(w, r, user, tally, scores, thisRule)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
@@ -210,7 +215,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
@@ -278,7 +283,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	}
 	defer resp.Body.Close()
@@ -304,15 +309,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "block":
 		conf.showBlockPage(w, r, user, tally, scores, thisRule)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	}
 
@@ -333,7 +338,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored)
+		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored, userAgent)
 		return
 	}
 
@@ -395,11 +400,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch thisRule.Action {
 	case "block":
 		conf.showBlockPage(w, r, user, tally, scores, thisRule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
 		return
 	}
 
@@ -419,7 +424,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(content)
 	}
 
-	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

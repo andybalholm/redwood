@@ -505,8 +505,9 @@ type, content-length, whether the content was modified by Redwood, which
 rules matched (and how many times), the score for each category, the
 list of categories that caused the page to be blocked (if it was),
 the page title (if `log-title` is enabled),
-and a list of the categories that were ignored even though they had higher
-scores than the one that determined the action. 
+a list of the categories that were ignored even though they had higher
+scores than the one that determined the action,
+and the User-Agent header (if `log-user-agent` is enabled). 
 The content length is meaningful only if a phrase scan was performed.
 The page title is available only if a phrase scan was performed and
 `log-title` was enabled in the configuration (logging the page title

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -32,6 +33,11 @@ type ACLDefinitions struct {
 	Times []struct {
 		schedule WeeklySchedule
 		acl      string
+	}
+
+	UserAgents []struct {
+		regexp *regexp.Regexp
+		acl    string
 	}
 
 	Descriptions map[string]string
@@ -100,6 +106,17 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			a.URLs.AddRule(rule{t: urlMatch, content: u})
 			a.URLTags[u] = append(a.URLTags[u], acl)
 		}
+
+	case "user-agent":
+		exp := strings.Join(args, " ")
+		r, err := regexp.Compile(exp)
+		if err != nil {
+			return err
+		}
+		a.UserAgents = append(a.UserAgents, struct {
+			regexp *regexp.Regexp
+			acl    string
+		}{r, acl})
 
 	case "user-ip":
 		if a.UserIPAddresses == nil {
@@ -263,6 +280,14 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 						acls[acl] = true
 					}
 				}
+			}
+		}
+	}
+
+	if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
+		for _, u := range a.UserAgents {
+			if u.regexp.MatchString(userAgent) {
+				acls[u.acl] = true
 			}
 		}
 	}

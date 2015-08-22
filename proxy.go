@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
+	"github.com/klauspost/compress/gzip"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
@@ -332,9 +332,17 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)
 		resp.Header.Set("Content-Type", originalContentType)
+		var dest io.Writer = w
+		if gzipOK {
+			resp.Header.Set("Content-Encoding", "gzip")
+			resp.Header.Del("Content-Length")
+			gzw := gzip.NewWriter(w)
+			defer gzw.Close()
+			dest = gzw
+		}
 		copyResponseHeader(w, resp)
-		w.Write(content)
-		n, err := io.Copy(w, resp.Body)
+		dest.Write(content)
+		n, err := io.Copy(dest, resp.Body)
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}

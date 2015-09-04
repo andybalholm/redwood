@@ -392,7 +392,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hash := dhash.New(img)
 
 		for _, h := range conf.ImageHashes {
-			if dhash.Distance(hash, h) <= conf.DhashThreshold {
+			distance := dhash.Distance(hash, h.Hash)
+			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
 				tally[rule{imageHash, h.String()}]++
 			}
 		}

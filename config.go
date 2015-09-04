@@ -22,6 +22,21 @@ import (
 	"github.com/andybalholm/dhash"
 )
 
+type dhashWithThreshold struct {
+	dhash.Hash
+
+	// Threshold is the number of bits that can be different and still be counted
+	// as a match. If it is -1, the global threshold is used.
+	Threshold int
+}
+
+func (d dhashWithThreshold) String() string {
+	if d.Threshold == -1 {
+		return d.Hash.String()
+	}
+	return fmt.Sprintf("%v-%d", d.Hash, d.Threshold)
+}
+
 // A config object holds a complete set of Redwood's configuration settings.
 type config struct {
 	BlockTemplate     *template.Template
@@ -32,7 +47,7 @@ type config struct {
 	Threshold         int
 	URLRules          *URLMatcher
 
-	ImageHashes    []dhash.Hash
+	ImageHashes    []dhashWithThreshold
 	DhashThreshold int
 
 	ACLs       ACLDefinitions

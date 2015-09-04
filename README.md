@@ -183,6 +183,9 @@ There are four kinds of filter rules:
 	https://github.com/andybalholm/dhash.
     The rule consists of a percent sign (`%`) followed by the
     32-character hash calculated by the dhash program.
+	The hash my optionally be followed by a hyphen and a threshold, 
+	which is an integer specifying the number of bits that may be different
+	for another hash to be considered to match this hash (this overrides the global dhash-threshold setting).
 
 	Images are hashed only if hashing is selected with the
     `hash-image` ACL action.
@@ -339,7 +342,7 @@ that scores over the threshold, the default action is `allow`.
 
     (response only) Calculate a hash of the image, and compare it to the
     hash rules. If the difference between this hash and the one in the rule
-    is less than the number of bits specified with `--dhash-threshold`,
+    is less than the number of bits specified with `--dhash-threshold` (or the hash's individual threshold),
 	it matches.
 
     This action should only be applied when the content is an image:

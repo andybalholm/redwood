@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/andybalholm/dhash"
@@ -173,12 +174,23 @@ func (cf *config) collectRules() {
 			case contentPhrase:
 				cf.ContentPhraseList.addPhrase(rule.content)
 			case imageHash:
-				h, err := dhash.Parse(rule.content)
+				content := rule.content
+				threshold := -1
+				if dash := strings.Index(content, "-"); dash != -1 {
+					t, err := strconv.Atoi(content[dash+1:])
+					if err != nil {
+						log.Printf("%v: %v", rule, err)
+						continue
+					}
+					threshold = t
+					content = content[:dash]
+				}
+				h, err := dhash.Parse(content)
 				if err != nil {
 					log.Printf("%v: %v", rule, err)
 					continue
 				}
-				cf.ImageHashes = append(cf.ImageHashes, h)
+				cf.ImageHashes = append(cf.ImageHashes, dhashWithThreshold{h, threshold})
 			default:
 				cf.URLRules.AddRule(rule)
 			}

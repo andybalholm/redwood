@@ -59,6 +59,9 @@ type config struct {
 
 	ProxyAddresses       []string
 	TransparentAddresses []string
+	ClassifierAddresses  []string
+
+	ClassifierIgnoredCategories []string
 
 	CGIBin         string
 	ServeMux       *http.ServeMux
@@ -136,14 +139,11 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.TLSLog, "tls-log", "", "path to tls log file")
 	c.newActiveFlag("trusted-root", "", "path to file of additional trusted root certificates (in PEM format)", c.addTrustedRoots)
 
-	c.newActiveFlag("http-proxy", "", "address (host:port) to listen for proxy connections on", func(s string) error {
-		c.ProxyAddresses = append(c.ProxyAddresses, s)
-		return nil
-	})
-	c.newActiveFlag("transparent-https", "", "address to listen for intercepted HTTPS connections on", func(s string) error {
-		c.TransparentAddresses = append(c.TransparentAddresses, s)
-		return nil
-	})
+	c.stringListFlag("http-proxy", "address (host:port) to listen for proxy connections on", &c.ProxyAddresses)
+	c.stringListFlag("transparent-https", "address to listen for intercepted HTTPS connections on", &c.TransparentAddresses)
+	c.stringListFlag("classifier", "address to listen for site-classification requests on", &c.ClassifierAddresses)
+
+	c.stringListFlag("classifier-ignore", "category to omit from classifier results", &c.ClassifierIgnoredCategories)
 
 	c.newActiveFlag("virtual-host", "", "a hostname substitution to apply to HTTP requests (e.g. -virtual-host me.local localhost)", func(val string) error {
 		f := strings.Fields(val)
@@ -318,4 +318,11 @@ func (c *config) newActiveFlag(name, value, usage string, f func(string) error) 
 	}
 	c.flags.Var(af, name, usage)
 	return af
+}
+
+func (c *config) stringListFlag(name, usage string, list *[]string) flag.Value {
+	return c.newActiveFlag(name, "", usage, func(s string) error {
+		*list = append(*list, s)
+		return nil
+	})
 }

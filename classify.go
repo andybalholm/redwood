@@ -31,28 +31,26 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 
 	var result classificationResponse
 
-	result.URL = r.FormValue("url")
-	if result.URL == "" {
+	url := r.FormValue("url")
+	result.URL = url
+	if url == "" {
 		http.Error(w, "The URL to classify must be supplied as an HTTP form parameter named 'url'.", 400)
 		return
 	}
 
-	req, err := http.NewRequest("GET", result.URL, nil)
+	resp, err := http.Get(url)
 	if err != nil {
 		result.Error = err.Error()
 		ServeJSON(w, r, result)
-		log.Printf("Classifier: error creating HTTP request for %s: %v", result.URL, err)
-		return
-	}
-
-	resp, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		result.Error = err.Error()
-		ServeJSON(w, r, result)
-		log.Printf("Classifier: error fetching %s: %v", result.URL, err)
+		log.Printf("Classifier: error fetching %s: %v", url, err)
 		return
 	}
 	defer resp.Body.Close()
+
+	// If the http Client followed redirects, use the final URL, not the one initially specified.
+	req := resp.Request
+	result.URL = req.URL.String()
+
 	if resp.StatusCode != 200 {
 		result.Error = resp.Status
 		ServeJSON(w, r, result)

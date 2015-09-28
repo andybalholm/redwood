@@ -89,23 +89,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		client = host
 	}
 
-	if conf.AuthCacheTime > 0 {
-		auth := r.Header.Get("Proxy-Authorization")
-		if auth == "" {
-			authCacheLock.RLock()
-			ar, ok := authCache[client]
-			authCacheLock.RUnlock()
-			if ok && time.Now().Sub(ar.Time) < time.Duration(conf.AuthCacheTime)*time.Second {
-				r.Header.Set("Proxy-Authorization", ar.ProxyAuthorization)
-			}
-		} else {
-			authCacheLock.Lock()
-			authCache[client] = authRecord{
-				ProxyAuthorization: auth,
-				Time:               time.Now(),
-			}
-			authCacheLock.Unlock()
+	usedCachedCredentials := false
+	if auth := r.Header.Get("Proxy-Authorization"); auth == "" && conf.AuthCacheTime > 0 {
+		authCacheLock.RLock()
+		ar, ok := authCache[client]
+		authCacheLock.RUnlock()
+		if ok && time.Now().Sub(ar.Time) < time.Duration(conf.AuthCacheTime)*time.Second {
+			r.Header.Set("Proxy-Authorization", ar.ProxyAuthorization)
 		}
+		usedCachedCredentials = true
 	}
 
 	if r.Header.Get("Proxy-Authorization") != "" {
@@ -154,6 +146,18 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	categories := conf.significantCategories(scores)
 
 	reqACLs := conf.ACLs.requestACLs(r, authUser)
+
+	if auth := r.Header.Get("Proxy-Authorization"); auth != "" && !usedCachedCredentials {
+		thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, categories, "cache-auth")
+		if thisRule.Action == "cache-auth" {
+			authCacheLock.Lock()
+			authCache[client] = authRecord{
+				ProxyAuthorization: auth,
+				Time:               time.Now(),
+			}
+			authCacheLock.Unlock()
+		}
+	}
 
 	possibleActions := []string{
 		"allow",

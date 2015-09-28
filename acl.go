@@ -212,7 +212,7 @@ func (c *config) loadACLs(filename string) error {
 				}
 			}
 
-		case "allow", "block", "block-invisible", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
+		case "allow", "block", "block-invisible", "cache-auth", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
 			r := ACLActionRule{Action: action}
 			for _, a := range args {
 				if strings.HasPrefix(a, "!") {

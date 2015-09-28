@@ -545,11 +545,13 @@ password is correct, or `ERR` if it is not. One such program is
 `basic_pam_auth`, which is included with Squid.
 
 Some software does not support proxy authentication.
-To work around this, Redwood has the `cache-auth` configuration directive.
+To work around this, Redwood has the `cache-auth` configuration directive and ACL action.
 This lets programs that don't support authentication reuse the credentials
 from those that do running on the same device.
+If the `cache-auth` ACL action applies to a request, the credentials will be saved for later use.
+They will expire after the time period specified in the `cache-auth` configuration directive (in seconds).
 For example, if `cache-auth` is set to 3600, 
-credentials will be saved for one hour (3600 seconds).
+credentials will be saved for one hour (3600 seconds),
 So if the user connects to the proxy with a program that supports authentication,
 all requests from that IP address within the next hour will be authenticated
 with the same credentials.

@@ -295,6 +295,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Prevent switching to QUIC.
 	resp.Header.Del("Alternate-Protocol")
+	resp.Header.Del("Alt-Svc")
 
 	originalContentType := resp.Header.Get("Content-Type")
 	fixContentType(resp)
@@ -340,7 +341,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var dest io.Writer = w
 		if gzipOK {
 			resp.Header.Set("Content-Encoding", "gzip")
-			resp.ContentLength = -1
 			gzw := gzip.NewWriter(w)
 			defer gzw.Close()
 			dest = gzw
@@ -382,7 +382,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if modified {
 				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 				cs = "utf-8"
-				resp.ContentLength = -1
 			}
 		}
 
@@ -428,12 +427,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if gzipOK && len(content) > 1000 {
 		resp.Header.Set("Content-Encoding", "gzip")
-		resp.ContentLength = -1
 		copyResponseHeader(w, resp)
 		gzw := gzip.NewWriter(w)
 		gzw.Write(content)
 		gzw.Close()
 	} else {
+		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 		copyResponseHeader(w, resp)
 		w.Write(content)
 	}
@@ -445,12 +444,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func copyResponseHeader(w http.ResponseWriter, resp *http.Response) {
 	newHeader := w.Header()
 	for key, values := range resp.Header {
+		if key == "Content-Length" {
+			continue
+		}
 		for _, v := range values {
 			newHeader.Add(key, v)
 		}
-	}
-	if resp.ContentLength >= 0 {
-		newHeader.Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 	}
 
 	w.WriteHeader(resp.StatusCode)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
@@ -44,6 +45,33 @@ func (c *config) readPasswordFile(filename string) error {
 func (c *config) send407(w http.ResponseWriter) {
 	w.Header().Set("Proxy-Authenticate", "Basic realm="+c.AuthRealm)
 	http.Error(w, "Proxy authentication required", http.StatusProxyAuthRequired)
+}
+
+// ProxyCredentials returns the username and password from r's
+// Proxy-Authorization header, or empty strings if the header is missing or
+// invalid.
+func ProxyCredentials(r *http.Request) (user, pass string) {
+	auth := r.Header.Get("Proxy-Authorization")
+	if auth == "" || !strings.HasPrefix(auth, "Basic ") {
+		return "", ""
+	}
+
+	auth = auth[len("Basic "):]
+	auth = strings.TrimSpace(auth)
+	enc := base64.StdEncoding
+	buf := make([]byte, enc.DecodedLen(len(auth)))
+	n, err := enc.Decode(buf, []byte(auth))
+	if err != nil {
+		return "", ""
+	}
+	auth = string(buf[:n])
+
+	colon := strings.Index(auth, ":")
+	if colon == -1 {
+		return "", ""
+	}
+
+	return auth[:colon], auth[colon+1:]
 }
 
 // ValidCredentials returns whether user and password are a valid combination.

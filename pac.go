@@ -27,17 +27,20 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 		proxyAddr = conf.PACLANAddress
 	}
 
-	user, pass := r.FormValue("u"), r.FormValue("p")
-	if perUserPorts != nil && user != "" && pass != "" && conf.ValidCredentials(user, pass) {
-		// Open a separate, pre-authenticated listener for this user.
-		port := getPersonalProxyPort(user, client)
-		proxyHost, _, err := net.SplitHostPort(proxyAddr)
-		if err != nil {
-			log.Printf("invalid pac-address value (%q)", proxyAddr)
-			http.Error(w, "can't generate PAC file", 500)
-			return
+	if a := r.FormValue("a"); a != "" {
+		if user, pass, ok := decodeBase64Credentials(a); ok {
+			if perUserPorts != nil && conf.ValidCredentials(user, pass) {
+				// Open a separate, pre-authenticated listener for this user.
+				port := getPersonalProxyPort(user, client)
+				proxyHost, _, err := net.SplitHostPort(proxyAddr)
+				if err != nil {
+					log.Printf("invalid pac-address value (%q)", proxyAddr)
+					http.Error(w, "can't generate PAC file", 500)
+					return
+				}
+				proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(port))
+			}
 		}
-		proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(port))
 	}
 
 	w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")

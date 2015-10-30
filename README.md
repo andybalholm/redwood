@@ -653,11 +653,10 @@ listening on separate, pre-authenticated ports for individual users.
 This helps to address various authentication problems resulting from software that
 doesn't support proxy authentication properly.
 To enable this, specify a range of ports with `per-user-ports` (e.g. `per-user-ports 7000-7999`).
-Then if a PAC file request contains a valid username and password (like `/proxy.pac?u=user&p=password`),
+Then, put a base64-encoded username/password pair (just like in an HTTP basic authentication header)
+in the PAC request URL (e.g. `/proxy.pac?a=dXNlcm5hbWU6cGFzc3dvcmQ=`).
+(Generate it by typing a command like `echo -n username:password | base64` at a UNIX command prompt.)
 Redwood will start listening for requests from that user on a new port from the specified range,
 and send a PAC file telling it to use that port for its proxy.
 All requests received from the same IP address as the PAC file request will be automatically
 authenticated as that user.
-
-Warning: The username and password are sent in plain text over HTTP.
-Do not use valuable passwords.

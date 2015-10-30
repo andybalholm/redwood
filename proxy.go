@@ -320,6 +320,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch thisRule.Action {
 	case "allow":
 		resp.Header.Set("Content-Type", originalContentType)
+		if resp.ContentLength > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
+		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
 		if err != nil {
@@ -354,6 +357,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			gzw := gzip.NewWriter(w)
 			defer gzw.Close()
 			dest = gzw
+		}
+		if resp.ContentLength > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)
 		dest.Write(content)

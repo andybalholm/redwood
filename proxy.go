@@ -40,6 +40,8 @@ type proxyHandler struct {
 	rt http.RoundTripper
 }
 
+var ip6Loopback = net.ParseIP("::1")
+
 // lanAddress returns whether addr is in one of the LAN address ranges.
 func lanAddress(addr string) bool {
 	ip := net.ParseIP(addr)
@@ -55,10 +57,13 @@ func lanAddress(addr string) bool {
 		return false
 	}
 
-	if ip[0]&0xfe == 0xfc {
+	// IPv6
+	switch {
+	case ip[0]&0xfe == 0xfc:
 		return true
-	}
-	if ip[0] == 0xfe && (ip[1]&0xfc) == 0x80 {
+	case ip[0] == 0xfe && (ip[1]&0xfc) == 0x80:
+		return true
+	case ip.Equal(ip6Loopback):
 		return true
 	}
 
@@ -75,6 +80,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !conf.ACLsLoaded {
 		http.Error(w, "Redwood proxy configuration needs to be updated for this version of Redwood.\n(Use ACLs)", 500)
+		return
+	}
+
+	if conf.PACAddress != "" && (r.URL.Path == "/proxy.pac" || r.URL.Path == "wpad.dat") {
+		handlePACFile(w, r)
 		return
 	}
 
@@ -101,8 +111,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Header.Get("Proxy-Authorization") != "" {
-		user, pass := ProxyCredentials(r)
-		if !conf.ValidCredentials(user, pass) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || !conf.ValidCredentials(user, pass) {
 			log.Printf("Incorrect username or password from %v: %q:%q", r.RemoteAddr, user, pass)
 			r.Header.Del("Proxy-Authorization")
 		}
@@ -134,7 +144,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var authUser string
 	if h.user != "" {
 		authUser = h.user
-	} else if u, _ := ProxyCredentials(r); u != "" {
+	} else if u, _, ok := r.BasicAuth(); ok {
 		authUser = u
 	}
 	if authUser != "" {

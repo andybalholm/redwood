@@ -636,3 +636,26 @@ The JSON object in the response has the following keys:
 For example, if the classifier is running on port 6503 on 10.1.10.1,
 http://10.1.10.1:6503/?url=https%3A%2F%2Fgolang.org might return
 {"url":"https://golang.org","categories":{"computer":266}}.
+
+PAC Files
+=========
+
+Redwood can provide PAC (Proxy Auto-Configuration) files to automatically configure
+client computers to use it as their proxy. To enable this feature, set `pac-address`
+to the proxy address to use in the PAC file.
+Then, whenever Redwood receives a request for `/proxy.pac` or `/wpad.dat`, 
+it sends a PAC file directing the client to proxy its requests through that address.
+If clients on the LAN should use different PAC settings from clients on the internet,
+a separate `pac-lan-address` can be specified.
+
+PAC files also make another feature possible: 
+listening on separate, pre-authenticated ports for individual users.
+This helps to address various authentication problems resulting from software that
+doesn't support proxy authentication properly.
+To enable this, specify a range of ports with `per-user-ports` (e.g. `per-user-ports 7000-7999`).
+Then if a PAC file request contains a valid username and password (like `/proxy.pac?u=user&p=password`),
+Redwood will start listening for requests from that user on a new port from the specified range,
+and send a PAC file telling it to use that port for its proxy.
+All requests received from the same IP address as the PAC file request will be automatically
+authenticated as that user.
+The port will be closed after 8 hours of inactivity.

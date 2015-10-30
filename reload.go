@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -21,7 +20,9 @@ func getConfig() *config {
 	return <-ch
 }
 
-var listenerChan = make(chan net.Listener)
+// shutdownChan is closed to indicate that the server is shutting down, and
+// no more connections should be accepted.
+var shutdownChan = make(chan struct{})
 
 var activeConnections sync.WaitGroup
 
@@ -42,9 +43,6 @@ func manageConfig() {
 	tlsLog := NewCSVLog(conf.TLSLog)
 
 	conf.startWebServer()
-
-	// listeners is a list of all currently-open network listeners.
-	var listeners []net.Listener
 
 	for {
 		select {
@@ -74,14 +72,9 @@ func manageConfig() {
 
 			conf.startWebServer()
 
-		case l := <-listenerChan:
-			listeners = append(listeners, l)
-
 		case <-termChan:
 			log.Println("Received SIGTERM")
-			for _, l := range listeners {
-				l.Close()
-			}
+			close(shutdownChan)
 			if conf.PIDFile != "" {
 				os.Remove(conf.PIDFile)
 			}

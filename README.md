@@ -1,6 +1,5 @@
-Redwood is an internet content-filtering program. It is designed to
-replace and improve on DansGuardian as the core of the Security
-Appliance internet filter. It adds flexibility and granularity to the
+Redwood is an internet content-filtering program. 
+It adds flexibility and granularity to the
 filtering by classifying sites into multiple categories instead of just
 “Allow” and “Block.”
 
@@ -408,9 +407,10 @@ file contains a URL-matching or URL-regular-expression rule to specify
 what site or page the pruning applies to, and a CSS selector to specify
 what elements to delete. Between the two, there may be a threshold
 value. If a threshold is specified, the element and its children are 
-phrase-scanned before
-deleting. It is deleted only if the score from the phrases found in a
+deleted after the page is phrase-scanned if 
+the score from the phrases found in a
 blocked category is at least the threshold.
+
 
     # Craigslist personals and discussion forums
     craigslist.org div#ppp, div#forums, option[value=ppp]

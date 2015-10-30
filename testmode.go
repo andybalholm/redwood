@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/dhash"
+	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
 
@@ -132,12 +133,13 @@ func runURLTest(u string) {
 		return
 	}
 
+	var doc *html.Node
 	switch thisRule.Action {
 	case "phrase-scan":
 		modified := false
 		_, cs, _ := charset.DetermineEncoding(content, resp.Header.Get("Content-Type"))
 		if strings.Contains(contentType, "html") {
-			modified = conf.pruneContent(URL, &content, cs, acls, nil)
+			modified = conf.pruneContent(URL, &content, cs, acls, &doc)
 		}
 		if modified {
 			cs = "utf-8"

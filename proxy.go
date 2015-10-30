@@ -378,8 +378,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "phrase-scan":
 		contentType := resp.Header.Get("Content-Type")
 		_, cs, _ := charset.DetermineEncoding(content, contentType)
+		var doc *html.Node
 		if strings.Contains(contentType, "html") {
-			var doc *html.Node
 			if conf.LogTitle {
 				doc, err = parseHTML(content, cs)
 				if err != nil {
@@ -394,14 +394,22 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			modified = conf.pruneContent(r.URL, &content, cs, acls, doc)
+			modified = conf.pruneContent(r.URL, &content, cs, acls, &doc)
 			if modified {
-				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 				cs = "utf-8"
 			}
 		}
 
 		conf.scanContent(content, contentType, cs, tally)
+
+		if strings.Contains(contentType, "html") {
+			if conf.doFilteredPruning(r.URL, &content, cs, acls, &doc) {
+				modified = true
+			}
+			if modified {
+				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+			}
+		}
 
 	case "hash-image":
 		img, _, err := image.Decode(bytes.NewReader(content))

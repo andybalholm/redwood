@@ -68,11 +68,12 @@ type config struct {
 	StaticFilesDir string
 	VirtualHosts   map[string]string
 
-	PruneActions    map[rule]selector
-	FilteredPruning map[rule][]filteredPruningRule
-	PruneMatcher    *URLMatcher
-	QueryChanges    map[rule]url.Values
-	QueryMatcher    *URLMatcher
+	PruneActions         map[rule]selector
+	FilteredPruning      map[rule][]filteredPruningRule
+	PruneMatcher         *URLMatcher
+	FilteredPruneMatcher *URLMatcher
+	QueryChanges         map[rule]url.Values
+	QueryMatcher         *URLMatcher
 
 	CertFile         string
 	KeyFile          string
@@ -101,17 +102,18 @@ type config struct {
 
 func loadConfiguration() (*config, error) {
 	c := &config{
-		flags:             flag.NewFlagSet("config", flag.ContinueOnError),
-		URLRules:          newURLMatcher(),
-		PruneActions:      map[rule]selector{},
-		FilteredPruning:   map[rule][]filteredPruningRule{},
-		PruneMatcher:      newURLMatcher(),
-		QueryChanges:      map[rule]url.Values{},
-		QueryMatcher:      newURLMatcher(),
-		VirtualHosts:      map[string]string{},
-		ServeMux:          http.NewServeMux(),
-		ContentPhraseList: newPhraseList(),
-		Passwords:         map[string]string{},
+		flags:                flag.NewFlagSet("config", flag.ContinueOnError),
+		URLRules:             newURLMatcher(),
+		PruneActions:         map[rule]selector{},
+		FilteredPruning:      map[rule][]filteredPruningRule{},
+		PruneMatcher:         newURLMatcher(),
+		FilteredPruneMatcher: newURLMatcher(),
+		QueryChanges:         map[rule]url.Values{},
+		QueryMatcher:         newURLMatcher(),
+		VirtualHosts:         map[string]string{},
+		ServeMux:             http.NewServeMux(),
+		ContentPhraseList:    newPhraseList(),
+		Passwords:            map[string]string{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")

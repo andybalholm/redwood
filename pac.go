@@ -6,8 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
-	"time"
+	"sync"
 )
 
 var perUserPorts chan int
@@ -31,7 +30,7 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 	user, pass := r.FormValue("u"), r.FormValue("p")
 	if perUserPorts != nil && user != "" && pass != "" && conf.ValidCredentials(user, pass) {
 		// Open a separate, pre-authenticated listener for this user.
-		port := <-perUserPorts
+		port := getPersonalProxyPort(user, client)
 		proxyHost, _, err := net.SplitHostPort(proxyAddr)
 		if err != nil {
 			log.Printf("invalid pac-address value (%q)", proxyAddr)
@@ -39,7 +38,6 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(port))
-		go runPerUserListener(user, client, port)
 	}
 
 	w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
@@ -61,47 +59,73 @@ var pacTemplate = `function FindProxyForURL(url, host) {
 	return "PROXY %s";
 }`
 
-func runPerUserListener(user string, clientIP string, port int) {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		log.Printf("error opening per-user listener for %s on port %d: %v", user, port, err)
+// getPersonalProxyPort returns a port number that user may
+// connect to from clientIP. If none is available, it starts a new listener.
+func getPersonalProxyPort(user string, clientIP string) int {
+	proxyForUserLock.RLock()
+	p := proxyForUser[user]
+	proxyForUserLock.RUnlock()
+
+	if p == nil {
+		// Start a new proxy listener for this user.
+		port := <-perUserPorts
+		p = &perUserProxy{
+			User:    user,
+			Port:    port,
+			Handler: proxyHandler{user: user},
+		}
+		proxyForUserLock.Lock()
+		proxyForUser[user] = p
+		proxyForUserLock.Unlock()
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err != nil {
+			log.Printf("error opening per-user listener for %s on port %d: %v", user, port, err)
+			return port
+		}
+
+		go func() {
+			<-shutdownChan
+			listener.Close()
+		}()
+
+		server := http.Server{Handler: p}
+		go server.Serve(listener)
+		log.Printf("opened per-user listener for %s on port %d", user, port)
+	}
+
+	p.AllowIP(clientIP)
+
+	return p.Port
+}
+
+type perUserProxy struct {
+	User          string
+	Port          int
+	Handler       http.Handler
+	allowedIPs    map[string]bool
+	allowedIPLock sync.RWMutex
+}
+
+func (p *perUserProxy) AllowIP(ip string) {
+	p.allowedIPLock.Lock()
+	if p.allowedIPs == nil {
+		p.allowedIPs = make(map[string]bool)
+	}
+	p.allowedIPs[ip] = true
+	p.allowedIPLock.Unlock()
+}
+
+func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	p.allowedIPLock.RLock()
+	ok := p.allowedIPs[host]
+	p.allowedIPLock.RUnlock()
+	if !ok {
+		http.Error(w, "Unauthorized IP address", http.StatusForbidden)
 		return
 	}
-
-	heartbeat := make(chan struct{})
-	go func() {
-		timeout := time.NewTimer(8 * time.Hour)
-		for {
-			select {
-			case <-timeout.C:
-				listener.Close()
-				perUserPorts <- port
-				timeout.Stop()
-				return
-			case <-heartbeat:
-				timeout.Reset(8 * time.Hour)
-			case <-shutdownChan:
-				listener.Close()
-				return
-			}
-		}
-	}()
-
-	handler := proxyHandler{user: user}
-	server := http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			heartbeat <- struct{}{}
-			host, _, _ := net.SplitHostPort(r.RemoteAddr)
-			if host != clientIP {
-				http.Error(w, "Unauthorized IP address", http.StatusForbidden)
-				return
-			}
-			handler.ServeHTTP(w, r)
-		}),
-	}
-
-	err = server.Serve(listener)
-	if err != nil && !strings.Contains(err.Error(), "use of closed") {
-		log.Printf("Error running HTTP proxy for %s on port %d: %v", user, port, err)
-	}
+	p.Handler.ServeHTTP(w, r)
 }
+
+var proxyForUser = make(map[string]*perUserProxy)
+var proxyForUserLock sync.RWMutex

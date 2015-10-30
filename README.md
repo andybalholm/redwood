@@ -658,4 +658,6 @@ Redwood will start listening for requests from that user on a new port from the 
 and send a PAC file telling it to use that port for its proxy.
 All requests received from the same IP address as the PAC file request will be automatically
 authenticated as that user.
-The port will be closed after 8 hours of inactivity.
+
+Warning: The username and password are sent in plain text over HTTP.
+Do not use valuable passwords.

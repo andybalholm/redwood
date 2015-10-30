@@ -90,10 +90,12 @@ func main() {
 		if err != nil || end < start {
 			log.Printf("invalid per-user-ports setting (%q)", conf.PerUserPorts)
 		} else {
-			perUserPorts = make(chan int, end-start+1)
-			for i := start; i <= end; i++ {
-				perUserPorts <- i
-			}
+			perUserPorts = make(chan int)
+			go func() {
+				for i := start; i <= end; i++ {
+					perUserPorts <- i
+				}
+			}()
 		}
 	}
 

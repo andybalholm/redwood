@@ -144,7 +144,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var authUser string
 	if h.user != "" {
 		authUser = h.user
-	} else if u, _ := ProxyCredentials(r); u != "" {
+	} else if u, _, ok := ProxyCredentials(r); ok {
 		authUser = u
 	}
 	if authUser != "" {

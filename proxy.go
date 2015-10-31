@@ -99,22 +99,22 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		client = host
 	}
 
-	usedCachedCredentials := false
-	if auth := r.Header.Get("Proxy-Authorization"); auth == "" && conf.AuthCacheTime > 0 {
-		authCacheLock.RLock()
-		ar, ok := authCache[client]
-		authCacheLock.RUnlock()
-		if ok && time.Now().Sub(ar.Time) < time.Duration(conf.AuthCacheTime)*time.Second {
-			r.Header.Set("Proxy-Authorization", ar.ProxyAuthorization)
-		}
-		usedCachedCredentials = true
-	}
+	authUser := ""
 
-	if r.Header.Get("Proxy-Authorization") != "" {
-		user, pass, ok := r.BasicAuth()
-		if !ok || !conf.ValidCredentials(user, pass) {
-			log.Printf("Incorrect username or password from %v: %q:%q", r.RemoteAddr, user, pass)
-			r.Header.Del("Proxy-Authorization")
+	switch {
+	case h.user != "":
+		authUser = h.user
+
+	case r.Header.Get("Proxy-Authorization") != "":
+		user, pass, ok := ProxyCredentials(r)
+		if ok {
+			if conf.ValidCredentials(user, pass) {
+				authUser = user
+			} else {
+				log.Printf("Incorrect username or password from %v: %s:%s", r.RemoteAddr, user, pass)
+			}
+		} else {
+			log.Printf("Invalid Proxy-Authorization header from %v: %q", r.RemoteAddr, r.Header.Get("Proxy-Authorization"))
 		}
 	}
 
@@ -141,12 +141,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := client
-	var authUser string
-	if h.user != "" {
-		authUser = h.user
-	} else if u, _, ok := ProxyCredentials(r); ok {
-		authUser = u
-	}
 	if authUser != "" {
 		user = authUser
 	}
@@ -157,24 +151,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	reqACLs := conf.ACLs.requestACLs(r, authUser)
 
-	if auth := r.Header.Get("Proxy-Authorization"); auth != "" && !usedCachedCredentials {
-		thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, categories, "cache-auth")
-		if thisRule.Action == "cache-auth" {
-			authCacheLock.Lock()
-			authCache[client] = authRecord{
-				ProxyAuthorization: auth,
-				Time:               time.Now(),
-			}
-			authCacheLock.Unlock()
-		}
-	}
-
 	possibleActions := []string{
 		"allow",
 		"block",
 		"block-invisible",
 	}
-	if r.Header.Get("Proxy-Authorization") == "" && !h.TLS {
+	if authUser == "" && !h.TLS {
 		possibleActions = append(possibleActions, "require-auth")
 	}
 	if r.Method == "CONNECT" && conf.TLSReady {

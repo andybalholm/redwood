@@ -83,7 +83,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if conf.PACAddress != "" && (r.URL.Path == "/proxy.pac" || r.URL.Path == "wpad.dat") {
+	if conf.PACAddress != "" && (r.URL.Path == "/proxy.pac" || r.URL.Path == "/wpad.dat") {
 		handlePACFile(w, r)
 		return
 	}

@@ -193,6 +193,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		SSLBump(conn, r.URL.Host, user, authUser)
 		return
 	}
@@ -213,6 +214,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}

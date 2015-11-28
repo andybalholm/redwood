@@ -12,6 +12,7 @@ import (
 
 	"github.com/andybalholm/dhash"
 	"github.com/klauspost/compress/gzip"
+	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
 
@@ -85,8 +86,9 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	case "phrase-scan":
 		contentType := resp.Header.Get("Content-Type")
 		_, cs, _ := charset.DetermineEncoding(content, contentType)
+		var doc *html.Node
 		if strings.Contains(contentType, "html") {
-			modified = conf.pruneContent(req.URL, &content, cs, acls, nil)
+			modified = conf.pruneContent(req.URL, &content, cs, acls, &doc)
 		}
 
 		conf.scanContent(content, contentType, cs, tally)

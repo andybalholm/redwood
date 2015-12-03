@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -100,6 +101,14 @@ func main() {
 	}
 
 	if portsListening > 0 {
+		if conf.CloseIdleConnections > 0 {
+			go func() {
+				for range time.Tick(conf.CloseIdleConnections) {
+					transport.CloseIdleConnections()
+				}
+			}()
+		}
+
 		// Wait forever (or until somebody calls log.Fatal).
 		select {}
 	}

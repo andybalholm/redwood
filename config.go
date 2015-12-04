@@ -18,6 +18,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/andybalholm/dhash"
 )
@@ -97,6 +98,8 @@ type config struct {
 	PACLANAddress string
 	PerUserPorts  string
 
+	CloseIdleConnections time.Duration
+
 	flags *flag.FlagSet
 }
 
@@ -125,6 +128,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
+	c.flags.DurationVar(&c.CloseIdleConnections, "close-idle-connections", time.Hour, "how often to close idle HTTP connections to upstream server")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")

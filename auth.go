@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -27,15 +28,33 @@ func (c *config) readPasswordFile(filename string) error {
 			break
 		}
 
-		space := strings.IndexAny(line, " \t")
-		if space == -1 {
-			log.Println("malformed line in password file:", line)
-			continue
-		}
+		words := strings.Fields(line)
 
-		user := line[:space]
-		pass := strings.TrimSpace(line[space:])
-		c.Passwords[user] = pass
+		switch len(words) {
+		case 2:
+			c.Passwords[words[0]] = words[1]
+
+		case 3:
+			user, pass, portStr := words[0], words[1], words[2]
+			c.Passwords[user] = pass
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				log.Printf("invalid port number %q in password file line: %s", portStr, line)
+				continue
+			}
+			proxyForUserLock.RLock()
+			p := proxyForUser[user]
+			proxyForUserLock.RUnlock()
+			if p == nil {
+				_, err := newPerUserProxy(user, port)
+				if err != nil {
+					log.Printf("error opening per-user listener for %s: %v", user, err)
+				}
+			}
+
+		default:
+			log.Println("malformed line in password file:", line)
+		}
 	}
 
 	return nil

@@ -31,7 +31,13 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 		if user, pass, ok := decodeBase64Credentials(a); ok {
 			if perUserPorts != nil && conf.ValidCredentials(user, pass) {
 				// Open a separate, pre-authenticated listener for this user.
-				port := getPersonalProxyPort(user, client)
+				port, err := getPersonalProxyPort(user, client)
+				if err != nil {
+					log.Printf("error opening per-user listener for %s: %v", user, err)
+					http.Error(w, "Could not open per-user proxy port", 500)
+					return
+				}
+
 				proxyHost, _, err := net.SplitHostPort(proxyAddr)
 				if err != nil {
 					log.Printf("invalid pac-address value (%q)", proxyAddr)
@@ -64,7 +70,7 @@ var pacTemplate = `function FindProxyForURL(url, host) {
 
 // getPersonalProxyPort returns a port number that user may
 // connect to from clientIP. If none is available, it starts a new listener.
-func getPersonalProxyPort(user string, clientIP string) int {
+func getPersonalProxyPort(user string, clientIP string) (int, error) {
 	proxyForUserLock.RLock()
 	p := proxyForUser[user]
 	proxyForUserLock.RUnlock()
@@ -72,33 +78,16 @@ func getPersonalProxyPort(user string, clientIP string) int {
 	if p == nil {
 		// Start a new proxy listener for this user.
 		port := <-perUserPorts
-		p = &perUserProxy{
-			User:    user,
-			Port:    port,
-			Handler: proxyHandler{user: user},
-		}
-		proxyForUserLock.Lock()
-		proxyForUser[user] = p
-		proxyForUserLock.Unlock()
-		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		var err error
+		p, err = newPerUserProxy(user, port)
 		if err != nil {
-			log.Printf("error opening per-user listener for %s on port %d: %v", user, port, err)
-			return port
+			return 0, err
 		}
-
-		go func() {
-			<-shutdownChan
-			listener.Close()
-		}()
-
-		server := http.Server{Handler: p}
-		go server.Serve(listener)
-		log.Printf("opened per-user listener for %s on port %d", user, port)
 	}
 
 	p.AllowIP(clientIP)
 
-	return p.Port
+	return p.Port, nil
 }
 
 type perUserProxy struct {
@@ -107,6 +96,32 @@ type perUserProxy struct {
 	Handler       http.Handler
 	allowedIPs    map[string]bool
 	allowedIPLock sync.RWMutex
+}
+
+func newPerUserProxy(user string, port int) (*perUserProxy, error) {
+	p := &perUserProxy{
+		User:    user,
+		Port:    port,
+		Handler: proxyHandler{user: user},
+	}
+	proxyForUserLock.Lock()
+	proxyForUser[user] = p
+	proxyForUserLock.Unlock()
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		<-shutdownChan
+		listener.Close()
+	}()
+
+	server := http.Server{Handler: p}
+	go server.Serve(listener)
+	log.Printf("opened per-user listener for %s on port %d", user, port)
+
+	return p, nil
 }
 
 func (p *perUserProxy) AllowIP(ip string) {
@@ -123,11 +138,28 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	p.allowedIPLock.RLock()
 	ok := p.allowedIPs[host]
 	p.allowedIPLock.RUnlock()
-	if !ok {
-		http.Error(w, "Unauthorized IP address", http.StatusForbidden)
+
+	if ok {
+		p.Handler.ServeHTTP(w, r)
 		return
 	}
-	p.Handler.ServeHTTP(w, r)
+
+	// This client's IP address is not pre-authorized for this port, but
+	// maybe it sent credentials and we can authorize it now.
+	// We accept credentials in either the Proxy-Authorization header or
+	// a URL parameter named "a".
+	user, pass, ok := ProxyCredentials(r)
+	if !ok {
+		user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
+	}
+	conf := getConfig()
+	if ok && user == p.User && conf.ValidCredentials(user, pass) {
+		p.AllowIP(host)
+		p.Handler.ServeHTTP(w, r)
+		return
+	}
+
+	conf.send407(w)
 }
 
 var proxyForUser = make(map[string]*perUserProxy)

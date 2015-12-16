@@ -224,8 +224,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Header.Add("Via", r.Proto+" Redwood")
-	r.Header.Add("X-Forwarded-For", client)
+	if !h.TLS {
+		r.Header.Add("Via", r.Proto+" Redwood")
+		r.Header.Add("X-Forwarded-For", client)
+	}
 
 	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && !lanAddress(client)
 	r.Header.Del("Accept-Encoding")

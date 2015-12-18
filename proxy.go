@@ -224,6 +224,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(r.Header["X-Forwarded-For"]) >= 10 {
+		http.Error(w, "Proxy forwarding loop", http.StatusBadRequest)
+		log.Printf("Proxy forwarding loop from %s to %v", r.Header.Get("X-Forwarded-For"), r.URL)
+		return
+	}
+
 	if !h.TLS {
 		r.Header.Add("Via", r.Proto+" Redwood")
 		r.Header.Add("X-Forwarded-For", client)

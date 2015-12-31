@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/http2"
 )
 
 // Intercept TLS (HTTPS) connections.
@@ -242,24 +244,10 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 		return
 	}
 
-	config := &tls.Config{
-		NextProtos:   []string{"http/1.1"},
-		Certificates: []tls.Certificate{cert, conf.TLSCert},
-	}
-
-	tlsConn := tls.Server(&insertingConn{conn, clientHello}, config)
-	err = tlsConn.Handshake()
-	if err != nil {
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err))
-		conn.Close()
-		return
-	}
-
 	_, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
 		port = ""
 	}
-	listener := &singleListener{conn: tlsConn}
 	server := http.Server{
 		Handler: proxyHandler{
 			TLS:         true,
@@ -267,7 +255,26 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 			user:        authUser,
 			rt:          NewTLSRedialTransport(serverConn, serverName),
 		},
+		TLSConfig: &tls.Config{
+			NextProtos:   []string{"h2", "http/1.1"},
+			Certificates: []tls.Certificate{cert, conf.TLSCert},
+		},
 	}
+
+	err = http2.ConfigureServer(&server, nil)
+	if err != nil {
+		log.Println("Error configuring HTTP/2 server:", err)
+	}
+
+	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)
+	err = tlsConn.Handshake()
+	if err != nil {
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err))
+		conn.Close()
+		return
+	}
+
+	listener := &singleListener{conn: tlsConn}
 	logTLS(user, serverAddr, serverName, nil)
 	server.Serve(listener)
 }

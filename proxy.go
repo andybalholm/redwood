@@ -265,7 +265,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Opaque = rawURL
 	}
 
-	proxied := false
 	var rt http.RoundTripper
 	if h.rt == nil {
 		if r.URL.Opaque != "" && transport.Proxy != nil {
@@ -273,7 +272,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				// If the request is going through a proxy, the host needs to be
 				// included in the opaque element.
 				r.URL.Opaque = "//" + r.URL.Host + r.URL.Opaque
-				proxied = true
 			}
 		}
 		rt = &transport
@@ -281,9 +279,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rt = h.rt
 	}
 
-	if !proxied {
-		r.Header.Del("Proxy-Authorization")
-	}
+	removeHopByHopHeaders(r.Header)
 	resp, err := rt.RoundTrip(r)
 	r.URL.Opaque = ""
 
@@ -298,6 +294,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Prevent switching to QUIC.
 	resp.Header.Del("Alternate-Protocol")
 	resp.Header.Del("Alt-Svc")
+
+	removeHopByHopHeaders(resp.Header)
 
 	originalContentType := resp.Header.Get("Content-Type")
 	fixContentType(resp)
@@ -568,4 +566,29 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 	io.Copy(serverConn, bufrw)
 	serverConn.Close()
 	return
+}
+
+var hopByHop = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"TE",
+	"Trailer",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
+// removeHopByHopHeaders removes header fields listed in
+// http://tools.ietf.org/html/draft-ietf-httpbis-p1-messaging-14#section-7.1.3.1
+func removeHopByHopHeaders(h http.Header) {
+	toRemove := hopByHop
+	if c := h.Get("Connection"); c != "" {
+		for _, key := range strings.Split(c, ",") {
+			toRemove = append(toRemove, strings.TrimSpace(key))
+		}
+	}
+	for _, key := range toRemove {
+		h.Del(key)
+	}
 }

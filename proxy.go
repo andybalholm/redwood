@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
@@ -267,14 +266,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var rt http.RoundTripper
 	if h.rt == nil {
-		if r.URL.Opaque != "" && transport.Proxy != nil {
-			if p, _ := transport.Proxy(r); p != nil {
+		if r.URL.Opaque != "" && httpTransport.Proxy != nil {
+			if p, _ := httpTransport.Proxy(r); p != nil {
 				// If the request is going through a proxy, the host needs to be
 				// included in the opaque element.
 				r.URL.Opaque = "//" + r.URL.Host + r.URL.Opaque
 			}
 		}
-		rt = &transport
+		rt = httpTransport
 	} else {
 		rt = h.rt
 	}
@@ -501,23 +500,6 @@ func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
 		Conn:   conn,
 		Reader: bufrw.Reader,
 	}, nil
-}
-
-var transport = http.Transport{
-	TLSClientConfig: unverifiedClientConfig,
-	Proxy:           http.ProxyFromEnvironment,
-}
-
-// This is to deal with the problem of stale keepalive connections, which cause
-// transport.RoundTrip to return io.EOF.
-func init() {
-	go func() {
-		for _ = range time.Tick(10 * time.Second) {
-			transport.CloseIdleConnections()
-		}
-	}()
-
-	transport.RegisterProtocol("ftp", FTPTransport{})
 }
 
 func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Request) {

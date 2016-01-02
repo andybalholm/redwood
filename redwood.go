@@ -104,7 +104,10 @@ func main() {
 		if conf.CloseIdleConnections > 0 {
 			go func() {
 				for range time.Tick(conf.CloseIdleConnections) {
-					transport.CloseIdleConnections()
+					httpTransport.CloseIdleConnections()
+					insecureHTTPTransport.CloseIdleConnections()
+					http2Transport.CloseIdleConnections()
+					insecureHTTP2Transport.CloseIdleConnections()
 				}
 			}()
 		}

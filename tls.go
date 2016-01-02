@@ -221,6 +221,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	serverConn, err := tls.Dial("tcp", serverAddr, &tls.Config{
 		ServerName:         serverName,
 		InsecureSkipVerify: true,
+		NextProtos:         []string{"h2", "http/1.1"},
 	})
 	if err != nil {
 		logTLS(user, serverAddr, serverName, err)
@@ -229,6 +230,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	}
 
 	state := serverConn.ConnectionState()
+	serverConn.Close()
 	serverCert := state.PeerCertificates[0]
 	intermediates := x509.NewCertPool()
 	for _, ic := range state.PeerCertificates[1:] {
@@ -248,12 +250,34 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	if err != nil {
 		port = ""
 	}
+
+	_, err = serverCert.Verify(x509.VerifyOptions{
+		Intermediates: intermediates,
+		DNSName:       serverName,
+	})
+	validWithDefaultRoots := err == nil
+
+	var rt http.RoundTripper
+	if state.NegotiatedProtocol == "h2" {
+		if validWithDefaultRoots {
+			rt = http2Transport
+		} else {
+			rt = insecureHTTP2Transport
+		}
+	} else {
+		if validWithDefaultRoots {
+			rt = httpTransport
+		} else {
+			rt = insecureHTTPTransport
+		}
+	}
+
 	server := http.Server{
 		Handler: proxyHandler{
 			TLS:         true,
 			connectPort: port,
 			user:        authUser,
-			rt:          NewTLSRedialTransport(serverConn, serverName),
+			rt:          rt,
 		},
 		TLSConfig: &tls.Config{
 			NextProtos:   []string{"h2", "http/1.1"},

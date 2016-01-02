@@ -262,19 +262,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 		if validWithDefaultRoots {
 			rt = http2Transport
 		} else {
-			rt = &pinnedTransport{
-				rt:  insecureHTTP2Transport,
-				key: state.PeerCertificates[0].RawSubjectPublicKeyInfo,
-			}
+			rt = newHardValidationTransport(insecureHTTP2Transport, serverName, state.PeerCertificates)
 		}
 	} else {
 		if validWithDefaultRoots {
 			rt = httpTransport
 		} else {
-			rt = &pinnedTransport{
-				rt:  insecureHTTPTransport,
-				key: state.PeerCertificates[0].RawSubjectPublicKeyInfo,
-			}
+			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
 		}
 	}
 

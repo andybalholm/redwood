@@ -555,6 +555,7 @@ var hopByHop = []string{
 	"Keep-Alive",
 	"Proxy-Authenticate",
 	"Proxy-Authorization",
+	"Proxy-Connection",
 	"TE",
 	"Trailer",
 	"Transfer-Encoding",

@@ -1,18 +1,31 @@
 package main
 
 import (
+	"bytes"
+	"crypto/tls"
+	"errors"
 	"io"
 	"log"
 	"mime"
+	"net"
 	"net/http"
 	"path"
+	"time"
 
 	"github.com/remogatto/ftpget"
 	"golang.org/x/net/http2"
 )
 
+var dialer = &net.Dialer{
+	Timeout:   30 * time.Second,
+	KeepAlive: 30 * time.Second,
+}
+
 var httpTransport = &http.Transport{
-	Proxy: http.ProxyFromEnvironment,
+	Proxy:                 http.ProxyFromEnvironment,
+	Dial:                  dialer.Dial,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
 }
 
 func init() {
@@ -20,14 +33,50 @@ func init() {
 }
 
 var insecureHTTPTransport = &http.Transport{
-	TLSClientConfig: unverifiedClientConfig,
-	Proxy:           http.ProxyFromEnvironment,
+	TLSClientConfig:       unverifiedClientConfig,
+	Proxy:                 http.ProxyFromEnvironment,
+	Dial:                  dialer.Dial,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
 }
 
-var http2Transport = &http2.Transport{}
+var http2Transport = &http2.Transport{
+	DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+		return tls.DialWithDialer(dialer, network, addr, cfg)
+	},
+}
 
 var insecureHTTP2Transport = &http2.Transport{
 	TLSClientConfig: unverifiedClientConfig,
+	DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+		return tls.DialWithDialer(dialer, network, addr, cfg)
+	},
+}
+
+// A pinnedTransport wraps another RoundTripper and ensures that the
+// certificates' public keys match.
+type pinnedTransport struct {
+	// rt is the underlying RoundTripper.
+	rt http.RoundTripper
+
+	// key is the RawSubjectPublicKeyInfo that the certificates need to match.
+	key []byte
+}
+
+var errPublicKeyMismatch = errors.New("certificate public key changed since first connection to server")
+
+func (p *pinnedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := p.rt.RoundTrip(req)
+	if err != nil {
+		return resp, err
+	}
+
+	if !bytes.Equal(resp.TLS.PeerCertificates[0].RawSubjectPublicKeyInfo, p.key) {
+		resp.Body.Close()
+		return nil, errPublicKeyMismatch
+	}
+
+	return resp, nil
 }
 
 // An FTPTransport fetches files via FTP.

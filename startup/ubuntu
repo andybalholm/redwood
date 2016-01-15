@@ -1,0 +1,17 @@
+# redwood - Redwood web filter
+#
+# The Redwood server provides a content-filtering web proxy.
+
+description "Redwood filter"
+
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+respawn
+respawn limit 10 5
+
+limit nofile 65536 65536
+
+console log
+
+exec /usr/bin/redwood

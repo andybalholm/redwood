@@ -353,35 +353,25 @@ func (s *singleListener) Addr() net.Addr {
 // data as serverCert but is signed by Redwood's root certificate, or
 // self-signed.
 func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *config) (cert tls.Certificate, err error) {
-	template := serverCert
+	// Use a hash of the real certificate as the serial number.
+	h := md5.New()
+	h.Write(serverCert.Raw)
+	h.Write([]byte{1}) // To give different serial numbers after the key usage change.
 
-	if selfSigned {
-		template = &x509.Certificate{
-			SerialNumber: new(big.Int).SetInt64(0),
-			Subject:      serverCert.Subject,
-			NotBefore:    serverCert.NotBefore,
-			NotAfter:     serverCert.NotAfter,
-			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-			ExtKeyUsage:  serverCert.ExtKeyUsage,
-			DNSNames:     serverCert.DNSNames,
-		}
-	} else {
-		// Use a hash of the real certificate as the serial number.
-		h := md5.New()
-		h.Write(serverCert.Raw)
-		h.Write([]byte{1}) // To give different serial numbers after the key usage change.
-		template.SerialNumber = big.NewInt(0).SetBytes(h.Sum(nil))
-		if err != nil {
-			return tls.Certificate{}, fmt.Errorf("failed to generate serial number: %s", err)
-		}
-		template.SubjectKeyId = nil
-		template.AuthorityKeyId = nil
-		template.OCSPServer = nil
-		template.IssuingCertificateURL = nil
-		template.CRLDistributionPoints = nil
-		template.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
-		template.BasicConstraintsValid = false
-		template.SignatureAlgorithm = x509.UnknownSignatureAlgorithm
+	template := &x509.Certificate{
+		SerialNumber:                big.NewInt(0).SetBytes(h.Sum(nil)),
+		Subject:                     serverCert.Subject,
+		NotBefore:                   serverCert.NotBefore,
+		NotAfter:                    serverCert.NotAfter,
+		KeyUsage:                    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:                 serverCert.ExtKeyUsage,
+		UnknownExtKeyUsage:          serverCert.UnknownExtKeyUsage,
+		BasicConstraintsValid:       false,
+		SubjectKeyId:                nil,
+		DNSNames:                    serverCert.DNSNames,
+		PermittedDNSDomainsCritical: serverCert.PermittedDNSDomainsCritical,
+		PermittedDNSDomains:         serverCert.PermittedDNSDomains,
+		SignatureAlgorithm:          x509.UnknownSignatureAlgorithm,
 	}
 
 	var newCertBytes []byte

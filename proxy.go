@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/andybalholm/cascadia"
@@ -85,6 +86,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if conf.PACAddress != "" && (r.URL.Path == "/proxy.pac" || r.URL.Path == "/wpad.dat") {
 		handlePACFile(w, r)
+		return
+	}
+
+	if r.URL.Path == "/reload" && (r.Host == "localhost" || strings.HasPrefix(r.Host, "localhost:")) {
+		// Simulate SIGHUP when receiving a request for http://localhost/reload.
+		hupChan <- syscall.SIGHUP
+		fmt.Fprintln(w, "Reloading configuration")
 		return
 	}
 

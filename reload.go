@@ -20,11 +20,15 @@ func getConfig() *config {
 	return <-ch
 }
 
-// shutdownChan is closed to indicate that the server is shutting down, and
-// no more connections should be accepted.
-var shutdownChan = make(chan struct{})
+var (
+	// shutdownChan is closed to indicate that the server is shutting down, and
+	// no more connections should be accepted.
+	shutdownChan = make(chan struct{})
 
-var activeConnections sync.WaitGroup
+	hupChan = make(chan os.Signal, 1)
+
+	activeConnections sync.WaitGroup
+)
 
 // manageConfig manages Redwood's configuration, reloading it when SIGHUP is received.
 func manageConfig() {
@@ -33,7 +37,6 @@ func manageConfig() {
 		log.Fatal(err)
 	}
 
-	hupChan := make(chan os.Signal, 1)
 	signal.Notify(hupChan, syscall.SIGHUP)
 
 	termChan := make(chan os.Signal, 1)

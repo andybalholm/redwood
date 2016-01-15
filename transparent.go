@@ -51,23 +51,25 @@ func runTransparentServer(addr string) error {
 			return err
 		}
 
-		serverAddr, err := realServerAddress(conn)
-		if err != nil {
-			log.Printf("Error getting original address for intercepted connection from %v: %v", conn.RemoteAddr(), err)
-			continue
-		}
-		user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+		go func() {
+			serverAddr, err := realServerAddress(conn)
+			if err != nil {
+				log.Printf("Error getting original address for intercepted connection from %v: %v", conn.RemoteAddr(), err)
+				return
+			}
+			user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
-		if isLocalAddress(serverAddr) {
-			// This is not an intercepted connection; it is a direct connection to
-			// our transparent port. If we bump it, we will end up with an infinite
-			// loop of redirects.
-			logTLS(user, serverAddr.String(), "", errors.New("infinite redirect loop"))
-			conn.Close()
-			continue
-		}
+			if isLocalAddress(serverAddr) {
+				// This is not an intercepted connection; it is a direct connection to
+				// our transparent port. If we bump it, we will end up with an infinite
+				// loop of redirects.
+				logTLS(user, serverAddr.String(), "", errors.New("infinite redirect loop"))
+				conn.Close()
+				return
+			}
 
-		go SSLBump(conn, serverAddr.String(), user, "")
+			SSLBump(conn, serverAddr.String(), user, "")
+		}()
 	}
 
 	panic("unreachable")

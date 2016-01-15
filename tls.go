@@ -258,7 +258,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	validWithDefaultRoots := err == nil
 
 	var rt http.RoundTripper
-	if state.NegotiatedProtocol == "h2" {
+	if state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
 		if validWithDefaultRoots {
 			rt = http2Transport
 		} else {

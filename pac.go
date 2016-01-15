@@ -131,6 +131,7 @@ func (p *perUserProxy) AllowIP(ip string) {
 	}
 	p.allowedIPs[ip] = true
 	p.allowedIPLock.Unlock()
+	log.Printf("Added IP address %s, authenticated as %s, on port %d", ip, p.User, p.Port)
 }
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -153,10 +154,16 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
 	}
 	conf := getConfig()
-	if ok && user == p.User && conf.ValidCredentials(user, pass) {
-		p.AllowIP(host)
-		p.Handler.ServeHTTP(w, r)
-		return
+	if ok {
+		if user == p.User && conf.ValidCredentials(user, pass) {
+			p.AllowIP(host)
+			p.Handler.ServeHTTP(w, r)
+			return
+		} else {
+			log.Printf("Incorrect username or password from %v: %s:%s, on port %d", r.RemoteAddr, user, pass, p.Port)
+		}
+	} else {
+		log.Printf("Missing required proxy authentication from %v to %v, on port %d", r.RemoteAddr, r.URL, p.Port)
 	}
 
 	conf.send407(w)

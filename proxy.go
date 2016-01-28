@@ -153,6 +153,26 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		user = authUser
 	}
 
+	// Livigent sends HTTP traffic as CONNECT requests for port 80.
+	if _, port, err := net.SplitHostPort(r.URL.Host); err == nil && port == "80" && r.Method == "CONNECT" {
+		conn, err := newHijackedConn(w)
+		if err != nil {
+			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
+			return
+		}
+		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
+
+		(&http.Server{
+			Handler: proxyHandler{
+				TLS:         false,
+				connectPort: port,
+				user:        authUser,
+				rt:          h.rt,
+			},
+		}).Serve(&singleListener{conn: conn})
+	}
+
 	tally := conf.URLRules.MatchingRules(r.URL)
 	scores := conf.categoryScores(tally)
 	categories := conf.significantCategories(scores)
@@ -194,10 +214,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
 		if err != nil {
-			fmt.Fprintln(conn, "HTTP/1.1 500 Internal Server Error")
-			fmt.Fprintln(conn)
-			fmt.Fprintln(conn, err)
-			conn.Close()
+			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
@@ -214,10 +231,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "CONNECT" {
 		conn, err := newHijackedConn(w)
 		if err != nil {
-			fmt.Fprintln(conn, "HTTP/1.1 500 Internal Server Error")
-			fmt.Fprintln(conn)
-			fmt.Fprintln(conn, err)
-			conn.Close()
+			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
@@ -505,6 +519,7 @@ func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
 	}
 	err = bufrw.Flush()
 	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 	return &hijackedConn{

@@ -341,6 +341,11 @@ that scores over the threshold, the default action is `allow`.
     Respond with HTTP 403, and send an invisible 1-pixel image instead
     of a block page.
 
+- disable-proxy-headers
+
+	Don't add headers that indicate that the request has passed through a proxy
+	(X-Forwarded-For and Via).
+
 - hash-image
 
     (response only) Calculate a hash of the image, and compare it to the

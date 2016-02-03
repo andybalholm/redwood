@@ -238,8 +238,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.TLS {
-		r.Header.Add("Via", r.Proto+" Redwood")
+	thisRule, _ = conf.ChooseACLCategoryAction(reqACLs, categories, "disable-proxy-headers")
+	if thisRule.Action != "disable-proxy-headers" {
+		viaHosts := r.Header["Via"]
+		viaHosts = append(viaHosts, strings.TrimPrefix(r.Proto, "HTTP/")+" Redwood")
+		r.Header.Set("Via", strings.Join(viaHosts, ", "))
 		r.Header.Add("X-Forwarded-For", client)
 	}
 
@@ -312,6 +315,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)
+
+	thisRule, _ = conf.ChooseACLCategoryAction(acls, categories, "disable-proxy-headers")
+	if thisRule.Action != "disable-proxy-headers" {
+		viaHosts := resp.Header["Via"]
+		viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
+		resp.Header.Set("Via", strings.Join(viaHosts, ", "))
+	}
+
 	if r.Method == "HEAD" {
 		thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
 	} else {

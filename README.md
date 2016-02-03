@@ -262,6 +262,10 @@ The following attributes are available:
 
 		acl images content-type image/*
                 
+- http-status
+
+    (response only) The response's HTTP status code.
+	If this is a multiple of 100, all status codes in that block of 100 will match.
 
 - method
 

@@ -127,14 +127,22 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
-	if r.URL.Host == "" {
-		r.URL.Host = r.Host
-	}
 	if r.URL.Scheme == "" {
 		if h.TLS {
 			r.URL.Scheme = "https"
 		} else {
 			r.URL.Scheme = "http"
+		}
+	}
+	if r.URL.Host == "" {
+		if r.Host != "" {
+			r.URL.Host = r.Host
+		} else {
+			log.Printf("Request from %s has no host in URL: %v", client, r.URL)
+			// Delay a while since some programs really hammer us with this kind of request.
+			time.Sleep(time.Second)
+			http.Error(w, "No host in request URL, and no Host header.", http.StatusBadRequest)
+			return
 		}
 	}
 

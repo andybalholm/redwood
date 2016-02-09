@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,6 +25,7 @@ type ACLDefinitions struct {
 	ContentTypes    map[string][]string
 	Methods         map[string][]string
 	Referers        map[string][]string
+	StatusCodes     map[int][]string
 	URLs            *URLMatcher
 	URLTags         map[string][]string
 	UserIPAddresses map[string][]string
@@ -82,6 +84,18 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			u = strings.ToLower(u)
 			a.URLs.AddRule(rule{t: urlMatch, content: u})
 			a.Referers[u] = append(a.Referers[u], acl)
+		}
+
+	case "http-status":
+		if a.StatusCodes == nil {
+			a.StatusCodes = make(map[int][]string)
+		}
+		for _, s := range args {
+			status, err := strconv.Atoi(s)
+			if err != nil {
+				return fmt.Errorf("invalid HTTP status code: %q", s)
+			}
+			a.StatusCodes[status] = append(a.StatusCodes[status], acl)
 		}
 
 	case "time":
@@ -212,7 +226,7 @@ func (c *config) loadACLs(filename string) error {
 				}
 			}
 
-		case "allow", "block", "block-invisible", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
+		case "allow", "block", "block-invisible", "disable-proxy-headers", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
 			r := ACLActionRule{Action: action}
 			for _, a := range args {
 				if strings.HasPrefix(a, "!") {
@@ -313,6 +327,16 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 				acls[acl] = true
 			}
 		}
+	}
+
+	status := resp.StatusCode
+	for _, acl := range a.StatusCodes[status] {
+		acls[acl] = true
+	}
+	// Also include the general status code category (multiple of 100).
+	status = status / 100 * 100
+	for _, acl := range a.StatusCodes[status] {
+		acls[acl] = true
 	}
 
 	return acls

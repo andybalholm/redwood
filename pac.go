@@ -149,23 +149,31 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// maybe it sent credentials and we can authorize it now.
 	// We accept credentials in either the Proxy-Authorization header or
 	// a URL parameter named "a".
-	user, pass, ok := ProxyCredentials(r)
-	if !ok {
-		user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
-	}
 	conf := getConfig()
+
+	user, pass, ok := ProxyCredentials(r)
 	if ok {
 		if user == p.User && conf.ValidCredentials(user, pass) {
 			p.AllowIP(host)
 			p.Handler.ServeHTTP(w, r)
 			return
 		} else {
-			log.Printf("Incorrect username or password from %v: %s:%s, on port %d", r.RemoteAddr, user, pass, p.Port)
+			log.Printf("Incorrect username or password in Proxy-Authorization header from %v: %s:%s, on port %d", r.RemoteAddr, user, pass, p.Port)
 		}
-	} else {
-		log.Printf("Missing required proxy authentication from %v to %v, on port %d", r.RemoteAddr, r.URL, p.Port)
 	}
 
+	user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
+	if ok {
+		if user == p.User && conf.ValidCredentials(user, pass) {
+			p.AllowIP(host)
+			p.Handler.ServeHTTP(w, r)
+			return
+		} else {
+			log.Printf("Incorrect username or password in URL parameter from %v: %s:%s, on port %d", r.RemoteAddr, user, pass, p.Port)
+		}
+	}
+
+	log.Printf("Missing required proxy authentication from %v to %v, on port %d", r.RemoteAddr, r.URL, p.Port)
 	conf.send407(w)
 }
 

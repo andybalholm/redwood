@@ -356,7 +356,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 	// Use a hash of the real certificate as the serial number.
 	h := md5.New()
 	h.Write(serverCert.Raw)
-	h.Write([]byte{1}) // To give different serial numbers after the key usage change.
+	h.Write([]byte{2})
 
 	template := &x509.Certificate{
 		SerialNumber:                big.NewInt(0).SetBytes(h.Sum(nil)),

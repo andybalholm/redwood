@@ -123,7 +123,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		}, false, conf)
 		if err != nil {
-			log.Printf("Error generataing HTTPS certificate for local server (%s): %v", serverAddr, err)
+			log.Printf("Error generating HTTPS certificate for local server (%s): %v", serverAddr, err)
 			conn.Close()
 			return
 		}

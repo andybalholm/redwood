@@ -179,3 +179,17 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var proxyForUser = make(map[string]*perUserProxy)
 var proxyForUserLock sync.RWMutex
+
+func openPerUserPorts(customPorts map[string]int) {
+	for user, port := range customPorts {
+		proxyForUserLock.RLock()
+		p := proxyForUser[user]
+		proxyForUserLock.RUnlock()
+		if p == nil {
+			_, err := newPerUserProxy(user, port)
+			if err != nil {
+				log.Printf("error opening per-user listener for %s: %v", user, err)
+			}
+		}
+	}
+}

@@ -42,15 +42,7 @@ func (c *config) readPasswordFile(filename string) error {
 				log.Printf("invalid port number %q in password file line: %s", portStr, line)
 				continue
 			}
-			proxyForUserLock.RLock()
-			p := proxyForUser[user]
-			proxyForUserLock.RUnlock()
-			if p == nil {
-				_, err := newPerUserProxy(user, port)
-				if err != nil {
-					log.Printf("error opening per-user listener for %s: %v", user, err)
-				}
-			}
+			c.CustomPorts[user] = port
 
 		default:
 			log.Println("malformed line in password file:", line)

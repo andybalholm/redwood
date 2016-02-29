@@ -77,6 +77,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
+	// If a request is directed to Redwood, rather than proxied or intercepted,
+	// it should be handled as an API request.
+	if !h.TLS && r.URL.Host == "" && strings.Contains(r.Host, ":") {
+		handleAPI(w, r)
+		return
+	}
+
 	conf := getConfig()
 
 	if !conf.ACLsLoaded {

@@ -74,6 +74,7 @@ func manageConfig() {
 			tlsLog = NewCSVLog(conf.TLSLog)
 
 			conf.startWebServer()
+			openPerUserPorts(conf.CustomPorts)
 
 		case <-termChan:
 			log.Println("Received SIGTERM")

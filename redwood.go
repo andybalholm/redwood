@@ -85,6 +85,9 @@ func main() {
 		portsListening++
 	}
 
+	openPerUserPorts(conf.CustomPorts)
+	portsListening += len(conf.CustomPorts)
+
 	if portsListening > 0 {
 		if conf.CloseIdleConnections > 0 {
 			go func() {

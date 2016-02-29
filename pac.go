@@ -192,3 +192,27 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 
 	ServeJSON(w, r, data)
 }
+
+func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("user")
+	if user == "" {
+		http.Error(w, `You must specify which user to authenticate with the "user" form parameter.`, 400)
+		return
+	}
+	proxyForUserLock.RLock()
+	p := proxyForUser[user]
+	proxyForUserLock.RUnlock()
+	if p == nil {
+		http.Error(w, user+" does not have a per-user proxy port set up.", 500)
+		return
+	}
+
+	ip := r.FormValue("ip")
+	if ip == "" {
+		http.Error(w, `You must specify the client IP address with the "ip" form parameter.`, 400)
+		return
+	}
+
+	p.AllowIP(ip)
+	fmt.Fprintf(w, "Added %s as an authenticated IP address for %s.", ip, user)
+}

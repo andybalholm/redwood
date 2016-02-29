@@ -14,6 +14,7 @@ func init() {
 	apiServeMux.HandleFunc("/classify", handleClassification)
 
 	apiServeMux.HandleFunc("/per-user-ports", handlePerUserPortList)
+	apiServeMux.HandleFunc("/per-user-ports/authenticate", handlePerUserAuthenticate)
 }
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {

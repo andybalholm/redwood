@@ -159,3 +159,36 @@ func openPerUserPorts(customPorts map[string]int) {
 		}
 	}
 }
+
+type portListEntry struct {
+	User                 string
+	Port                 int
+	AuthenticatedClients []string
+}
+
+func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
+	var data []portListEntry
+
+	proxyForUserLock.RLock()
+
+	for _, p := range proxyForUser {
+		var clients []string
+		p.allowedIPLock.RLock()
+
+		for c := range p.allowedIPs {
+			clients = append(clients, c)
+		}
+
+		p.allowedIPLock.RUnlock()
+
+		data = append(data, portListEntry{
+			User:                 p.User,
+			Port:                 p.Port,
+			AuthenticatedClients: clients,
+		})
+	}
+
+	proxyForUserLock.RUnlock()
+
+	ServeJSON(w, r, data)
+}

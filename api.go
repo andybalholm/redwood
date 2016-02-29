@@ -12,6 +12,8 @@ func init() {
 	apiServeMux.HandleFunc("/proxy.pac", handlePACFile)
 	apiServeMux.HandleFunc("/reload", handleReload)
 	apiServeMux.HandleFunc("/classify", handleClassification)
+
+	apiServeMux.HandleFunc("/per-user-ports", handlePerUserPortList)
 }
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {

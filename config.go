@@ -94,10 +94,6 @@ type config struct {
 	LogUserAgent bool
 	TLSLog       string
 
-	PACAddress    string
-	PACLANAddress string
-	PerUserPorts  string
-
 	CloseIdleConnections time.Duration
 
 	flags *flag.FlagSet
@@ -136,10 +132,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
 	c.flags.BoolVar(&c.LogTitle, "log-title", false, "Include page title in access log.")
 	c.flags.BoolVar(&c.LogUserAgent, "log-user-agent", false, "Include User-Agent header in access log.")
-	c.flags.StringVar(&c.PACAddress, "pac-address", "", "proxy server address (host:port) to provide in PAC file")
-	c.flags.StringVar(&c.PACLANAddress, "pac-lan-address", "", "proxy server address (host:port) to provide in PAC file to LAN clients")
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
-	c.flags.StringVar(&c.PerUserPorts, "per-user-ports", "", "range of ports to use for per-user PAC files")
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)
 	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")

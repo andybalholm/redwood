@@ -91,11 +91,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if conf.PACAddress != "" && (r.URL.Path == "/proxy.pac" || r.URL.Path == "/wpad.dat") {
-		handlePACFile(w, r)
-		return
-	}
-
 	if r.URL.Path == "/reload" && (r.Host == "localhost" || strings.HasPrefix(r.Host, "localhost:")) {
 		// Simulate SIGHUP when receiving a request for http://localhost/reload.
 		hupChan <- syscall.SIGHUP

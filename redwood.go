@@ -85,21 +85,6 @@ func main() {
 		portsListening++
 	}
 
-	if conf.PerUserPorts != "" {
-		var start, end int
-		_, err := fmt.Sscanf(conf.PerUserPorts, "%d-%d", &start, &end)
-		if err != nil || end < start {
-			log.Printf("invalid per-user-ports setting (%q)", conf.PerUserPorts)
-		} else {
-			perUserPorts = make(chan int)
-			go func() {
-				for i := start; i <= end; i++ {
-					perUserPorts <- i
-				}
-			}()
-		}
-	}
-
 	if portsListening > 0 {
 		if conf.CloseIdleConnections > 0 {
 			go func() {

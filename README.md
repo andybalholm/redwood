@@ -648,22 +648,17 @@ PAC Files
 =========
 
 Redwood can provide PAC (Proxy Auto-Configuration) files to automatically configure
-client computers to use it as their proxy. To enable this feature, set `pac-address`
-to the proxy address to use in the PAC file.
-Then, whenever Redwood receives a request for `/proxy.pac` or `/wpad.dat`, 
-it sends a PAC file directing the client to proxy its requests through that address.
-If clients on the LAN should use different PAC settings from clients on the internet,
-a separate `pac-lan-address` can be specified.
+client computers to use it as their proxy.
+Then, whenever Redwood receives a request for `/proxy.pac`, 
+it sends a PAC file directing the client to proxy its requests.
 
 PAC files also make another feature possible: 
 listening on separate, pre-authenticated ports for individual users.
 This helps to address various authentication problems resulting from software that
 doesn't support proxy authentication properly.
-To enable this, specify a range of ports with `per-user-ports` (e.g. `per-user-ports 7000-7999`).
+To enable this, specify a custom port number on the user's line in the password file.
 Then, put a base64-encoded username/password pair (just like in an HTTP basic authentication header)
 in the PAC request URL (e.g. `/proxy.pac?a=dXNlcm5hbWU6cGFzc3dvcmQ=`).
 (Generate it by typing a command like `echo -n username:password | base64` at a UNIX command prompt.)
-Redwood will start listening for requests from that user on a new port from the specified range,
-and send a PAC file telling it to use that port for its proxy.
-All requests received from the same IP address as the PAC file request will be automatically
+All requests received on that port from the same IP address as the PAC file request will be automatically
 authenticated as that user.

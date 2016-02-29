@@ -6,6 +6,7 @@ var apiServeMux = http.NewServeMux()
 
 func init() {
 	apiServeMux.Handle("/debug/pprof/", http.DefaultServeMux)
+	apiServeMux.HandleFunc("/proxy.pac", handlePACFile)
 }
 
 func handleAPI(w http.ResponseWriter, r *http.Request) {

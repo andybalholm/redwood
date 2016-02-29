@@ -85,11 +85,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	conf := getConfig()
 
-	if !conf.ACLsLoaded {
-		http.Error(w, "Redwood proxy configuration needs to be updated for this version of Redwood.\n(Use ACLs)", 500)
-		return
-	}
-
 	if len(r.URL.String()) > 10000 {
 		http.Error(w, "URL too long", http.StatusRequestURITooLong)
 		return

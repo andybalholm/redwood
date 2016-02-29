@@ -43,6 +43,8 @@ type ACLDefinitions struct {
 	}
 
 	Descriptions map[string]string
+
+	Actions []ACLActionRule
 }
 
 var errEmptyACLRule = errors.New("empty ACL rule")
@@ -164,15 +166,13 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 	return nil
 }
 
-// loadACLs loads ACL definitions and actions from a file.
-func (c *config) loadACLs(filename string) error {
+// load loads ACL definitions and actions from a file.
+func (a *ACLDefinitions) load(filename string) error {
 	f, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-
-	c.ACLsLoaded = true
 
 	scanner := bufio.NewScanner(f)
 	lineNo := 0
@@ -199,7 +199,7 @@ func (c *config) loadACLs(filename string) error {
 				log.Printf("Incomplete ACL definition at %s, line %d", filename, lineNo)
 				continue
 			}
-			err = c.ACLs.AddRule(args[0], args[1:])
+			err = a.AddRule(args[0], args[1:])
 			if err != nil {
 				log.Printf("Error at %s, line %d: %v", filename, lineNo, err)
 			}
@@ -210,17 +210,17 @@ func (c *config) loadACLs(filename string) error {
 				log.Printf("Incomplete ACL description at %s, line %d", filename, lineNo)
 				continue
 			}
-			if c.ACLs.Descriptions == nil {
-				c.ACLs.Descriptions = make(map[string]string)
+			if a.Descriptions == nil {
+				a.Descriptions = make(map[string]string)
 			}
-			c.ACLs.Descriptions[args[0]] = strings.Join(args[1:], " ")
+			a.Descriptions[args[0]] = strings.Join(args[1:], " ")
 
 		case "include":
 			for _, file := range args {
 				if !filepath.IsAbs(file) {
 					file = filepath.Join(filepath.Dir(filename), file)
 				}
-				err = c.loadACLs(file)
+				err := a.load(file)
 				if err != nil {
 					log.Printf("Error including acl file %s: %v", file, err)
 				}
@@ -235,7 +235,7 @@ func (c *config) loadACLs(filename string) error {
 					r.Needed = append(r.Needed, a)
 				}
 			}
-			c.ACLActions = append(c.ACLActions, r)
+			a.Actions = append(a.Actions, r)
 
 		default:
 			log.Printf("Invalid ACL action at %s, line %d: %s", filename, lineNo, action)
@@ -370,14 +370,14 @@ func (r ACLActionRule) Conditions() string {
 // ChooseACLAction returns the first ACL action rule that
 // matches acls and has an action in actions. If no rule matches, it returns
 // a blank rule.
-func (c *config) ChooseACLAction(acls map[string]bool, actions ...string) ACLActionRule {
+func (a *ACLDefinitions) ChooseACLAction(acls map[string]bool, actions ...string) ACLActionRule {
 	choices := make(map[string]bool, len(actions))
 	for _, a := range actions {
 		choices[a] = true
 	}
 
 ruleLoop:
-	for _, r := range c.ACLActions {
+	for _, r := range a.Actions {
 		if !choices[r.Action] {
 			continue ruleLoop
 		}
@@ -437,7 +437,7 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []stri
 	for _, cat := range categories {
 		aclsPlus := copyACLSet(acls)
 		aclsPlus[cat] = true
-		r := c.ChooseACLAction(aclsPlus, actionsPlus...)
+		r := c.ACLs.ChooseACLAction(aclsPlus, actionsPlus...)
 		if r.Action == "" {
 			cg := c.Categories[cat]
 			r.Needed = []string{cat}
@@ -463,5 +463,5 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []stri
 		}
 	}
 
-	return c.ChooseACLAction(acls, actions...), ignored
+	return c.ACLs.ChooseACLAction(acls, actions...), ignored
 }

@@ -619,14 +619,9 @@ To do the same thing with pf on a FreeBSD gateway
 Classification Service
 ======================
 
-In addition to running as a proxy, Redwood can also run as a URL classification service.
+In addition to running as a proxy, Redwood can also be used as a URL classification service.
 It receives an HTTP request specifying a URL, and returns a JSON object that tells 
 what categories it was classifed in, and the score for each category.
-
-The classification service is enabled by a configuration line like the following,
-which would make it listen for classification requests on port 6503:
-
-	classifier :6503
 
 Categories can be excluded from the classification reports:
 
@@ -640,8 +635,8 @@ The JSON object in the response has the following keys:
  - categories: an object with category names for keys, and their scores for values
  - error: any error that was encountered fetching or processing the page
 
-For example, if the classifier is running on port 6503 on 10.1.10.1,
-http://10.1.10.1:6503/?url=https%3A%2F%2Fgolang.org might return
+For example, if Redwood is running on port 6502 on 10.1.10.1,
+http://10.1.10.1:6502/classify?url=https%3A%2F%2Fgolang.org might return
 {"url":"https://golang.org","categories":{"computer":266}}.
 
 PAC Files

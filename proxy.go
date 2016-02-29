@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/andybalholm/cascadia"
@@ -88,13 +87,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !conf.ACLsLoaded {
 		http.Error(w, "Redwood proxy configuration needs to be updated for this version of Redwood.\n(Use ACLs)", 500)
-		return
-	}
-
-	if r.URL.Path == "/reload" && (r.Host == "localhost" || strings.HasPrefix(r.Host, "localhost:")) {
-		// Simulate SIGHUP when receiving a request for http://localhost/reload.
-		hupChan <- syscall.SIGHUP
-		fmt.Fprintln(w, "Reloading configuration")
 		return
 	}
 

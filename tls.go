@@ -232,12 +232,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	state := serverConn.ConnectionState()
 	serverConn.Close()
 	serverCert := state.PeerCertificates[0]
-	intermediates := x509.NewCertPool()
-	for _, ic := range state.PeerCertificates[1:] {
-		intermediates.AddCert(ic)
-	}
 
-	valid := conf.validCert(serverCert, intermediates)
+	valid := conf.validCert(serverCert, state.PeerCertificates[1:])
 	cert, err := imitateCertificate(serverCert, !valid, conf)
 	if err != nil {
 		serverConn.Close()
@@ -252,7 +248,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	}
 
 	_, err = serverCert.Verify(x509.VerifyOptions{
-		Intermediates: intermediates,
+		Intermediates: certPoolWith(state.PeerCertificates[1:]),
 		DNSName:       serverName,
 	})
 	validWithDefaultRoots := err == nil
@@ -301,6 +297,14 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	listener := &singleListener{conn: tlsConn}
 	logTLS(user, serverAddr, serverName, nil)
 	server.Serve(listener)
+}
+
+func certPoolWith(certs []*x509.Certificate) *x509.CertPool {
+	pool := x509.NewCertPool()
+	for _, c := range certs {
+		pool.AddCert(c)
+	}
+	return pool
 }
 
 // A insertingConn is a net.Conn that inserts extra data at the start of the
@@ -395,8 +399,9 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 	return newCert, nil
 }
 
-func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPool) bool {
-	_, err := cert.Verify(x509.VerifyOptions{Intermediates: intermediates})
+func (conf *config) validCert(cert *x509.Certificate, intermediates []*x509.Certificate) bool {
+	pool := certPoolWith(intermediates)
+	_, err := cert.Verify(x509.VerifyOptions{Intermediates: pool})
 	if err == nil {
 		return true
 	}
@@ -408,7 +413,7 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPo
 	}
 
 	if conf.ExtraRootCerts != nil {
-		_, err = cert.Verify(x509.VerifyOptions{Roots: conf.ExtraRootCerts, Intermediates: intermediates})
+		_, err = cert.Verify(x509.VerifyOptions{Roots: conf.ExtraRootCerts, Intermediates: pool})
 		if err == nil {
 			return true
 		}
@@ -458,7 +463,7 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPo
 				if err != nil {
 					continue
 				}
-				intermediates.AddCert(thisCert)
+				pool.AddCert(thisCert)
 				toFetch = append(toFetch, thisCert.IssuingCertificateURL...)
 			}
 		} else {
@@ -467,12 +472,12 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates *x509.CertPo
 			if err != nil {
 				continue
 			}
-			intermediates.AddCert(thisCert)
+			pool.AddCert(thisCert)
 			toFetch = append(toFetch, thisCert.IssuingCertificateURL...)
 		}
 	}
 
-	_, err = cert.Verify(x509.VerifyOptions{Intermediates: intermediates})
+	_, err = cert.Verify(x509.VerifyOptions{Intermediates: pool})
 	if err == nil {
 		return true
 	}

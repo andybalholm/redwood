@@ -66,39 +66,8 @@ func main() {
 		portsListening++
 	}
 
-	for _, addr := range conf.ClassifierAddresses {
-		classifierListener, err := net.Listen("tcp", addr)
-		if err != nil {
-			log.Fatalf("error listening for classification requests on %s: %v", addr, err)
-		}
-		go func() {
-			<-shutdownChan
-			classifierListener.Close()
-		}()
-		server := http.Server{Handler: http.HandlerFunc(handleClassification)}
-		go func() {
-			err := server.Serve(classifierListener)
-			if err != nil && !strings.Contains(err.Error(), "use of closed") {
-				log.Fatalln("Error running classifier:", err)
-			}
-		}()
-		portsListening++
-	}
-
-	if conf.PerUserPorts != "" {
-		var start, end int
-		_, err := fmt.Sscanf(conf.PerUserPorts, "%d-%d", &start, &end)
-		if err != nil || end < start {
-			log.Printf("invalid per-user-ports setting (%q)", conf.PerUserPorts)
-		} else {
-			perUserPorts = make(chan int)
-			go func() {
-				for i := start; i <= end; i++ {
-					perUserPorts <- i
-				}
-			}()
-		}
-	}
+	openPerUserPorts(conf.CustomPorts)
+	portsListening += len(conf.CustomPorts)
 
 	if portsListening > 0 {
 		if conf.CloseIdleConnections > 0 {

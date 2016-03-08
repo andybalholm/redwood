@@ -51,16 +51,14 @@ type config struct {
 	ImageHashes    []dhashWithThreshold
 	DhashThreshold int
 
-	ACLs       ACLDefinitions
-	ACLActions []ACLActionRule
-	ACLsLoaded bool
+	ACLs    ACLDefinitions
+	APIACLs ACLDefinitions
 
 	PIDFile string
 	TestURL string
 
 	ProxyAddresses       []string
 	TransparentAddresses []string
-	ClassifierAddresses  []string
 
 	ClassifierIgnoredCategories []string
 
@@ -88,15 +86,12 @@ type config struct {
 	Passwords      map[string]string
 	PasswordLock   sync.RWMutex
 	AuthRealm      string
+	CustomPorts    map[string]int
 
 	AccessLog    string
 	LogTitle     bool
 	LogUserAgent bool
 	TLSLog       string
-
-	PACAddress    string
-	PACLANAddress string
-	PerUserPorts  string
 
 	CloseIdleConnections time.Duration
 
@@ -117,10 +112,12 @@ func loadConfiguration() (*config, error) {
 		ServeMux:             http.NewServeMux(),
 		ContentPhraseList:    newPhraseList(),
 		Passwords:            map[string]string{},
+		CustomPorts:          map[string]int{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
-	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.loadACLs)
+	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.ACLs.load)
+	c.newActiveFlag("api-acls", "", "ACL rule file for API requests", c.APIACLs.load)
 	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
@@ -136,10 +133,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
 	c.flags.BoolVar(&c.LogTitle, "log-title", false, "Include page title in access log.")
 	c.flags.BoolVar(&c.LogUserAgent, "log-user-agent", false, "Include User-Agent header in access log.")
-	c.flags.StringVar(&c.PACAddress, "pac-address", "", "proxy server address (host:port) to provide in PAC file")
-	c.flags.StringVar(&c.PACLANAddress, "pac-lan-address", "", "proxy server address (host:port) to provide in PAC file to LAN clients")
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
-	c.flags.StringVar(&c.PerUserPorts, "per-user-ports", "", "range of ports to use for per-user PAC files")
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)
 	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")
@@ -152,7 +146,6 @@ func loadConfiguration() (*config, error) {
 
 	c.stringListFlag("http-proxy", "address (host:port) to listen for proxy connections on", &c.ProxyAddresses)
 	c.stringListFlag("transparent-https", "address to listen for intercepted HTTPS connections on", &c.TransparentAddresses)
-	c.stringListFlag("classifier", "address to listen for site-classification requests on", &c.ClassifierAddresses)
 
 	c.stringListFlag("classifier-ignore", "category to omit from classifier results", &c.ClassifierIgnoredCategories)
 

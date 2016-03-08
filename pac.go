@@ -9,42 +9,30 @@ import (
 	"sync"
 )
 
-var perUserPorts chan int
-
 // handlePACFile serves an automatically-generated PAC (Proxy Auto-Config) file
 // pointing to this proxy server.
 func handlePACFile(w http.ResponseWriter, r *http.Request) {
-	conf := getConfig()
-
-	proxyAddr := conf.PACAddress
-
-	client := r.RemoteAddr
-	host, _, err := net.SplitHostPort(client)
-	if err == nil {
-		client = host
-	}
-	if lanAddress(client) && conf.PACLANAddress != "" {
-		proxyAddr = conf.PACLANAddress
-	}
+	proxyAddr := r.Host
 
 	if a := r.FormValue("a"); a != "" {
 		if user, pass, ok := decodeBase64Credentials(a); ok {
-			if perUserPorts != nil && conf.ValidCredentials(user, pass) {
-				// Open a separate, pre-authenticated listener for this user.
-				port, err := getPersonalProxyPort(user, client)
-				if err != nil {
-					log.Printf("error opening per-user listener for %s: %v", user, err)
-					http.Error(w, "Could not open per-user proxy port", 500)
-					return
+			conf := getConfig()
+			if conf.ValidCredentials(user, pass) {
+				proxyForUserLock.RLock()
+				p := proxyForUser[user]
+				proxyForUserLock.RUnlock()
+				if p != nil {
+					client := r.RemoteAddr
+					host, _, err := net.SplitHostPort(client)
+					if err == nil {
+						client = host
+					}
+					p.AllowIP(client)
+					proxyHost, _, err := net.SplitHostPort(proxyAddr)
+					if err == nil {
+						proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(p.Port))
+					}
 				}
-
-				proxyHost, _, err := net.SplitHostPort(proxyAddr)
-				if err != nil {
-					log.Printf("invalid pac-address value (%q)", proxyAddr)
-					http.Error(w, "can't generate PAC file", 500)
-					return
-				}
-				proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(port))
 			}
 		}
 	}
@@ -67,28 +55,6 @@ var pacTemplate = `function FindProxyForURL(url, host) {
 
 	return "PROXY %s";
 }`
-
-// getPersonalProxyPort returns a port number that user may
-// connect to from clientIP. If none is available, it starts a new listener.
-func getPersonalProxyPort(user string, clientIP string) (int, error) {
-	proxyForUserLock.RLock()
-	p := proxyForUser[user]
-	proxyForUserLock.RUnlock()
-
-	if p == nil {
-		// Start a new proxy listener for this user.
-		port := <-perUserPorts
-		var err error
-		p, err = newPerUserProxy(user, port)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	p.AllowIP(clientIP)
-
-	return p.Port, nil
-}
 
 type perUserProxy struct {
 	User          string
@@ -179,3 +145,74 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var proxyForUser = make(map[string]*perUserProxy)
 var proxyForUserLock sync.RWMutex
+
+func openPerUserPorts(customPorts map[string]int) {
+	for user, port := range customPorts {
+		proxyForUserLock.RLock()
+		p := proxyForUser[user]
+		proxyForUserLock.RUnlock()
+		if p == nil {
+			_, err := newPerUserProxy(user, port)
+			if err != nil {
+				log.Printf("error opening per-user listener for %s: %v", user, err)
+			}
+		}
+	}
+}
+
+type portListEntry struct {
+	User                 string
+	Port                 int
+	AuthenticatedClients []string
+}
+
+func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
+	var data []portListEntry
+
+	proxyForUserLock.RLock()
+
+	for _, p := range proxyForUser {
+		var clients []string
+		p.allowedIPLock.RLock()
+
+		for c := range p.allowedIPs {
+			clients = append(clients, c)
+		}
+
+		p.allowedIPLock.RUnlock()
+
+		data = append(data, portListEntry{
+			User:                 p.User,
+			Port:                 p.Port,
+			AuthenticatedClients: clients,
+		})
+	}
+
+	proxyForUserLock.RUnlock()
+
+	ServeJSON(w, r, data)
+}
+
+func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
+	user := r.FormValue("user")
+	if user == "" {
+		http.Error(w, `You must specify which user to authenticate with the "user" form parameter.`, 400)
+		return
+	}
+	proxyForUserLock.RLock()
+	p := proxyForUser[user]
+	proxyForUserLock.RUnlock()
+	if p == nil {
+		http.Error(w, user+" does not have a per-user proxy port set up.", 500)
+		return
+	}
+
+	ip := r.FormValue("ip")
+	if ip == "" {
+		http.Error(w, `You must specify the client IP address with the "ip" form parameter.`, 400)
+		return
+	}
+
+	p.AllowIP(ip)
+	fmt.Fprintf(w, "Added %s as an authenticated IP address for %s.", ip, user)
+}

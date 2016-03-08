@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/andybalholm/cascadia"
@@ -77,24 +76,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
+	// If a request is directed to Redwood, rather than proxied or intercepted,
+	// it should be handled as an API request.
+	if !h.TLS && r.URL.Host == "" && strings.Contains(r.Host, ":") {
+		handleAPI(w, r)
+		return
+	}
+
 	conf := getConfig()
-
-	if !conf.ACLsLoaded {
-		http.Error(w, "Redwood proxy configuration needs to be updated for this version of Redwood.\n(Use ACLs)", 500)
-		return
-	}
-
-	if conf.PACAddress != "" && (r.URL.Path == "/proxy.pac" || r.URL.Path == "/wpad.dat") {
-		handlePACFile(w, r)
-		return
-	}
-
-	if r.URL.Path == "/reload" && (r.Host == "localhost" || strings.HasPrefix(r.Host, "localhost:")) {
-		// Simulate SIGHUP when receiving a request for http://localhost/reload.
-		hupChan <- syscall.SIGHUP
-		fmt.Fprintln(w, "Reloading configuration")
-		return
-	}
 
 	if len(r.URL.String()) > 10000 {
 		http.Error(w, "URL too long", http.StatusRequestURITooLong)

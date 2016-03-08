@@ -25,9 +25,6 @@ type classificationResponse struct {
 // handleClassification responds to an HTTP request with a url parameter, and
 // responds with a JSON object describing how the page would be classified.
 func handleClassification(w http.ResponseWriter, r *http.Request) {
-	activeConnections.Add(1)
-	defer activeConnections.Done()
-
 	conf := getConfig()
 
 	var result classificationResponse

@@ -619,14 +619,9 @@ To do the same thing with pf on a FreeBSD gateway
 Classification Service
 ======================
 
-In addition to running as a proxy, Redwood can also run as a URL classification service.
+In addition to running as a proxy, Redwood can also be used as a URL classification service.
 It receives an HTTP request specifying a URL, and returns a JSON object that tells 
 what categories it was classifed in, and the score for each category.
-
-The classification service is enabled by a configuration line like the following,
-which would make it listen for classification requests on port 6503:
-
-	classifier :6503
 
 Categories can be excluded from the classification reports:
 
@@ -640,30 +635,25 @@ The JSON object in the response has the following keys:
  - categories: an object with category names for keys, and their scores for values
  - error: any error that was encountered fetching or processing the page
 
-For example, if the classifier is running on port 6503 on 10.1.10.1,
-http://10.1.10.1:6503/?url=https%3A%2F%2Fgolang.org might return
+For example, if Redwood is running on port 6502 on 10.1.10.1,
+http://10.1.10.1:6502/classify?url=https%3A%2F%2Fgolang.org might return
 {"url":"https://golang.org","categories":{"computer":266}}.
 
 PAC Files
 =========
 
 Redwood can provide PAC (Proxy Auto-Configuration) files to automatically configure
-client computers to use it as their proxy. To enable this feature, set `pac-address`
-to the proxy address to use in the PAC file.
-Then, whenever Redwood receives a request for `/proxy.pac` or `/wpad.dat`, 
-it sends a PAC file directing the client to proxy its requests through that address.
-If clients on the LAN should use different PAC settings from clients on the internet,
-a separate `pac-lan-address` can be specified.
+client computers to use it as their proxy.
+Then, whenever Redwood receives a request for `/proxy.pac`, 
+it sends a PAC file directing the client to proxy its requests.
 
 PAC files also make another feature possible: 
 listening on separate, pre-authenticated ports for individual users.
 This helps to address various authentication problems resulting from software that
 doesn't support proxy authentication properly.
-To enable this, specify a range of ports with `per-user-ports` (e.g. `per-user-ports 7000-7999`).
+To enable this, specify a custom port number on the user's line in the password file.
 Then, put a base64-encoded username/password pair (just like in an HTTP basic authentication header)
 in the PAC request URL (e.g. `/proxy.pac?a=dXNlcm5hbWU6cGFzc3dvcmQ=`).
 (Generate it by typing a command like `echo -n username:password | base64` at a UNIX command prompt.)
-Redwood will start listening for requests from that user on a new port from the specified range,
-and send a PAC file telling it to use that port for its proxy.
-All requests received from the same IP address as the PAC file request will be automatically
+All requests received on that port from the same IP address as the PAC file request will be automatically
 authenticated as that user.

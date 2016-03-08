@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -25,7 +27,10 @@ var (
 	// no more connections should be accepted.
 	shutdownChan = make(chan struct{})
 
-	hupChan = make(chan os.Signal, 1)
+	// reloadChan is used to signal that the configuration should be reloaded.
+	// Send a chan struct{} on it; that channel will be closed when the configuration
+	// has finished reloading.
+	reloadChan = make(chan chan struct{})
 
 	activeConnections sync.WaitGroup
 )
@@ -37,7 +42,16 @@ func manageConfig() {
 		log.Fatal(err)
 	}
 
-	signal.Notify(hupChan, syscall.SIGHUP)
+	go func() {
+		hupChan := make(chan os.Signal, 1)
+		signal.Notify(hupChan, syscall.SIGHUP)
+		for _ = range hupChan {
+			log.Println("Received SIGHUP")
+			ch := make(chan struct{})
+			reloadChan <- ch
+			<-ch
+		}
+	}()
 
 	termChan := make(chan os.Signal, 1)
 	signal.Notify(termChan, syscall.SIGTERM)
@@ -58,8 +72,7 @@ func manageConfig() {
 		case data := <-tlsLogChan:
 			tlsLog.Log(data)
 
-		case <-hupChan:
-			log.Println("Received SIGHUP")
+		case ch := <-reloadChan:
 			newConf, err := loadConfiguration()
 			if err != nil {
 				log.Println("Error reloading configuration:", err)
@@ -74,6 +87,10 @@ func manageConfig() {
 			tlsLog = NewCSVLog(conf.TLSLog)
 
 			conf.startWebServer()
+			openPerUserPorts(conf.CustomPorts)
+
+			log.Println("Reloaded configuration")
+			close(ch)
 
 		case <-termChan:
 			log.Println("Received SIGTERM")
@@ -91,4 +108,11 @@ func manageConfig() {
 			os.Exit(0)
 		}
 	}
+}
+
+func handleReload(w http.ResponseWriter, r *http.Request) {
+	ch := make(chan struct{})
+	reloadChan <- ch
+	<-ch
+	fmt.Fprintln(w, "Reloaded configuration")
 }

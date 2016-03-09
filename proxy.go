@@ -225,6 +225,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Header.Get("Upgrade") == "websocket" {
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		h.makeWebsocketConnection(w, r)
 		return
 	}

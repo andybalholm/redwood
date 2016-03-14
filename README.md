@@ -1,4 +1,4 @@
-Redwood is an internet content-filtering program. 
+Redwood is an internet content-filtering program.
 It adds flexibility and granularity to the
 filtering by classifying sites into multiple categories instead of just
 “Allow” and “Block.”
@@ -49,7 +49,7 @@ An example configuration file:
     # the file containing the Access Control List configuration
     acls /etc/redwood/acls.conf
 
-    # the minimum total score from a blocked category needed 
+    # the minimum total score from a blocked category needed
     # to block a page
     threshold 275
 
@@ -178,11 +178,11 @@ There are four kinds of filter rules:
 
 - Image Hashes
 
-	Redwood can hash images using the library at 
+	Redwood can hash images using the library at
 	https://github.com/andybalholm/dhash.
     The rule consists of a percent sign (`%`) followed by the
     32-character hash calculated by the dhash program.
-	The hash my optionally be followed by a hyphen and a threshold, 
+	The hash my optionally be followed by a hyphen and a threshold,
 	which is an integer specifying the number of bits that may be different
 	for another hash to be considered to match this hash (this overrides the global dhash-threshold setting).
 
@@ -261,7 +261,7 @@ The following attributes are available:
     asterisk after the slash:
 
 		acl images content-type image/*
-                
+
 - http-status
 
     (response only) The response's HTTP status code.
@@ -281,7 +281,7 @@ The following attributes are available:
     The current time.
 
 		acl work-hours time MTWHF 9:00-17:00
-                
+
 
     This attribute lets you select certain days of the week and/or
     ranges of times of the day. If the days of the week are specified,
@@ -308,7 +308,7 @@ The following attributes are available:
     with a dash).
 
 		acl managers 10.0.2.5 10.0.1.0/24 10.0.2.18-25
-                
+
 
 - user-name
 
@@ -371,7 +371,7 @@ that scores over the threshold, the default action is `allow`.
 		acl text content-type text/* application/xhtml+xml
 		acl css content-type text/css
 		phrase-scan text !css
-			
+
 
 - require-auth
 
@@ -415,8 +415,8 @@ Content pruning is controlled by a configuration file. Each line of the
 file contains a URL-matching or URL-regular-expression rule to specify
 what site or page the pruning applies to, and a CSS selector to specify
 what elements to delete. Between the two, there may be a threshold
-value. If a threshold is specified, the element and its children are 
-deleted after the page is phrase-scanned if 
+value. If a threshold is specified, the element and its children are
+deleted after the page is phrase-scanned if
 the score from the phrases found in a
 blocked category is at least the threshold.
 
@@ -529,7 +529,7 @@ a list of the categories that were ignored even though they had higher
 scores than the one that determined the action,
 the User-Agent header (if `log-user-agent` is enabled),
 the HTTP version,
-and the Referer header. 
+and the Referer header.
 The content length is meaningful only if a phrase scan was performed.
 The page title is available only if a phrase scan was performed and
 `log-title` was enabled in the configuration (logging the page title
@@ -547,16 +547,16 @@ Authentication
 Redwood can be configured (using the `require-auth` ACL action) to
 require HTTP basic proxy authentication, with a username and password.
 The usernames and passwords can come from a file that is specified by
-the `--password-file` configuration directive. 
+the `--password-file` configuration directive.
 Each line in the file
 consists of a username, a password, and an optional port number,
 separated by spaces or tabs.
 (If the port number is present, Redwood will listen for HTTP requests
-on that port. 
+on that port.
 Only the specified user may use that port,
 but once a client has authenticated as that user,
 all further requests from that client to this port will be considered authenticated,
-whether they have the Proxy-Authorization header or not.) 
+whether they have the Proxy-Authorization header or not.)
 Alternatively,
 a program can be specified to perform authentication with
 `--auth-helper`. Each line of the program’s input will be a username and
@@ -587,7 +587,7 @@ It can be configured to block them instead with the `block-obsolete-ssl` option.
 Transparent Proxy
 =================
 
-With the proper firewall setup, Redwood can transparently intercept 
+With the proper firewall setup, Redwood can transparently intercept
 connections to web servers and filter them without needing to configure
 proxy settings on the client computers.
 Intercepted HTTP connections can use the same proxy port as is used
@@ -596,7 +596,7 @@ For HTTPS connections, Redwood must be configured to listen for
 intercepted connections on a separate port, with the `transparent-https`
 directive.
 
-The following configuration lines will set Redwood to listen on 
+The following configuration lines will set Redwood to listen on
 ports 6502 and 6510:
 
 	http-proxy :6502
@@ -621,7 +621,7 @@ Classification Service
 ======================
 
 In addition to running as a proxy, Redwood can also be used as a URL classification service.
-It receives an HTTP request specifying a URL, and returns a JSON object that tells 
+It receives an HTTP request specifying a URL, and returns a JSON object that tells
 what categories it was classifed in, and the score for each category.
 
 Categories can be excluded from the classification reports:
@@ -645,10 +645,10 @@ PAC Files
 
 Redwood can provide PAC (Proxy Auto-Configuration) files to automatically configure
 client computers to use it as their proxy.
-Then, whenever Redwood receives a request for `/proxy.pac`, 
+Then, whenever Redwood receives a request for `/proxy.pac`,
 it sends a PAC file directing the client to proxy its requests.
 
-PAC files also make another feature possible: 
+PAC files also make another feature possible:
 listening on separate, pre-authenticated ports for individual users.
 This helps to address various authentication problems resulting from software that
 doesn't support proxy authentication properly.

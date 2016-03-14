@@ -117,7 +117,10 @@ func loadCategory(dirname string) (c *category, err error) {
 
 	s, _ = conf.Get("invisible")
 	if s != "" {
-		c.invisible = true
+		c.invisible, err = strconv.ParseBool(strings.TrimSpace(s))
+		if err != nil {
+			log.Printf("Invalid setting for 'invisible' in %s: %q", confFile, s)
+		}
 	}
 
 	ruleFiles, err := filepath.Glob(filepath.Join(dirname, "*.list"))

@@ -204,6 +204,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Host == localServer {
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		conf.ServeMux.ServeHTTP(w, r)
 		return
 	}

@@ -354,7 +354,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	lr := &io.LimitedReader{
 		R: resp.Body,
-		N: 1e6,
+		N: int64(conf.MaxContentScanSize),
 	}
 	content, err := ioutil.ReadAll(lr)
 	if err != nil {

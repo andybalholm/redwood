@@ -1,9 +1,0 @@
-default 500
-
-/google\..*tbm=(isch|vid)/
-
-bing.com/images
-bing.com/videos
-
-video.search.yahoo.com
-images.search.yahoo.com

@@ -1,9 +1,0 @@
-# Phraselists to convert upstream filter blocking pages to Redwood block pages
-# Originally Created By Fernand Jonker
-
-<Adult site blocked> 100 
-<is not allowed on this network> 100 
-<This service is powered by OpenDNS with data from St. Bernard's iGuard> 100 
-<This site was categorized as> 100 
-<block.opendns.com> 100 
-

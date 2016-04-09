@@ -550,14 +550,19 @@ require HTTP basic proxy authentication, with a username and password.
 The usernames and passwords can come from a file that is specified by
 the `--password-file` configuration directive.
 Each line in the file
-consists of a username, a password, and an optional port number,
+consists of a username, a password, an optional port number,
+and an optional client platform name,
 separated by spaces or tabs.
 (If the port number is present, Redwood will listen for HTTP requests
 on that port.
 Only the specified user may use that port,
 but once a client has authenticated as that user,
-all further requests from that client to this port will be considered authenticated,
-whether they have the Proxy-Authorization header or not.)
+all further requests from that IP address to this port will be considered authenticated,
+whether they have the Proxy-Authorization header or not.
+If a platform name is specified as well, any request that appears to come from that platform
+according to the User-Agent string will be automatically authenticated.
+The currently recognized platforms are Windows, Linux, Android, Macintosh,
+iPhone, iPad, and iPod.)
 Alternatively,
 a program can be specified to perform authentication with
 `--auth-helper`. Each line of the program’s input will be a username and

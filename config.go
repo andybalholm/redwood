@@ -83,11 +83,12 @@ type config struct {
 	ExtraRootCerts   *x509.CertPool
 	BlockObsoleteSSL bool
 
-	Authenticators []func(user, password string) bool
-	Passwords      map[string]string
-	PasswordLock   sync.RWMutex
-	AuthRealm      string
-	CustomPorts    map[string]int
+	Authenticators  []func(user, password string) bool
+	Passwords       map[string]string
+	PasswordLock    sync.RWMutex
+	AuthRealm       string
+	CustomPorts     map[string]int
+	ClientPlatforms map[string]string
 
 	AccessLog    string
 	LogTitle     bool
@@ -114,6 +115,7 @@ func loadConfiguration() (*config, error) {
 		ContentPhraseList:    newPhraseList(),
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]int{},
+		ClientPlatforms:      map[string]string{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")

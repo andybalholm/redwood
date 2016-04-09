@@ -57,18 +57,20 @@ var pacTemplate = `function FindProxyForURL(url, host) {
 }`
 
 type perUserProxy struct {
-	User          string
-	Port          int
-	Handler       http.Handler
-	allowedIPs    map[string]bool
-	allowedIPLock sync.RWMutex
+	User           string
+	Port           int
+	Handler        http.Handler
+	ClientPlatform string
+	allowedIPs     map[string]bool
+	allowedIPLock  sync.RWMutex
 }
 
-func newPerUserProxy(user string, port int) (*perUserProxy, error) {
+func newPerUserProxy(user string, port int, clientPlatform string) (*perUserProxy, error) {
 	p := &perUserProxy{
-		User:    user,
-		Port:    port,
-		Handler: proxyHandler{user: user},
+		User:           user,
+		Port:           port,
+		ClientPlatform: clientPlatform,
+		Handler:        proxyHandler{user: user},
 	}
 	proxyForUserLock.Lock()
 	proxyForUser[user] = p
@@ -139,6 +141,14 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	pf := platform(r.Header.Get("User-Agent"))
+	if p.ClientPlatform != "" && pf == p.ClientPlatform || darwinPlatforms[p.ClientPlatform] && pf == "Darwin" {
+		log.Printf("Accepting %s as %s because of User-Agent string %q", host, p.ClientPlatform, r.Header.Get("User-Agent"))
+		p.AllowIP(host)
+		p.Handler.ServeHTTP(w, r)
+		return
+	}
+
 	log.Printf("Missing required proxy authentication from %v to %v, on port %d", r.RemoteAddr, r.URL, p.Port)
 	conf.send407(w)
 }
@@ -146,13 +156,13 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var proxyForUser = make(map[string]*perUserProxy)
 var proxyForUserLock sync.RWMutex
 
-func openPerUserPorts(customPorts map[string]int) {
+func openPerUserPorts(customPorts map[string]int, clientPlatforms map[string]string) {
 	for user, port := range customPorts {
 		proxyForUserLock.RLock()
 		p := proxyForUser[user]
 		proxyForUserLock.RUnlock()
 		if p == nil {
-			_, err := newPerUserProxy(user, port)
+			_, err := newPerUserProxy(user, port, clientPlatforms[user])
 			if err != nil {
 				log.Printf("error opening per-user listener for %s: %v", user, err)
 			}

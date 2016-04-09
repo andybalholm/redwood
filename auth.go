@@ -44,6 +44,17 @@ func (c *config) readPasswordFile(filename string) error {
 			}
 			c.CustomPorts[user] = port
 
+		case 4:
+			user, pass, portStr, clientPlatform := words[0], words[1], words[2], words[3]
+			c.Passwords[user] = pass
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				log.Printf("invalid port number %q in password file line: %s", portStr, line)
+				continue
+			}
+			c.CustomPorts[user] = port
+			c.ClientPlatforms[user] = clientPlatform
+
 		default:
 			log.Println("malformed line in password file:", line)
 		}

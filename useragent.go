@@ -39,6 +39,14 @@ var platformAliases = map[string]string{
 	"MobileAsset":           "Darwin",
 }
 
+var darwinPlatforms = map[string]bool{
+	"Macintosh": true,
+	"iPhone":    true,
+	"iPad":      true,
+	"iPod":      true,
+	"Darwin":    true,
+}
+
 // platform examines a User-Agent string and attempts to return
 // the platform that the client is running on. If it can't detect the platform,
 // it returns the empty string. Apple products are distinguished if possible

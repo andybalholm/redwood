@@ -173,6 +173,7 @@ func openPerUserPorts(customPorts map[string]int, clientPlatforms map[string]str
 type portListEntry struct {
 	User                 string
 	Port                 int
+	Platform             string
 	AuthenticatedClients []string
 }
 
@@ -194,6 +195,7 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 		data = append(data, portListEntry{
 			User:                 p.User,
 			Port:                 p.Port,
+			Platform:             p.ClientPlatform,
 			AuthenticatedClients: clients,
 		})
 	}

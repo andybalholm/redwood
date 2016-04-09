@@ -126,7 +126,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 
 	result.Categories = scores
 	ServeJSON(w, r, result)
-	logAccess(req, resp, len(content), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil, "")
+	logAccess(req, resp, len(content), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil)
 }
 
 // ServeJSON converts v to JSON and sends it on w.

@@ -99,8 +99,8 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to. user is the username to use for logging; authUser is
-// the authenticated user, if any.
-func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
+// the authenticated user, if any; r is the CONNECT request, if any.
+func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) {
 	defer func() {
 		if err := recover(); err != nil {
 			buf := make([]byte, 4096)
@@ -208,7 +208,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string) {
 	}
 
 	rule, ignored := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
-	logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored, "")
+	if r == nil {
+		logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored)
+	} else {
+		logAccess(r, nil, 0, false, user, tally, scores, rule, "", ignored)
+	}
+
 	switch rule.Action {
 	case "allow", "":
 		connectDirect(conn, serverAddr, clientHello)

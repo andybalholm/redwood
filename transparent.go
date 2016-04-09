@@ -68,7 +68,7 @@ func runTransparentServer(addr string) error {
 				return
 			}
 
-			SSLBump(conn, serverAddr.String(), user, "")
+			SSLBump(conn, serverAddr.String(), user, "", nil)
 		}()
 	}
 

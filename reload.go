@@ -87,7 +87,7 @@ func manageConfig() {
 			tlsLog = NewCSVLog(conf.TLSLog)
 
 			conf.startWebServer()
-			openPerUserPorts(conf.CustomPorts, conf.ClientPlatforms)
+			openPerUserPorts(conf.CustomPorts)
 
 			log.Println("Reloaded configuration")
 			close(ch)

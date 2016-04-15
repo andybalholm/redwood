@@ -6,7 +6,10 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // handlePACFile serves an automatically-generated PAC (Proxy Auto-Config) file
@@ -63,19 +66,40 @@ type perUserProxy struct {
 	ClientPlatform string
 	allowedIPs     map[string]bool
 	allowedIPLock  sync.RWMutex
+
+	expectedDomains  map[string]bool
+	expectedIPBlocks []*net.IPNet
+	expectedNetLock  sync.RWMutex
 }
 
-func newPerUserProxy(user string, port int, clientPlatform string) (*perUserProxy, error) {
+func newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error) {
 	p := &perUserProxy{
-		User:           user,
-		Port:           port,
-		ClientPlatform: clientPlatform,
-		Handler:        proxyHandler{user: user},
+		User:            user,
+		Port:            portInfo.Port,
+		ClientPlatform:  portInfo.ClientPlatform,
+		Handler:         proxyHandler{user: user},
+		allowedIPs:      map[string]bool{},
+		expectedDomains: map[string]bool{},
 	}
+
+	for _, network := range portInfo.ExpectedNetworks {
+		if _, nw, err := net.ParseCIDR(network); err == nil {
+			p.expectedIPBlocks = append(p.expectedIPBlocks, nw)
+		} else if ip := net.ParseIP(network); ip != nil {
+			if ip4 := ip.To4(); ip4 != nil {
+				p.expectedIPBlocks = append(p.expectedIPBlocks, &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)})
+			} else {
+				p.expectedIPBlocks = append(p.expectedIPBlocks, &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)})
+			}
+		} else {
+			p.expectedDomains[network] = true
+		}
+	}
+
 	proxyForUserLock.Lock()
 	proxyForUser[user] = p
 	proxyForUserLock.Unlock()
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portInfo.Port))
 	if err != nil {
 		return nil, err
 	}
@@ -87,19 +111,45 @@ func newPerUserProxy(user string, port int, clientPlatform string) (*perUserProx
 
 	server := http.Server{Handler: p}
 	go server.Serve(listener)
-	log.Printf("opened per-user listener for %s on port %d", user, port)
+	log.Printf("opened per-user listener for %s on port %d", user, portInfo.Port)
 
 	return p, nil
 }
 
 func (p *perUserProxy) AllowIP(ip string) {
 	p.allowedIPLock.Lock()
-	if p.allowedIPs == nil {
-		p.allowedIPs = make(map[string]bool)
-	}
 	p.allowedIPs[ip] = true
 	p.allowedIPLock.Unlock()
 	log.Printf("Added IP address %s, authenticated as %s, on port %d", ip, p.User, p.Port)
+
+	domain := rdnsDomain(ip)
+	if domain != "" {
+		p.expectedNetLock.Lock()
+		alreadyExpected := p.expectedDomains[domain]
+		if !alreadyExpected {
+			p.expectedDomains[domain] = true
+		}
+		p.expectedNetLock.Unlock()
+		if !alreadyExpected {
+			log.Printf("Added %s to the list of expected domains on port %d", domain, p.Port)
+		}
+	}
+}
+
+// rdnsDomain returns the base domain name of ip's reverse-DNS hostname (or the
+// empty string if it is unavailable).
+func rdnsDomain(ip string) string {
+	names, err := net.LookupAddr(ip)
+	if err != nil || len(names) == 0 {
+		return ""
+	}
+	host := strings.TrimSuffix(names[0], ".")
+	ps := publicsuffix.List.PublicSuffix(host)
+	dot := strings.LastIndex(strings.TrimSuffix(strings.TrimSuffix(host, ps), "."), ".")
+	if dot == -1 {
+		return host
+	}
+	return host[dot+1:]
 }
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -141,28 +191,45 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pf := platform(r.Header.Get("User-Agent"))
-	if p.ClientPlatform != "" && pf == p.ClientPlatform || darwinPlatforms[p.ClientPlatform] && pf == "Darwin" {
-		log.Printf("Accepting %s as %s because of User-Agent string %q", host, p.ClientPlatform, r.Header.Get("User-Agent"))
-		p.AllowIP(host)
-		p.Handler.ServeHTTP(w, r)
-		return
+	expectedNetwork := false
+	ip := net.ParseIP(host)
+	for _, nw := range p.expectedIPBlocks {
+		if nw.Contains(ip) {
+			expectedNetwork = true
+			break
+		}
+	}
+	domain := rdnsDomain(host)
+	if domain != "" && !expectedNetwork {
+		p.expectedNetLock.RLock()
+		expectedNetwork = p.expectedDomains[domain]
+		p.expectedNetLock.RUnlock()
 	}
 
-	log.Printf("Missing required proxy authentication from %v to %v, on port %d", r.RemoteAddr, r.URL, p.Port)
+	if expectedNetwork {
+		pf := platform(r.Header.Get("User-Agent"))
+		if p.ClientPlatform != "" && pf == p.ClientPlatform || darwinPlatforms[p.ClientPlatform] && pf == "Darwin" {
+			log.Printf("Accepting %s as %s because of User-Agent string %q", host, p.ClientPlatform, r.Header.Get("User-Agent"))
+			p.AllowIP(host)
+			p.Handler.ServeHTTP(w, r)
+			return
+		}
+	}
+
+	log.Printf("Missing required proxy authentication from %v to %v, on port %d (User-Agent: %s, domain: %s)", r.RemoteAddr, r.URL, p.Port, r.Header.Get("User-Agent"), domain)
 	conf.send407(w)
 }
 
 var proxyForUser = make(map[string]*perUserProxy)
 var proxyForUserLock sync.RWMutex
 
-func openPerUserPorts(customPorts map[string]int, clientPlatforms map[string]string) {
-	for user, port := range customPorts {
+func openPerUserPorts(customPorts map[string]customPortInfo) {
+	for user, portInfo := range customPorts {
 		proxyForUserLock.RLock()
 		p := proxyForUser[user]
 		proxyForUserLock.RUnlock()
 		if p == nil {
-			_, err := newPerUserProxy(user, port, clientPlatforms[user])
+			_, err := newPerUserProxy(user, portInfo)
 			if err != nil {
 				log.Printf("error opening per-user listener for %s: %v", user, err)
 			}
@@ -175,6 +242,7 @@ type portListEntry struct {
 	Port                 int
 	Platform             string
 	AuthenticatedClients []string
+	ExpectedNetworks     []string
 }
 
 func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
@@ -192,11 +260,22 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 
 		p.allowedIPLock.RUnlock()
 
+		var networks []string
+		p.expectedNetLock.RLock()
+		for d := range p.expectedDomains {
+			networks = append(networks, d)
+		}
+		for _, nw := range p.expectedIPBlocks {
+			networks = append(networks, nw.String())
+		}
+		p.expectedNetLock.RUnlock()
+
 		data = append(data, portListEntry{
 			User:                 p.User,
 			Port:                 p.Port,
 			Platform:             p.ClientPlatform,
 			AuthenticatedClients: clients,
+			ExpectedNetworks:     networks,
 		})
 	}
 

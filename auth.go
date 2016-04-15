@@ -42,7 +42,9 @@ func (c *config) readPasswordFile(filename string) error {
 				log.Printf("invalid port number %q in password file line: %s", portStr, line)
 				continue
 			}
-			c.CustomPorts[user] = port
+			c.CustomPorts[user] = customPortInfo{
+				Port: port,
+			}
 
 		case 4:
 			user, pass, portStr, clientPlatform := words[0], words[1], words[2], words[3]
@@ -52,8 +54,24 @@ func (c *config) readPasswordFile(filename string) error {
 				log.Printf("invalid port number %q in password file line: %s", portStr, line)
 				continue
 			}
-			c.CustomPorts[user] = port
-			c.ClientPlatforms[user] = clientPlatform
+			c.CustomPorts[user] = customPortInfo{
+				Port:           port,
+				ClientPlatform: clientPlatform,
+			}
+
+		case 5:
+			user, pass, portStr, clientPlatform, networks := words[0], words[1], words[2], words[3], words[4]
+			c.Passwords[user] = pass
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				log.Printf("invalid port number %q in password file line: %s", portStr, line)
+				continue
+			}
+			c.CustomPorts[user] = customPortInfo{
+				Port:             port,
+				ClientPlatform:   clientPlatform,
+				ExpectedNetworks: strings.Split(networks, ","),
+			}
 
 		default:
 			log.Println("malformed line in password file:", line)

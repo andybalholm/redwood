@@ -66,7 +66,7 @@ func main() {
 		portsListening++
 	}
 
-	openPerUserPorts(conf.CustomPorts, conf.ClientPlatforms)
+	openPerUserPorts(conf.CustomPorts)
 	portsListening += len(conf.CustomPorts)
 
 	if portsListening > 0 {

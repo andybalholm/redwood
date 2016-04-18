@@ -199,11 +199,28 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	domain := rdnsDomain(host)
-	if domain != "" && !expectedNetwork {
-		p.expectedNetLock.RLock()
-		expectedNetwork = p.expectedDomains[domain]
-		p.expectedNetLock.RUnlock()
+
+	if !expectedNetwork {
+		names, err := net.LookupAddr(host)
+		if err == nil {
+			p.expectedNetLock.RLock()
+		nameListLoop:
+			for _, name := range names {
+				name = strings.TrimSuffix(name, ".")
+				for {
+					if p.expectedDomains[name] {
+						expectedNetwork = true
+						break nameListLoop
+					}
+					dot := strings.Index(name, ".")
+					if dot == -1 {
+						continue nameListLoop
+					}
+					name = name[dot+1:]
+				}
+			}
+			p.expectedNetLock.RUnlock()
+		}
 	}
 
 	if expectedNetwork {
@@ -216,7 +233,7 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("Missing required proxy authentication from %v to %v, on port %d (User-Agent: %s, domain: %s)", r.RemoteAddr, r.URL, p.Port, r.Header.Get("User-Agent"), domain)
+	log.Printf("Missing required proxy authentication from %v to %v, on port %d (User-Agent: %s, domain: %s)", r.RemoteAddr, r.URL, p.Port, r.Header.Get("User-Agent"), rdnsDomain(host))
 	conf.send407(w)
 }
 

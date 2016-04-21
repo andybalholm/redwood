@@ -41,6 +41,8 @@ type blockData struct {
 	User       string
 	Tally      string
 	Scores     string
+	Request    *http.Request
+	Response   *http.Response
 }
 
 func (c *config) aclDescription(name string) string {
@@ -58,7 +60,7 @@ func (c *config) aclDescription(name string) string {
 }
 
 // showBlockPage shows a block page for a page that was blocked by an ACL.
-func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	w.WriteHeader(http.StatusForbidden)
 	if c.BlockTemplate == nil {
 		return
@@ -69,6 +71,8 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, user stri
 		User:       user,
 		Tally:      listTally(stringTally(tally)),
 		Scores:     listTally(scores),
+		Request:    r,
+		Response:   resp,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 

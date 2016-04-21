@@ -181,7 +181,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
 		return
 	case "block":
-		conf.showBlockPage(w, r, user, tally, scores, thisRule)
+		conf.showBlockPage(w, r, nil, user, tally, scores, thisRule)
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "block-invisible":
@@ -343,7 +343,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "block":
-		conf.showBlockPage(w, r, user, tally, scores, thisRule)
+		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
 		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
 		return
 	case "block-invisible":
@@ -448,7 +448,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch thisRule.Action {
 	case "block":
-		conf.showBlockPage(w, r, user, tally, scores, thisRule)
+		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
 		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
 		return
 	case "block-invisible":

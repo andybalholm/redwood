@@ -529,7 +529,8 @@ a list of the categories that were ignored even though they had higher
 scores than the one that determined the action,
 the User-Agent header (if `log-user-agent` is enabled),
 the HTTP version,
-and the Referer header.
+the Referer header,
+and the client platform (such as Windows or iPad, found in the User-Agent header).
 The content length is meaningful only if a phrase scan was performed.
 The page title is available only if a phrase scan was performed and
 `log-title` was enabled in the configuration (logging the page title
@@ -549,20 +550,40 @@ require HTTP basic proxy authentication, with a username and password.
 The usernames and passwords can come from a file that is specified by
 the `--password-file` configuration directive.
 Each line in the file
-consists of a username, a password, and an optional port number,
+consists of a username, a password, and some optional items,
 separated by spaces or tabs.
-(If the port number is present, Redwood will listen for HTTP requests
-on that port.
-Only the specified user may use that port,
-but once a client has authenticated as that user,
-all further requests from that client to this port will be considered authenticated,
-whether they have the Proxy-Authorization header or not.)
 Alternatively,
 a program can be specified to perform authentication with
 `--auth-helper`. Each line of the program’s input will be a username and
 a password, separated by a space. It should respond with `OK` if the
 password is correct, or `ERR` if it is not. One such program is
 `basic_pam_auth`, which is included with Squid.
+
+The optional items in the password file are for setting up a custom proxy port
+for that individual user, to make authentication easier.
+The first optional item is a port number; if it is present,
+Redwood will listen for HTTP requests on that port.
+Only the specified user may use that port,
+but once a client has authenticated as that user,
+all further requests from that IP address to this port will be considered authenticated,
+whether they have the Proxy-Authorization header or not.
+
+In addition, you can set up automatic authentication based on the device platform
+and the network the device is on.
+For example, to automatically authenticate an iPad on the Verizon network,
+you could have the following line in the password file:
+
+    ipad-user mySecurePassword 7500 iPad myvzw.com
+
+Redwood uses the HTTP User-Agent string to determine a device's platform.
+The currently recognized platforms are Windows, Linux, Android, Macintosh,
+iPhone, iPad, and iPod.)
+
+The network can be specified as an IP address range in CIDR notation (70.192.0.0/11)
+or as a domain name to be compared to an IP address's reverse DNS entry.
+Multiple networks can be specified, separated by commas.
+If a device successfully authenticates (using the username and password)
+from a network that is not on the list, that network will be added to the list of expected networks. 
 
 SSLBump
 =======

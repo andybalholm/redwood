@@ -135,11 +135,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var userAgent string
-	if conf.LogUserAgent {
-		userAgent = r.Header.Get("User-Agent")
-	}
-
 	if realHost, ok := conf.VirtualHosts[r.Host]; ok {
 		r.Host = realHost
 		r.URL.Host = realHost
@@ -182,11 +177,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "block":
 		conf.showBlockPage(w, r, nil, user, tally, scores, thisRule)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
@@ -199,12 +194,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
-		SSLBump(conn, r.URL.Host, user, authUser)
+		SSLBump(conn, r.URL.Host, user, authUser, r)
 		return
 	}
 
 	if r.Host == localServer {
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		conf.ServeMux.ServeHTTP(w, r)
 		return
 	}
@@ -219,14 +214,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
 
 	if r.Header.Get("Upgrade") == "websocket" {
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		h.makeWebsocketConnection(w, r)
 		return
 	}
@@ -296,7 +291,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	}
 	defer resp.Body.Close()
@@ -340,15 +335,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "block":
 		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, userAgent)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	}
 
@@ -379,7 +374,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored, userAgent)
+		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored)
 		return
 	}
 
@@ -449,11 +444,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch thisRule.Action {
 	case "block":
 		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
 		return
 	}
 
@@ -473,7 +468,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write(content)
 	}
 
-	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, userAgent)
+	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
 }
 
 // copyResponseHeader writes resp's header and status code to w.

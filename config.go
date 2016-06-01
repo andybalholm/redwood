@@ -87,7 +87,7 @@ type config struct {
 	Passwords      map[string]string
 	PasswordLock   sync.RWMutex
 	AuthRealm      string
-	CustomPorts    map[string]int
+	CustomPorts    map[string]customPortInfo
 
 	AccessLog    string
 	LogTitle     bool
@@ -97,6 +97,12 @@ type config struct {
 	CloseIdleConnections time.Duration
 
 	flags *flag.FlagSet
+}
+
+type customPortInfo struct {
+	Port             int
+	ClientPlatform   string
+	ExpectedNetworks []string
 }
 
 func loadConfiguration() (*config, error) {
@@ -113,7 +119,7 @@ func loadConfiguration() (*config, error) {
 		ServeMux:             http.NewServeMux(),
 		ContentPhraseList:    newPhraseList(),
 		Passwords:            map[string]string{},
-		CustomPorts:          map[string]int{},
+		CustomPorts:          map[string]customPortInfo{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")

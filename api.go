@@ -45,6 +45,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 
 	case "block":
 		http.Error(w, "You do not have access to this page.", http.StatusForbidden)
+		return
 	}
 
 	apiServeMux.ServeHTTP(w, r)

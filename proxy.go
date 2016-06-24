@@ -247,13 +247,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var rt http.RoundTripper
 	if h.rt == nil {
-		if r.URL.Opaque != "" && httpTransport.Proxy != nil {
-			if p, _ := httpTransport.Proxy(r); p != nil {
-				// If the request is going through a proxy, the host needs to be
-				// included in the opaque element.
-				r.URL.Opaque = "//" + r.URL.Host + r.URL.Opaque
-			}
-		}
 		rt = httpTransport
 	} else {
 		rt = h.rt
@@ -261,7 +254,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	removeHopByHopHeaders(r.Header)
 	resp, err := rt.RoundTrip(r)
-	r.URL.Opaque = ""
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)

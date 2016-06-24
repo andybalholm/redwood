@@ -243,32 +243,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && !lanAddress(client)
 	r.Header.Del("Accept-Encoding")
 
-	urlChanged := conf.changeQuery(r.URL)
-
-	if !urlChanged {
-		// Rebuild the URL in a way that will preserve which characters are escaped
-		// and which aren't, for compatibility with broken servers.
-		rawURL := r.RequestURI
-		if strings.HasPrefix(rawURL, r.URL.Scheme) {
-			rawURL = rawURL[len(r.URL.Scheme):]
-			rawURL = strings.TrimPrefix(rawURL, "://")
-			slash := strings.Index(rawURL, "/")
-			if slash == -1 {
-				rawURL = "/"
-			} else {
-				rawURL = rawURL[slash:]
-			}
-		}
-		q := strings.Index(rawURL, "?")
-		if q != -1 {
-			rawURL = rawURL[:q]
-		}
-		if strings.HasPrefix(rawURL, "//") {
-			// The path should start with a single slash not two.
-			rawURL = rawURL[1:]
-		}
-		r.URL.Opaque = rawURL
-	}
+	conf.changeQuery(r.URL)
 
 	var rt http.RoundTripper
 	if h.rt == nil {

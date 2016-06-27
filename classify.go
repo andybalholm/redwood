@@ -37,7 +37,16 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		result.Error = err.Error()
+		ServeJSON(w, r, result)
+		log.Printf("Classifier: error creating request for %s: %v", url, err)
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		result.Error = err.Error()
 		ServeJSON(w, r, result)
@@ -47,7 +56,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	// If the http Client followed redirects, use the final URL, not the one initially specified.
-	req := resp.Request
+	req = resp.Request
 	result.URL = req.URL.String()
 
 	if resp.StatusCode != 200 {

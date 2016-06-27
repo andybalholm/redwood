@@ -20,6 +20,7 @@ type classificationResponse struct {
 	URL        string         `json:"url"`
 	Categories map[string]int `json:"categories,omitempty"`
 	Error      string         `json:"error,omitempty"`
+	LogLine    []string       `json:"logLine,omitempty"`
 }
 
 // handleClassification responds to an HTTP request with a url parameter, and
@@ -125,8 +126,11 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result.Categories = scores
+	logLine := logAccess(req, resp, len(content), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil)
+	if r.URL.Path == "/classify/verbose" {
+		result.LogLine = logLine
+	}
 	ServeJSON(w, r, result)
-	logAccess(req, resp, len(content), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil)
 }
 
 // ServeJSON converts v to JSON and sends it on w.

@@ -20,6 +20,7 @@ type classificationResponse struct {
 	URL        string         `json:"url"`
 	Categories map[string]int `json:"categories,omitempty"`
 	Error      string         `json:"error,omitempty"`
+	LogLine    []string       `json:"logLine,omitempty"`
 }
 
 // handleClassification responds to an HTTP request with a url parameter, and
@@ -36,7 +37,16 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		result.Error = err.Error()
+		ServeJSON(w, r, result)
+		log.Printf("Classifier: error creating request for %s: %v", url, err)
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		result.Error = err.Error()
 		ServeJSON(w, r, result)
@@ -46,7 +56,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	// If the http Client followed redirects, use the final URL, not the one initially specified.
-	req := resp.Request
+	req = resp.Request
 	result.URL = req.URL.String()
 
 	if resp.StatusCode != 200 {
@@ -125,8 +135,11 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result.Categories = scores
+	logLine := logAccess(req, resp, len(content), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil)
+	if r.URL.Path == "/classify/verbose" {
+		result.LogLine = logLine
+	}
 	ServeJSON(w, r, result)
-	logAccess(req, resp, len(content), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil)
 }
 
 // ServeJSON converts v to JSON and sends it on w.

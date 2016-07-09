@@ -54,7 +54,7 @@ func (l *CSVLog) Close() {
 	l.file.Close()
 }
 
-func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string) {
+func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string) []string {
 	conf := getConfig()
 
 	modified := ""
@@ -84,7 +84,10 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 		userAgent = req.Header.Get("User-Agent")
 	}
 
-	accessLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")))
+	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")))
+
+	accessLogChan <- logLine
+	return logLine
 }
 
 func logTLS(user, serverAddr, serverName string, err error) {

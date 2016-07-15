@@ -14,8 +14,7 @@ with a customizable page stating that the request is not allowed
 overblock request).
 
 Redwood’s filtering is based on URLs and also, where applicable, on page
-content. (By default, content filtering is applied to files whose MIME
-type starts with `text`.)
+content.
 
 Configuration File
 ==================

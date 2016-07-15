@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -294,11 +295,29 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch thisRule.Action {
 	case "allow":
 		resp.Header.Set("Content-Type", originalContentType)
-		if resp.ContentLength > 0 {
+		var dest io.Writer = w
+		shouldGZIP := false
+		if gzipOK && (resp.ContentLength == -1 || resp.ContentLength > 1024) {
+			ct, _, err := mime.ParseMediaType(originalContentType)
+			if err == nil {
+				switch ct {
+				case "application/javascript", "application/x-javascript", "application/json":
+					shouldGZIP = true
+				default:
+					shouldGZIP = strings.HasPrefix(ct, "text/")
+				}
+			}
+		}
+		if shouldGZIP {
+			resp.Header.Set("Content-Encoding", "gzip")
+			gzw := gzip.NewWriter(w)
+			defer gzw.Close()
+			dest = gzw
+		} else if resp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)
-		n, err := io.Copy(w, resp.Body)
+		n, err := io.Copy(dest, resp.Body)
 		if err != nil {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
@@ -331,8 +350,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			gzw := gzip.NewWriter(w)
 			defer gzw.Close()
 			dest = gzw
-		}
-		if resp.ContentLength > 0 {
+		} else if resp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)

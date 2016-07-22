@@ -135,13 +135,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		tlsConn := tls.Server(conn, config)
 		err = tlsConn.Handshake()
 		if err != nil {
-			logTLS(user, serverAddr, localServer, fmt.Errorf("error in handshake with client: %v", err))
+			logTLS(user, serverAddr, localServer, fmt.Errorf("error in handshake with client: %v", err), false)
 			conn.Close()
 			return
 		}
 		listener := &singleListener{conn: tlsConn}
 		server := http.Server{Handler: conf.ServeMux}
-		logTLS(user, serverAddr, localServer, nil)
+		logTLS(user, serverAddr, localServer, nil, false)
 		server.Serve(listener)
 		return
 	}
@@ -151,7 +151,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	// just the address).
 	clientHello, err := readClientHello(conn)
 	if err != nil {
-		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err))
+		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false)
 		if err == ErrObsoleteSSLVersion {
 			obsoleteVersion = true
 			if conf.BlockObsoleteSSL {
@@ -223,54 +223,58 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		return
 	}
 
-	serverConn, err := tls.Dial("tcp", serverAddr, &tls.Config{
-		ServerName:         serverName,
-		InsecureSkipVerify: true,
-		NextProtos:         []string{"h2", "http/1.1"},
-	})
-	if err != nil {
-		logTLS(user, serverAddr, serverName, err)
-		connectDirect(conn, serverAddr, clientHello)
-		return
-	}
+	cert, rt := conf.CertCache.Get(serverName, serverAddr)
+	cachedCert := rt != nil
+	if !cachedCert {
+		serverConn, err := tls.Dial("tcp", serverAddr, &tls.Config{
+			ServerName:         serverName,
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2", "http/1.1"},
+		})
+		if err != nil {
+			logTLS(user, serverAddr, serverName, err, cachedCert)
+			connectDirect(conn, serverAddr, clientHello)
+			return
+		}
 
-	state := serverConn.ConnectionState()
-	serverConn.Close()
-	serverCert := state.PeerCertificates[0]
-
-	valid := conf.validCert(serverCert, state.PeerCertificates[1:])
-	cert, err := imitateCertificate(serverCert, !valid, conf)
-	if err != nil {
+		state := serverConn.ConnectionState()
 		serverConn.Close()
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err))
-		connectDirect(conn, serverAddr, clientHello)
-		return
+		serverCert := state.PeerCertificates[0]
+
+		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
+		cert, err = imitateCertificate(serverCert, !valid, conf)
+		if err != nil {
+			serverConn.Close()
+			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert)
+			connectDirect(conn, serverAddr, clientHello)
+			return
+		}
+
+		_, err = serverCert.Verify(x509.VerifyOptions{
+			Intermediates: certPoolWith(state.PeerCertificates[1:]),
+			DNSName:       serverName,
+		})
+		validWithDefaultRoots := err == nil
+
+		if state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
+			if validWithDefaultRoots {
+				rt = http2Transport
+			} else {
+				rt = newHardValidationTransport(insecureHTTP2Transport, serverName, state.PeerCertificates)
+			}
+		} else {
+			if validWithDefaultRoots {
+				rt = httpTransport
+			} else {
+				rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
+			}
+		}
+		conf.CertCache.Put(serverName, serverAddr, cert, rt)
 	}
 
 	_, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
 		port = ""
-	}
-
-	_, err = serverCert.Verify(x509.VerifyOptions{
-		Intermediates: certPoolWith(state.PeerCertificates[1:]),
-		DNSName:       serverName,
-	})
-	validWithDefaultRoots := err == nil
-
-	var rt http.RoundTripper
-	if state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
-		if validWithDefaultRoots {
-			rt = http2Transport
-		} else {
-			rt = newHardValidationTransport(insecureHTTP2Transport, serverName, state.PeerCertificates)
-		}
-	} else {
-		if validWithDefaultRoots {
-			rt = httpTransport
-		} else {
-			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
-		}
 	}
 
 	server := http.Server{
@@ -294,13 +298,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err))
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), cachedCert)
 		conn.Close()
 		return
 	}
 
 	listener := &singleListener{conn: tlsConn}
-	logTLS(user, serverAddr, serverName, nil)
+	logTLS(user, serverAddr, serverName, nil, cachedCert)
 	server.Serve(listener)
 }
 
@@ -637,4 +641,66 @@ func (c *config) addTrustedRoots(certPath string) error {
 		return fmt.Errorf("no certificates found in %s", certPath)
 	}
 	return nil
+}
+
+type CertificateCache struct {
+	lock        sync.RWMutex
+	cache       map[certCacheKey]certCacheEntry
+	TTL         time.Duration
+	lastCleaned time.Time
+}
+
+type certCacheKey struct {
+	name, addr string
+}
+
+type certCacheEntry struct {
+	certificate tls.Certificate
+	transport   http.RoundTripper
+	added       time.Time
+}
+
+func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certificate, transport http.RoundTripper) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	now := time.Now()
+	if c.cache == nil {
+		c.cache = make(map[certCacheKey]certCacheEntry)
+		c.lastCleaned = now
+	}
+
+	if now.Sub(c.lastCleaned) > c.TTL {
+		// Remove expired entries.
+		for k, v := range c.cache {
+			if now.Sub(v.added) > c.TTL {
+				delete(c.cache, k)
+			}
+		}
+	}
+
+	c.cache[certCacheKey{
+		name: serverName,
+		addr: serverAddr,
+	}] = certCacheEntry{
+		certificate: cert,
+		transport:   transport,
+		added:       now,
+	}
+}
+
+func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, http.RoundTripper) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	v, ok := c.cache[certCacheKey{
+		name: serverName,
+		addr: serverAddr,
+	}]
+
+	if !ok || time.Now().Sub(v.added) > c.TTL {
+		return tls.Certificate{}, nil
+	}
+
+	return v.certificate, v.transport
 }

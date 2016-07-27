@@ -82,6 +82,7 @@ type config struct {
 	TLSReady         bool
 	ExtraRootCerts   *x509.CertPool
 	BlockObsoleteSSL bool
+	CertCache        CertificateCache
 
 	Authenticators []func(user, password string) bool
 	Passwords      map[string]string
@@ -131,6 +132,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
+	c.flags.DurationVar(&c.CertCache.TTL, "cert-cache-ttl", time.Hour, "how long to cache generated TLS certificates")
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.flags.DurationVar(&c.CloseIdleConnections, "close-idle-connections", time.Hour, "how often to close idle HTTP connections to upstream server")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)

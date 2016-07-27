@@ -90,13 +90,18 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 	return logLine
 }
 
-func logTLS(user, serverAddr, serverName string, err error) {
+func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
 	}
 
-	tlsLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, serverName, serverAddr, errStr)
+	cached := ""
+	if cachedCert {
+		cached = "cached certificate"
+	}
+
+	tlsLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, serverName, serverAddr, errStr, cached)
 }
 
 // toStrings converts its arguments into a slice of strings.

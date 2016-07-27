@@ -63,7 +63,7 @@ func runTransparentServer(addr string) error {
 				// This is not an intercepted connection; it is a direct connection to
 				// our transparent port. If we bump it, we will end up with an infinite
 				// loop of redirects.
-				logTLS(user, serverAddr.String(), "", errors.New("infinite redirect loop"))
+				logTLS(user, serverAddr.String(), "", errors.New("infinite redirect loop"), false)
 				conn.Close()
 				return
 			}

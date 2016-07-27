@@ -539,7 +539,8 @@ The TLS log has a line for each HTTPS connection that was intercepted.
 Like the access log, it goes to standard output by default, and it can
 be sent to a file with the `tls-log` directive. The TLS log has the
 following fields: time, username or client IP address, server name,
-server address, and any error that was encountered.
+server address, any error that was encountered, 
+and whether the certificate used came from the certificate cache.
 
 Authentication
 ==============

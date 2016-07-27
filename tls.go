@@ -61,7 +61,7 @@ func (c *config) loadCertificate() {
 
 // connectDirect connects to serverAddr and copies data between it and conn.
 // extraData is sent to the server first.
-func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
+func connectDirect(conn net.Conn, serverAddr string, extraData []byte) (uploaded, downloaded int64) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
@@ -86,14 +86,17 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) {
 		serverConn.Write(extraData)
 	}
 
+	ulChan := make(chan int64)
 	go func() {
-		io.Copy(conn, serverConn)
+		n, _ := io.Copy(conn, serverConn)
 		time.Sleep(time.Second)
 		conn.Close()
+		ulChan <- n + int64(len(extraData))
 	}()
-	io.Copy(serverConn, conn)
+	downloaded, _ = io.Copy(serverConn, conn)
 	serverConn.Close()
-	return
+	uploaded = <-ulChan
+	return uploaded, downloaded
 }
 
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
@@ -216,7 +219,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	switch rule.Action {
 	case "allow", "":
-		connectDirect(conn, serverAddr, clientHello)
+		upload, download := connectDirect(conn, serverAddr, clientHello)
+		logAccess(cr, nil, int(upload+download), false, user, tally, scores, rule, "", ignored)
 		return
 	case "block":
 		conn.Close()

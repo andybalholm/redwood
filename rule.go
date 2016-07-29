@@ -63,7 +63,13 @@ func parseRule(s string) (r rule, leftover string, err error) {
 	switch s[0] {
 	case '/':
 		r.t = urlRegex
-		slash := strings.LastIndex(s, "/")
+		space := strings.Index(s, " ")
+		var slash int
+		if space == -1 {
+			slash = strings.LastIndex(s, "/")
+		} else {
+			slash = strings.LastIndex(s[:space], "/")
+		}
 		if slash == 0 {
 			return rule{}, s, errors.New("unmatched slash")
 		}

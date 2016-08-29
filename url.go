@@ -148,6 +148,8 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 		host = host[:colon]
 	}
 
+	host = strings.TrimSuffix(host, ".")
+
 	// Find the main domain name (e.g. "google" in "www.google.com").
 	suffix := publicsuffix.List.PublicSuffix(host)
 	if suffix != "" && suffix != host {

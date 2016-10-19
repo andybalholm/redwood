@@ -22,6 +22,7 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
+	ConnectPorts    map[int][]string
 	ContentTypes    map[string][]string
 	Methods         map[string][]string
 	Referers        map[string][]string
@@ -59,6 +60,18 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 	args := newRule[1:]
 
 	switch keyword {
+	case "connect-port":
+		if a.ConnectPorts == nil {
+			a.ConnectPorts = make(map[int][]string)
+		}
+		for _, port := range args {
+			p, err := strconv.Atoi(port)
+			if err != nil {
+				return err
+			}
+			a.ConnectPorts[p] = append(a.ConnectPorts[p], acl)
+		}
+
 	case "content-type":
 		if a.ContentTypes == nil {
 			a.ContentTypes = make(map[string][]string)
@@ -270,6 +283,20 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 
 	for _, a := range a.Methods[r.Method] {
 		acls[a] = true
+	}
+
+	if r.Method == "CONNECT" {
+		_, port, err := net.SplitHostPort(r.Host)
+		if err != nil {
+			port = "443"
+		}
+		p, err := strconv.Atoi(port)
+		if err != nil {
+			p = 443
+		}
+		for _, a := range a.ConnectPorts[p] {
+			acls[a] = true
+		}
 	}
 
 	now := time.Now()

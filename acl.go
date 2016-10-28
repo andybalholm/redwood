@@ -456,7 +456,7 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []stri
 				}
 			}
 		}
-		if r.Action == "ignore-category" {
+		if r.Action == "ignore-category" || r.Action == "" {
 			ignored = append(ignored, cat)
 		} else {
 			return r, ignored

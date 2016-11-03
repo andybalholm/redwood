@@ -146,7 +146,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		user = authUser
 	}
 
-	// Livigent sends HTTP traffic as CONNECT requests for port 80.
+	// Some proxy interception programs send HTTP traffic as CONNECT requests
+	// for port 80.
 	if _, port, err := net.SplitHostPort(r.URL.Host); err == nil && port == "80" && r.Method == "CONNECT" {
 		conn, err := newHijackedConn(w)
 		if err != nil {
@@ -164,6 +165,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				rt:          h.rt,
 			},
 		}).Serve(&singleListener{conn: conn})
+		return
 	}
 
 	tally := conf.URLRules.MatchingRules(r.URL)

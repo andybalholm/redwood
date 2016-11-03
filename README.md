@@ -253,6 +253,11 @@ threshold).
 
 The following attributes are available:
 
+- connect-port
+
+	(request only) The destination port of a CONNECT request.
+	This attribute never matches if the request method is not CONNECT.
+
 - content-type
 
     (response only) The response’s media type, usually taken from the

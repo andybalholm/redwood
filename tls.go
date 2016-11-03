@@ -166,6 +166,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 
+	host, port, err := net.SplitHostPort(serverAddr)
+	if err != nil {
+		host = serverAddr
+		port = "443"
+	}
+
 	serverName := ""
 	if !obsoleteVersion {
 		if sn, ok := clientHelloServerName(clientHello); ok {
@@ -173,11 +179,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 	if serverName == "" {
-		serverName, _, err = net.SplitHostPort(serverAddr)
-		if err != nil {
-			serverName = serverAddr
-		}
-
+		serverName = host
 		if ip := net.ParseIP(serverName); ip != nil {
 			// All we have is an IP address, not a name from a CONNECT request.
 			// See if we can do better by reverse DNS.
@@ -192,7 +194,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	cr := &http.Request{
 		Method:     "CONNECT",
 		Header:     make(http.Header),
-		Host:       serverName,
+		Host:       net.JoinHostPort(serverName, port),
 		URL:        &url.URL{Host: serverName},
 		RemoteAddr: conn.RemoteAddr().String(),
 	}
@@ -274,11 +276,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 		}
 		conf.CertCache.Put(serverName, serverAddr, cert, rt)
-	}
-
-	_, port, err := net.SplitHostPort(serverAddr)
-	if err != nil {
-		port = ""
 	}
 
 	server := http.Server{

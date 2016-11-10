@@ -269,6 +269,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rt = h.rt
 	}
 
+	// Some HTTP/2 servers don't like having a body on a GET request, even if
+	// it is empty.
+	switch r.Method {
+	case "GET", "HEAD", "DELETE", "TRACE":
+		r.Body.Close()
+		r.Body = nil
+	}
+
 	removeHopByHopHeaders(r.Header)
 	resp, err := rt.RoundTrip(r)
 

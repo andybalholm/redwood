@@ -666,6 +666,10 @@ For example, if Redwood is running on port 6502 on 10.1.10.1,
 http://10.1.10.1:6502/classify?url=https%3A%2F%2Fgolang.org might return
 {"url":"https://golang.org","categories":{"computer":266}}.
 
+It can also classify text directly. 
+http://10.1.10.1:6502/classify-text?text=programming+language
+might return {"text":"programming language","categories":{"computer":27}}.
+
 PAC Files
 =========
 

@@ -17,7 +17,8 @@ import (
 )
 
 type classificationResponse struct {
-	URL        string         `json:"url"`
+	URL        string         `json:"url,omitempty"`
+	Text       string         `json:"text,omitempty"`
 	Categories map[string]int `json:"categories,omitempty"`
 	Error      string         `json:"error,omitempty"`
 	LogLine    []string       `json:"logLine,omitempty"`
@@ -139,6 +140,32 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/classify/verbose" {
 		result.LogLine = logLine
 	}
+	ServeJSON(w, r, result)
+}
+
+// handleClassifyText is like handleClassify, but it takes the text to be
+// classified from the "text" parameter instead of fetching a URL.
+func handleClassifyText(w http.ResponseWriter, r *http.Request) {
+	conf := getConfig()
+
+	var result classificationResponse
+
+	text := r.FormValue("text")
+	result.Text = text
+	if text == "" {
+		http.Error(w, "The text to classify must be supplied as an HTTP form parameter named 'text'.", 400)
+		return
+	}
+
+	tally := make(map[rule]int)
+	conf.scanContent([]byte(text), "text/plain", "utf-8", tally)
+	scores := conf.categoryScores(tally)
+
+	for _, c := range conf.ClassifierIgnoredCategories {
+		delete(scores, c)
+	}
+	result.Categories = scores
+
 	ServeJSON(w, r, result)
 }
 

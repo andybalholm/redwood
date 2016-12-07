@@ -146,6 +146,19 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		user = authUser
 	}
 
+	// Handle IPv6 hostname without brackets in CONNECT request.
+	if r.Method == "CONNECT" {
+		hostport := r.URL.Host
+		host, port, err := net.SplitHostPort(hostport)
+		if err, ok := err.(*net.AddrError); ok && err.Err == "too many colons in address" {
+			colon := strings.LastIndex(hostport, ":")
+			host, port = hostport[:colon], hostport[colon+1:]
+			if ip := net.ParseIP(host); ip != nil {
+				r.URL.Host = net.JoinHostPort(host, port)
+			}
+		}
+	}
+
 	// Some proxy interception programs send HTTP traffic as CONNECT requests
 	// for port 80.
 	if _, port, err := net.SplitHostPort(r.URL.Host); err == nil && port == "80" && r.Method == "CONNECT" {

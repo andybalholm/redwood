@@ -155,14 +155,19 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	clientHello, err := readClientHello(conn)
 	if err != nil {
 		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false)
-		if err == ErrObsoleteSSLVersion {
+		if _, ok := err.(net.Error); ok {
+			conn.Close()
+			return
+		} else if err == ErrObsoleteSSLVersion {
 			obsoleteVersion = true
 			if conf.BlockObsoleteSSL {
 				conn.Close()
 				return
 			}
 		} else {
+			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
+			return
 		}
 	}
 
@@ -503,6 +508,9 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates []*x509.Cert
 var ErrObsoleteSSLVersion = errors.New("obsolete SSL protocol version")
 
 func readClientHello(conn net.Conn) (hello []byte, err error) {
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	defer conn.SetReadDeadline(time.Time{})
+
 	var header [5]byte
 	n, err := io.ReadFull(conn, header[:])
 	hello = header[:n]

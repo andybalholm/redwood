@@ -103,6 +103,7 @@ func newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error
 	if err != nil {
 		return nil, err
 	}
+	listener = tcpKeepAliveListener{listener.(*net.TCPListener)}
 
 	go func() {
 		<-shutdownChan

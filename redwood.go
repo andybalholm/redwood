@@ -48,7 +48,7 @@ func main() {
 		}()
 		server := http.Server{Handler: proxyHandler{}}
 		go func() {
-			err := server.Serve(proxyListener)
+			err := server.Serve(tcpKeepAliveListener{proxyListener.(*net.TCPListener)})
 			if err != nil && !strings.Contains(err.Error(), "use of closed") {
 				log.Fatalln("Error running HTTP proxy:", err)
 			}

@@ -30,6 +30,8 @@ func runTransparentServer(addr string) error {
 		ln.Close()
 	}()
 
+	ln = tcpKeepAliveListener{ln.(*net.TCPListener)}
+
 	var tempDelay time.Duration
 
 	for {

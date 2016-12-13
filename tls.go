@@ -226,6 +226,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	switch rule.Action {
 	case "allow", "":
+		conf = nil
 		upload, download := connectDirect(conn, serverAddr, clientHello)
 		logAccess(cr, nil, int(upload+download), false, user, tally, scores, rule, "", ignored)
 		return
@@ -244,6 +245,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		})
 		if err != nil {
 			logTLS(user, serverAddr, serverName, err, cachedCert)
+			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
 			return
 		}
@@ -257,6 +259,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		if err != nil {
 			serverConn.Close()
 			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert)
+			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
 			return
 		}
@@ -311,6 +314,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	listener := &singleListener{conn: tlsConn}
 	logTLS(user, serverAddr, serverName, nil, cachedCert)
+	conf = nil
 	server.Serve(listener)
 }
 

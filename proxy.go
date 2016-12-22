@@ -284,8 +284,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Some HTTP/2 servers don't like having a body on a GET request, even if
 	// it is empty.
-	switch r.Method {
-	case "GET", "HEAD", "DELETE", "TRACE":
+	if r.ContentLength == 0 {
 		r.Body.Close()
 		r.Body = nil
 	}

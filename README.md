@@ -331,6 +331,10 @@ to the end of the file without finding a matching rule, it will use the
 default action of the highest-scoring category. If there is no category
 that scores over the threshold, the default action is `allow`.
 
+An ACL action line may optionally have a description string at the end.
+This is a double-quoted string whose value will be available to the block page template
+as {{.RuleDescription}}.
+
 - allow
 
     Allow the request to proceed.

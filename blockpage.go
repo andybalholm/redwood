@@ -35,14 +35,15 @@ func (c *config) loadBlockPage(path string) error {
 }
 
 type blockData struct {
-	URL        string
-	Categories string
-	Conditions string
-	User       string
-	Tally      string
-	Scores     string
-	Request    *http.Request
-	Response   *http.Response
+	URL             string
+	Categories      string
+	Conditions      string
+	User            string
+	Tally           string
+	Scores          string
+	RuleDescription string
+	Request         *http.Request
+	Response        *http.Response
 }
 
 func (c *config) aclDescription(name string) string {
@@ -66,13 +67,14 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 		return
 	}
 	data := blockData{
-		URL:        r.URL.String(),
-		Conditions: rule.Conditions(),
-		User:       user,
-		Tally:      listTally(stringTally(tally)),
-		Scores:     listTally(scores),
-		Request:    r,
-		Response:   resp,
+		URL:             r.URL.String(),
+		Conditions:      rule.Conditions(),
+		User:            user,
+		Tally:           listTally(stringTally(tally)),
+		Scores:          listTally(scores),
+		RuleDescription: rule.Description,
+		Request:         r,
+		Response:        resp,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 

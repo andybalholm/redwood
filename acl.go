@@ -241,10 +241,20 @@ func (a *ACLDefinitions) load(filename string) error {
 
 		case "allow", "block", "block-invisible", "disable-proxy-headers", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
 			r := ACLActionRule{Action: action}
+		argLoop:
 			for _, a := range args {
-				if strings.HasPrefix(a, "!") {
+				switch a[0] {
+				case '!':
 					r.Disallowed = append(r.Disallowed, a[1:])
-				} else {
+				case '"':
+					// Parse a description string.
+					quoted := line[strings.Index(line, a):]
+					_, err := fmt.Sscanf(quoted, "%q", &r.Description)
+					if err != nil {
+						log.Printf("Invalid quoted string at %s, line %d: %q", filename, lineNo, quoted)
+					}
+					break argLoop
+				default:
 					r.Needed = append(r.Needed, a)
 				}
 			}
@@ -380,6 +390,10 @@ type ACLActionRule struct {
 
 	// Disallowed is a list of ACLs that the request must not belong to.
 	Disallowed []string
+
+	// Description is an explanation of why the action was chosen, suitable for
+	// display to end users.
+	Description string
 }
 
 // Conditions returns a string summarizing r's conditions.

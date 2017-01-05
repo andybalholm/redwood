@@ -67,8 +67,6 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fixContentType(resp)
-
 	reqACLs := conf.ACLs.requestACLs(req, "")
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)

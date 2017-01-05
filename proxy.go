@@ -306,9 +306,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	removeHopByHopHeaders(resp.Header)
 
-	originalContentType := resp.Header.Get("Content-Type")
-	fixContentType(resp)
-
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)
 
@@ -330,11 +327,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch thisRule.Action {
 	case "allow":
-		resp.Header.Set("Content-Type", originalContentType)
 		var dest io.Writer = w
 		shouldGZIP := false
 		if gzipOK && (resp.ContentLength == -1 || resp.ContentLength > 1024) {
-			ct, _, err := mime.ParseMediaType(originalContentType)
+			ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 			if err == nil {
 				switch ct {
 				case "application/javascript", "application/x-javascript", "application/json":
@@ -379,7 +375,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)
-		resp.Header.Set("Content-Type", originalContentType)
 		var dest io.Writer = w
 		if gzipOK {
 			resp.Header.Set("Content-Encoding", "gzip")
@@ -471,10 +466,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		showInvisibleBlock(w)
 		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
 		return
-	}
-
-	if !modified {
-		resp.Header.Set("Content-Type", originalContentType)
 	}
 
 	if gzipOK && len(content) > 1000 {

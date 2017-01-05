@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"mime"
 	"net"
@@ -350,19 +352,37 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 	acls := make(map[string]bool)
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		if ct2, _, err := mime.ParseMediaType(ct); err == nil {
-			ct = ct2
-		}
-		for _, acl := range a.ContentTypes[ct] {
-			acls[acl] = true
-		}
-		slash := strings.Index(ct, "/")
-		if slash != -1 {
-			generic := ct[:slash+1] + "*"
-			for _, acl := range a.ContentTypes[generic] {
-				acls[acl] = true
+	ct, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	switch ct {
+	case "unknown/unknown", "application/unknown", "*/*", "":
+		// These types tend to be used for content whose type is unknown,
+		// so we should try to second-guess them.
+		preview := make([]byte, 512)
+		n, _ := resp.Body.Read(preview)
+		preview = preview[:n]
+
+		if n > 0 {
+			ct, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
+			log.Printf("Detected Content-Type as %q for %v", ct, resp.Request.URL)
+
+			// Make the preview data available for re-reading.
+			var rc struct {
+				io.Reader
+				io.Closer
 			}
+			rc.Reader = io.MultiReader(bytes.NewReader(preview), resp.Body)
+			rc.Closer = resp.Body
+			resp.Body = rc
+		}
+	}
+	for _, acl := range a.ContentTypes[ct] {
+		acls[acl] = true
+	}
+	slash := strings.Index(ct, "/")
+	if slash != -1 {
+		generic := ct[:slash+1] + "*"
+		for _, acl := range a.ContentTypes[generic] {
+			acls[acl] = true
 		}
 	}
 

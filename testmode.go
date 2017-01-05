@@ -97,7 +97,6 @@ func runURLTest(u string) {
 	fmt.Println(resp.Status)
 	fmt.Println()
 
-	fixContentType(resp)
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)
 

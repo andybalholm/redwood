@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"image"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -75,7 +76,10 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	scores := conf.categoryScores(tally)
 	categories := conf.significantCategories(scores)
 
-	content, err := ioutil.ReadAll(resp.Body)
+	content, err := ioutil.ReadAll(&io.LimitedReader{
+		R: resp.Body,
+		N: 1 << 28,
+	})
 	if err != nil {
 		result.Error = err.Error()
 		ServeJSON(w, r, result)

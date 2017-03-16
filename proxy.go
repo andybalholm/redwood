@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -299,6 +300,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.Header.Get("Content-Encoding") == "deflate" && r.Method != "HEAD" {
+		resp.Body = flate.NewReader(resp.Body)
+		defer resp.Body.Close()
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.ContentLength = -1
+	}
 
 	// Prevent switching to QUIC.
 	resp.Header.Del("Alternate-Protocol")

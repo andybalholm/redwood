@@ -334,7 +334,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		thisRule.Action = "allow"
 	}
 
-	gzipOK = gzipOK && resp.Header.Get("Content-Encoding") == ""
+	gzipOK = gzipOK && resp.Header.Get("Content-Encoding") == "" && resp.Header.Get("Content-Type") != ""
 
 	switch thisRule.Action {
 	case "allow":

@@ -297,8 +297,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			rt:          rt,
 		},
 		TLSConfig: &tls.Config{
-			NextProtos:   []string{"h2", "http/1.1"},
-			Certificates: []tls.Certificate{cert, conf.TLSCert},
+			NextProtos:               []string{"h2", "http/1.1"},
+			Certificates:             []tls.Certificate{cert, conf.TLSCert},
+			PreferServerCipherSuites: true,
+			CurvePreferences: []tls.CurveID{
+				tls.CurveP256,
+				tls.X25519, // Go 1.8 only
+			},
 		},
 		IdleTimeout: conf.CloseIdleConnections,
 	}

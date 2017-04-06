@@ -143,7 +143,10 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		}
 		listener := &singleListener{conn: tlsConn}
-		server := http.Server{Handler: conf.ServeMux}
+		server := http.Server{
+			Handler:     conf.ServeMux,
+			IdleTimeout: conf.CloseIdleConnections,
+		}
 		logTLS(user, serverAddr, localServer, nil, false)
 		server.Serve(listener)
 		return
@@ -297,6 +300,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			NextProtos:   []string{"h2", "http/1.1"},
 			Certificates: []tls.Certificate{cert, conf.TLSCert},
 		},
+		IdleTimeout: conf.CloseIdleConnections,
 	}
 
 	err = http2.ConfigureServer(&server, nil)

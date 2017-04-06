@@ -46,7 +46,10 @@ func main() {
 			<-shutdownChan
 			proxyListener.Close()
 		}()
-		server := http.Server{Handler: proxyHandler{}}
+		server := http.Server{
+			Handler:     proxyHandler{},
+			IdleTimeout: conf.CloseIdleConnections,
+		}
 		go func() {
 			err := server.Serve(tcpKeepAliveListener{proxyListener.(*net.TCPListener)})
 			if err != nil && !strings.Contains(err.Error(), "use of closed") {

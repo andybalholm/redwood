@@ -178,6 +178,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				user:        authUser,
 				rt:          h.rt,
 			},
+			IdleTimeout: conf.CloseIdleConnections,
 		}).Serve(&singleListener{conn: conn})
 		return
 	}

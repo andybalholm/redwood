@@ -110,7 +110,11 @@ func newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error
 		listener.Close()
 	}()
 
-	server := http.Server{Handler: p}
+	conf := getConfig()
+	server := http.Server{
+		Handler:     p,
+		IdleTimeout: conf.CloseIdleConnections,
+	}
 	go server.Serve(listener)
 	log.Printf("opened per-user listener for %s on port %d", user, portInfo.Port)
 

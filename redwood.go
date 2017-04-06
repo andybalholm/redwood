@@ -74,10 +74,10 @@ func main() {
 
 	if portsListening > 0 {
 		if conf.CloseIdleConnections > 0 {
+			httpTransport.IdleConnTimeout = conf.CloseIdleConnections
+			insecureHTTPTransport.IdleConnTimeout = conf.CloseIdleConnections
 			go func() {
 				for range time.Tick(conf.CloseIdleConnections) {
-					httpTransport.CloseIdleConnections()
-					insecureHTTPTransport.CloseIdleConnections()
 					http2Transport.CloseIdleConnections()
 					insecureHTTP2Transport.CloseIdleConnections()
 				}

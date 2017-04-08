@@ -72,8 +72,10 @@ type config struct {
 	FilteredPruning      map[rule][]filteredPruningRule
 	PruneMatcher         *URLMatcher
 	FilteredPruneMatcher *URLMatcher
-	QueryChanges         map[rule]url.Values
-	QueryMatcher         *URLMatcher
+	CensoredWords        map[string]bool
+
+	QueryChanges map[rule]url.Values
+	QueryMatcher *URLMatcher
 
 	CertFile         string
 	KeyFile          string
@@ -132,6 +134,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
+	c.newActiveFlag("censored-words", "", "file of words to remove from pages", c.readCensoredWordsFile)
 	c.flags.DurationVar(&c.CertCache.TTL, "cert-cache-ttl", time.Hour, "how long to cache generated TLS certificates")
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.flags.DurationVar(&c.CloseIdleConnections, "close-idle-connections", time.Minute, "how often to close idle HTTP connections")

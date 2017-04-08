@@ -157,7 +157,7 @@ var headSelector = cascadia.MustCompile("head")
 // re-renders the HTML. It returns true if the content was changed. The content
 // may be pre-parsed and passed in as tree; the final parse tree will be stored
 // in tree.
-func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map[string]bool, tree **html.Node) bool {
+func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, tree **html.Node) bool {
 	URLMatches := c.PruneMatcher.MatchingRules(URL)
 	if len(URLMatches) == 0 {
 		return false
@@ -186,7 +186,8 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 		return false
 	}
 
-	// Mark the new content as having a charset of UTF-8.
+	// Remove any meta tag that indicated the charset, since it will be
+	// re-rendered as UTF-8.
 	prune(*tree, metaCharsetSelector, toDelete)
 
 	// Actually delete the nodes that are to be removed.
@@ -224,14 +225,14 @@ func (c *config) pruneContent(URL *url.URL, content *[]byte, cs string, acls map
 	return true
 }
 
-func (c *config) doFilteredPruning(URL *url.URL, content *[]byte, cs string, acls map[string]bool, tree **html.Node) bool {
+func (c *config) doFilteredPruning(URL *url.URL, content []byte, cs string, acls map[string]bool, tree **html.Node) bool {
 	URLMatches := c.FilteredPruneMatcher.MatchingRules(URL)
 	if len(URLMatches) == 0 {
 		return false
 	}
 
 	if *tree == nil {
-		doc, err := parseHTML(*content, cs)
+		doc, err := parseHTML(content, cs)
 		if err != nil {
 			log.Printf("Error parsing html from %s: %s", URL, err)
 			return false
@@ -259,14 +260,6 @@ func (c *config) doFilteredPruning(URL *url.URL, content *[]byte, cs string, acl
 		n.Parent.RemoveChild(n)
 	}
 
-	b := new(bytes.Buffer)
-	err := html.Render(b, *tree)
-	if err != nil {
-		log.Printf("Error rendering modified content from %s: %s", URL, err)
-		return false
-	}
-
-	*content = b.Bytes()
 	return true
 }
 

@@ -98,7 +98,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		_, cs, _ := charset.DetermineEncoding(content, contentType)
 		var doc *html.Node
 		if strings.Contains(contentType, "html") {
-			modified = conf.pruneContent(req.URL, &content, cs, acls, &doc)
+			modified = conf.pruneContent(req.URL, &content, cs, &doc)
 		}
 
 		conf.scanContent(content, contentType, cs, tally)

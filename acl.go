@@ -241,7 +241,7 @@ func (a *ACLDefinitions) load(filename string) error {
 				}
 			}
 
-		case "allow", "block", "block-invisible", "disable-proxy-headers", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
+		case "allow", "block", "block-invisible", "censor-words", "disable-proxy-headers", "hash-image", "ignore-category", "phrase-scan", "require-auth", "ssl-bump":
 			r := ACLActionRule{Action: action}
 		argLoop:
 			for _, a := range args {

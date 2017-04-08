@@ -429,7 +429,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			modified = conf.pruneContent(r.URL, &content, cs, acls, &doc)
+			modified = conf.pruneContent(r.URL, &content, cs, &doc)
 			if modified {
 				cs = "utf-8"
 			}
@@ -438,8 +438,26 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conf.scanContent(content, contentType, cs, tally)
 
 		if strings.Contains(contentType, "html") {
-			if conf.doFilteredPruning(r.URL, &content, cs, acls, &doc) {
-				modified = true
+			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, acls, &doc)
+
+			censorRule, _ := conf.ChooseACLCategoryAction(acls, categories, "censor-words")
+			if censorRule.Action == "censor-words" {
+				if doc == nil {
+					doc, _ = parseHTML(content, cs)
+				}
+				if censorHTML(doc, conf.CensoredWords) {
+					modifiedAfterScan = true
+				}
+			}
+
+			if modifiedAfterScan {
+				b := new(bytes.Buffer)
+				if err := html.Render(b, doc); err != nil {
+					log.Printf("Error rendering modified content from %s: %v", r.URL, err)
+				} else {
+					content = b.Bytes()
+					modified = true
+				}
 			}
 			if modified {
 				resp.Header.Set("Content-Type", "text/html; charset=utf-8")

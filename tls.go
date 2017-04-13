@@ -147,6 +147,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			Handler:     conf.ServeMux,
 			IdleTimeout: conf.CloseIdleConnections,
 		}
+		conf = nil
 		logTLS(user, serverAddr, localServer, nil, false)
 		server.Serve(listener)
 		return

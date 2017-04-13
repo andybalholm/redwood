@@ -169,9 +169,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 
-		(&http.Server{
+		server := &http.Server{
 			Handler: proxyHandler{
 				TLS:         false,
 				connectPort: port,
@@ -179,7 +178,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				rt:          h.rt,
 			},
 			IdleTimeout: conf.CloseIdleConnections,
-		}).Serve(&singleListener{conn: conn})
+		}
+		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
+		server.Serve(&singleListener{conn: conn})
 		return
 	}
 

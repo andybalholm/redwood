@@ -72,7 +72,7 @@ type perUserProxy struct {
 	expectedNetLock  sync.RWMutex
 }
 
-func newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error) {
+func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error) {
 	p := &perUserProxy{
 		User:            user,
 		Port:            portInfo.Port,
@@ -112,7 +112,7 @@ func newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error
 
 	server := http.Server{
 		Handler:     p,
-		IdleTimeout: getConfig().CloseIdleConnections,
+		IdleTimeout: c.CloseIdleConnections,
 	}
 	go server.Serve(listener)
 	log.Printf("opened per-user listener for %s on port %d", user, portInfo.Port)
@@ -244,13 +244,13 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var proxyForUser = make(map[string]*perUserProxy)
 var proxyForUserLock sync.RWMutex
 
-func openPerUserPorts(customPorts map[string]customPortInfo) {
-	for user, portInfo := range customPorts {
+func (c *config) openPerUserPorts() {
+	for user, portInfo := range c.CustomPorts {
 		proxyForUserLock.RLock()
 		p := proxyForUser[user]
 		proxyForUserLock.RUnlock()
 		if p == nil {
-			_, err := newPerUserProxy(user, portInfo)
+			_, err := c.newPerUserProxy(user, portInfo)
 			if err != nil {
 				log.Printf("error opening per-user listener for %s: %v", user, err)
 			}

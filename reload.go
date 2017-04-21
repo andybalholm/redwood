@@ -33,7 +33,12 @@ var (
 	activeConnections sync.WaitGroup
 )
 
+var configReloadLock sync.Mutex
+
 func reloadConfig() error {
+	configReloadLock.Lock()
+	defer configReloadLock.Unlock()
+
 	newConf, err := loadConfiguration()
 	if err != nil {
 		log.Println("Error reloading configuration:", err)

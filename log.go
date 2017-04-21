@@ -9,21 +9,30 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 // recording pages filtered to access log
 
-var accessLogChan = make(chan []string)
-var tlsLogChan = make(chan []string)
+var (
+	accessLog CSVLog
+	tlsLog    CSVLog
+)
 
 type CSVLog struct {
+	lock sync.Mutex
 	file *os.File
 	csv  *csv.Writer
 }
 
-func NewCSVLog(filename string) *CSVLog {
-	l := new(CSVLog)
+func (l *CSVLog) Open(filename string) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if l.file != nil && l.file != os.Stdout {
+		l.file.Close()
+		l.file = nil
+	}
 
 	if filename != "" {
 		logfile, err := os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -38,20 +47,13 @@ func NewCSVLog(filename string) *CSVLog {
 	}
 
 	l.csv = csv.NewWriter(l.file)
-
-	return l
 }
 
 func (l *CSVLog) Log(data []string) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
 	l.csv.Write(data)
 	l.csv.Flush()
-}
-
-func (l *CSVLog) Close() {
-	if l.file == os.Stdout {
-		return
-	}
-	l.file.Close()
 }
 
 func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string) []string {
@@ -86,7 +88,7 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 
 	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")))
 
-	accessLogChan <- logLine
+	accessLog.Log(logLine)
 	return logLine
 }
 
@@ -101,7 +103,7 @@ func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
 		cached = "cached certificate"
 	}
 
-	tlsLogChan <- toStrings(time.Now().Format("2006-01-02 15:04:05"), user, serverName, serverAddr, errStr, cached)
+	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05"), user, serverName, serverAddr, errStr, cached))
 }
 
 // toStrings converts its arguments into a slice of strings.

@@ -15,9 +15,14 @@ import (
 )
 
 func main() {
-	go manageConfig()
+	conf, err := loadConfiguration()
+	if err != nil {
+		log.Fatal(err)
+	}
+	configuration = conf
 
-	conf := getConfig()
+	accessLog.Open(conf.AccessLog)
+	tlsLog.Open(conf.TLSLog)
 
 	if conf.PIDFile != "" {
 		pid := os.Getpid()

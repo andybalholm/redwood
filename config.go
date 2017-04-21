@@ -200,6 +200,7 @@ func loadConfiguration() (*config, error) {
 	c.collectRules()
 
 	c.loadCertificate()
+	c.startWebServer()
 
 	return c, nil
 }

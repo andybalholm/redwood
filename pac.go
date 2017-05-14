@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -8,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/miekg/dns"
 
 	"golang.org/x/net/publicsuffix"
 )
@@ -143,17 +146,65 @@ func (p *perUserProxy) AllowIP(ip string) {
 // rdnsDomain returns the base domain name of ip's reverse-DNS hostname (or the
 // empty string if it is unavailable).
 func rdnsDomain(ip string) string {
+	var host string
 	names, err := net.LookupAddr(ip)
-	if err != nil || len(names) == 0 {
+	if err == nil && len(names) > 0 {
+		host = names[0]
+	}
+	if host == "" {
+		// If a PTR record isn't available, fall back to SOA.
+		host, _ = rdnsSOA(ip)
+	}
+	if host == "" {
 		return ""
 	}
-	host := strings.TrimSuffix(names[0], ".")
+	host = strings.TrimSuffix(host, ".")
 	ps := publicsuffix.List.PublicSuffix(host)
 	dot := strings.LastIndex(strings.TrimSuffix(strings.TrimSuffix(host, ps), "."), ".")
 	if dot == -1 {
 		return host
 	}
 	return host[dot+1:]
+}
+
+var dnsServer string
+
+func init() {
+	conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+	if err != nil || len(conf.Servers) == 0 {
+		return
+	}
+	dnsServer = conf.Servers[0] + ":" + conf.Port
+}
+
+// rdnsSOA returns the nameserver from the SOA (start of authority) reverse-DNS
+// record for ip.
+func rdnsSOA(ip string) (server string, err error) {
+	octets := strings.Split(ip, ".")
+	if len(octets) != 4 {
+		return "", errors.New("invalid IPv4 address")
+	}
+	octets[0], octets[1], octets[2], octets[3] = octets[3], octets[2], octets[1], octets[0]
+
+	m := new(dns.Msg)
+
+	for i := 0; i < 4; i++ {
+		m.SetQuestion(strings.Join(octets[i:], ".")+".in-addr.arpa.", dns.TypeSOA)
+		soa, err := dns.Exchange(m, dnsServer)
+		if err != nil {
+			return "", err
+		}
+		if soa.Rcode != dns.RcodeSuccess || len(soa.Answer) == 0 {
+			continue
+		}
+		trsoa, ok := soa.Answer[0].(*dns.SOA)
+		if !ok {
+			continue
+		}
+		return trsoa.Ns, nil
+	}
+
+	return "", errors.New("SOA not found")
 }
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {

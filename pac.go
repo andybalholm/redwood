@@ -63,16 +63,36 @@ var pacTemplate = `function FindProxyForURL(url, host) {
 }`
 
 type perUserProxy struct {
-	User           string
-	Port           int
-	Handler        http.Handler
-	ClientPlatform string
-	allowedIPs     map[string]bool
-	allowedIPLock  sync.RWMutex
+	User          string
+	Port          int
+	Handler       http.Handler
+	allowedIPs    map[string]bool
+	allowedIPLock sync.RWMutex
 
 	expectedDomains  map[string]bool
 	expectedIPBlocks []*net.IPNet
+	ClientPlatform   string
 	expectedNetLock  sync.RWMutex
+}
+
+func (p *perUserProxy) addExpectedNetwork(network string) {
+	p.expectedNetLock.Lock()
+	defer p.expectedNetLock.Unlock()
+	if _, nw, err := net.ParseCIDR(network); err == nil {
+		p.expectedIPBlocks = append(p.expectedIPBlocks, nw)
+	} else if ip := net.ParseIP(network); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			p.expectedIPBlocks = append(p.expectedIPBlocks, &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)})
+		} else {
+			p.expectedIPBlocks = append(p.expectedIPBlocks, &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)})
+		}
+	} else {
+		domain, err := publicsuffix.EffectiveTLDPlusOne(network)
+		if err != nil {
+			domain = network
+		}
+		p.expectedDomains[domain] = true
+	}
 }
 
 func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error) {
@@ -86,17 +106,7 @@ func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUser
 	}
 
 	for _, network := range portInfo.ExpectedNetworks {
-		if _, nw, err := net.ParseCIDR(network); err == nil {
-			p.expectedIPBlocks = append(p.expectedIPBlocks, nw)
-		} else if ip := net.ParseIP(network); ip != nil {
-			if ip4 := ip.To4(); ip4 != nil {
-				p.expectedIPBlocks = append(p.expectedIPBlocks, &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)})
-			} else {
-				p.expectedIPBlocks = append(p.expectedIPBlocks, &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)})
-			}
-		} else {
-			p.expectedDomains[network] = true
-		}
+		p.addExpectedNetwork(network)
 	}
 
 	proxyForUserLock.Lock()
@@ -159,12 +169,11 @@ func rdnsDomain(ip string) string {
 		return ""
 	}
 	host = strings.TrimSuffix(host, ".")
-	ps := publicsuffix.List.PublicSuffix(host)
-	dot := strings.LastIndex(strings.TrimSuffix(strings.TrimSuffix(host, ps), "."), ".")
-	if dot == -1 {
+	domain, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil {
 		return host
 	}
-	return host[dot+1:]
+	return domain
 }
 
 var dnsServer string
@@ -248,40 +257,27 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	expectedNetwork := false
 	ip := net.ParseIP(host)
+	p.expectedNetLock.RLock()
+	expectedPlatform := p.ClientPlatform
 	for _, nw := range p.expectedIPBlocks {
 		if nw.Contains(ip) {
 			expectedNetwork = true
 			break
 		}
 	}
+	p.expectedNetLock.RUnlock()
 
-	if !expectedNetwork {
-		names, err := net.LookupAddr(host)
-		if err == nil {
-			p.expectedNetLock.RLock()
-		nameListLoop:
-			for _, name := range names {
-				name = strings.TrimSuffix(name, ".")
-				for {
-					if p.expectedDomains[name] {
-						expectedNetwork = true
-						break nameListLoop
-					}
-					dot := strings.Index(name, ".")
-					if dot == -1 {
-						continue nameListLoop
-					}
-					name = name[dot+1:]
-				}
-			}
-			p.expectedNetLock.RUnlock()
-		}
+	domain := rdnsDomain(host)
+	if !expectedNetwork && domain != "" {
+		p.expectedNetLock.RLock()
+		expectedNetwork = p.expectedDomains[domain]
+		p.expectedNetLock.RUnlock()
 	}
 
 	if expectedNetwork {
 		pf := platform(r.Header.Get("User-Agent"))
-		if p.ClientPlatform != "" && pf == p.ClientPlatform || darwinPlatforms[p.ClientPlatform] && pf == "Darwin" {
-			log.Printf("Accepting %s as %s because of User-Agent string %q", host, p.ClientPlatform, r.Header.Get("User-Agent"))
+		if expectedPlatform != "" && pf == expectedPlatform || darwinPlatforms[expectedPlatform] && pf == "Darwin" {
+			log.Printf("Accepting %s (domain: %s) as %s because of User-Agent string %q", host, domain, expectedPlatform, r.Header.Get("User-Agent"))
 			p.AllowIP(host)
 			p.Handler.ServeHTTP(w, r)
 			return
@@ -304,6 +300,15 @@ func (c *config) openPerUserPorts() {
 			_, err := c.newPerUserProxy(user, portInfo)
 			if err != nil {
 				log.Printf("error opening per-user listener for %s: %v", user, err)
+			}
+		} else {
+			for _, network := range portInfo.ExpectedNetworks {
+				p.addExpectedNetwork(network)
+			}
+			if portInfo.ClientPlatform != "" {
+				p.expectedNetLock.Lock()
+				p.ClientPlatform = portInfo.ClientPlatform
+				p.expectedNetLock.Unlock()
 			}
 		}
 	}
@@ -340,12 +345,13 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 		for _, nw := range p.expectedIPBlocks {
 			networks = append(networks, nw.String())
 		}
+		clientPlatform := p.ClientPlatform
 		p.expectedNetLock.RUnlock()
 
 		data = append(data, portListEntry{
 			User:                 p.User,
 			Port:                 p.Port,
-			Platform:             p.ClientPlatform,
+			Platform:             clientPlatform,
 			AuthenticatedClients: clients,
 			ExpectedNetworks:     networks,
 		})

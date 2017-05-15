@@ -277,7 +277,7 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if expectedNetwork {
 		pf := platform(r.Header.Get("User-Agent"))
 		if expectedPlatform != "" && pf == expectedPlatform || darwinPlatforms[expectedPlatform] && pf == "Darwin" {
-			log.Printf("Accepting %s (domain: %s) as %s because of User-Agent string %q", host, domain, expectedPlatform, r.Header.Get("User-Agent"))
+			log.Printf("Authenticating %s as %s based on IP address and platform (domain=%s, platform=%s, user-agent=%q, port=%d)", host, p.User, domain, expectedPlatform, r.Header.Get("User-Agent"), p.Port)
 			p.AllowIP(host)
 			p.Handler.ServeHTTP(w, r)
 			return

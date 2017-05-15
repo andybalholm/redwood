@@ -284,7 +284,21 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("Missing required proxy authentication from %v to %v, on port %d (User-Agent: %s, domain: %s)", r.RemoteAddr, r.URL, p.Port, r.Header.Get("User-Agent"), rdnsDomain(host))
+	// Maybe this is a request where authentication isn't even required according
+	// to the ACLs. If so, let it through, but don't mark the IP address as
+	// authenticated.
+	tally := conf.URLRules.MatchingRules(r.URL)
+	scores := conf.categoryScores(tally)
+	categories := conf.significantCategories(scores)
+	reqACLs := conf.ACLs.requestACLs(r, "")
+	thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "require-auth")
+	if thisRule.Action != "require-auth" {
+		log.Printf("Allowing request in spite of missing authentication (url=%v, user=%s, port=%d, client=%s)", r.URL, p.User, p.Port, r.RemoteAddr)
+		p.Handler.ServeHTTP(w, r)
+		return
+	}
+
+	log.Printf("Missing required proxy authentication from %v to %v (User-Agent=%q, domain=%s, port=%d)", r.RemoteAddr, r.URL, r.Header.Get("User-Agent"), domain, p.Port)
 	conf.send407(w)
 }
 

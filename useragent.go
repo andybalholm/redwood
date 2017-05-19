@@ -14,6 +14,7 @@ var platformStrings = []string{
 	"iPhone",
 	"Darwin",
 	"Windows",
+	"Blackberry",
 	"MAC",
 	"Mac",
 	"Microsoft",

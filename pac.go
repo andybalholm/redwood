@@ -316,13 +316,12 @@ func (c *config) openPerUserPorts() {
 				log.Printf("error opening per-user listener for %s: %v", user, err)
 			}
 		} else {
+			p.expectedNetLock.Lock()
+			p.ClientPlatform = portInfo.ClientPlatform
+			p.expectedIPBlocks = p.expectedIPBlocks[:0]
+			p.expectedNetLock.Unlock()
 			for _, network := range portInfo.ExpectedNetworks {
 				p.addExpectedNetwork(network)
-			}
-			if portInfo.ClientPlatform != "" {
-				p.expectedNetLock.Lock()
-				p.ClientPlatform = portInfo.ClientPlatform
-				p.expectedNetLock.Unlock()
 			}
 		}
 	}

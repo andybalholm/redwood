@@ -582,6 +582,16 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Some servers are very particular about the
+	// capitalization of the special WebSocket headers.
+	for k, v := range r.Header {
+		if strings.HasPrefix(k, "Sec-Websocket-") {
+			newKey := "Sec-WebSocket-" + strings.TrimPrefix(k, "Sec-Websocket-")
+			delete(r.Header, k)
+			r.Header[newKey] = v
+		}
+	}
+
 	err = r.Write(serverConn)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

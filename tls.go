@@ -274,7 +274,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		})
 		validWithDefaultRoots := err == nil
 
-		if state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
+		if conf.HTTP2Upstream && state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
 			if validWithDefaultRoots {
 				rt = http2Transport
 			} else {
@@ -298,7 +298,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			rt:          rt,
 		},
 		TLSConfig: &tls.Config{
-			NextProtos:               []string{"h2", "http/1.1"},
 			Certificates:             []tls.Certificate{cert, conf.TLSCert},
 			PreferServerCipherSuites: true,
 			CurvePreferences: []tls.CurveID{
@@ -309,9 +308,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		IdleTimeout: conf.CloseIdleConnections,
 	}
 
-	err = http2.ConfigureServer(&server, nil)
-	if err != nil {
-		log.Println("Error configuring HTTP/2 server:", err)
+	if conf.HTTP2Downstream {
+		server.TLSConfig.NextProtos = []string{"h2", "http/1.1"}
+		err = http2.ConfigureServer(&server, nil)
+		if err != nil {
+			log.Println("Error configuring HTTP/2 server:", err)
+		}
 	}
 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)

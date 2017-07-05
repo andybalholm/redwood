@@ -1,11 +1,10 @@
-// +build !go1.9
+// +build go1.9
 
 package main
 
 import (
 	"errors"
 	"net"
-	"reflect"
 	"syscall"
 	"unsafe"
 )
@@ -19,20 +18,26 @@ const SO_ORIGINAL_DST = 80
 
 // realServerAddress returns an intercepted connection's original destination.
 func realServerAddress(conn net.Conn) (net.Addr, error) {
-	tcpConn, ok := conn.(*net.TCPConn)
+	syscallConn, ok := conn.(syscall.Conn)
 	if !ok {
-		return nil, errors.New("not a TCPConn")
+		return nil, errors.New("can't get raw network connection")
 	}
-
-	TCPConn := reflect.ValueOf(tcpConn).Elem()
-	netFD := TCPConn.FieldByName("fd").Elem()
-	fd := netFD.FieldByName("sysfd").Int()
-
-	var addr sockaddr
-	size := uint32(unsafe.Sizeof(addr))
-	err := getsockopt(int(fd), syscall.SOL_IP, SO_ORIGINAL_DST, unsafe.Pointer(&addr), &size)
+	rawConn, err := syscallConn.SyscallConn()
 	if err != nil {
 		return nil, err
+	}
+
+	var addr sockaddr
+	var getsockoptErr error
+	err = rawConn.Control(func(fd uintptr) {
+		size := uint32(unsafe.Sizeof(addr))
+		getsockoptErr = getsockopt(int(fd), syscall.SOL_IP, SO_ORIGINAL_DST, unsafe.Pointer(&addr), &size)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if getsockoptErr != nil {
+		return nil, getsockoptErr
 	}
 
 	var ip net.IP

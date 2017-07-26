@@ -482,18 +482,35 @@ func unionACLSets(sets ...map[string]bool) map[string]bool {
 }
 
 // ChooseACLCategoryAction is like ChooseACLAction, except that it also takes
-// a list of categories. The first category in the list is added to the set of
+// a tally of category scores. Any ACL categories (action==ACL) with positive
+// scores are added to the set of ACLs. A list is made of all the other
+// categories with scores over the threshold, with the highest-scoring category
+// first. The first category in the list is added to the set of
 // ACLs. If the result is empty, the default action for that category will be
 // used. Then if the result is "ignore-category", the process will be repeated
 // with the next category in the list. Finally, if all categories are ignored,
-// the process is repeated with just the original set of ACLs. The second
-// return value is a list of the categories that were ignored.
-func (c *config) ChooseACLCategoryAction(acls map[string]bool, categories []string, actions ...string) (ar ACLActionRule, ignored []string) {
+// the process is repeated with just the original set of ACLs and ACL
+// categories. The second return value is a list of the categories that were
+// ignored.
+func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string]int, threshold int, actions ...string) (ar ACLActionRule, ignored []string) {
 	actionsPlus := append(actions, "ignore-category")
 	choices := make(map[string]bool, len(actions))
 	for _, a := range actions {
 		choices[a] = true
 	}
+
+	acls = copyACLSet(acls)
+	significantScores := make(map[string]int)
+	for k, v := range scores {
+		if v > 0 && c.Categories[k].action == ACL {
+			acls[k] = true
+			continue
+		}
+		if v >= threshold {
+			significantScores[k] = v
+		}
+	}
+	categories := sortedKeys(significantScores)
 
 	for _, cat := range categories {
 		aclsPlus := copyACLSet(acls)

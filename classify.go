@@ -74,7 +74,6 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 
 	tally := conf.URLRules.MatchingRules(req.URL)
 	scores := conf.categoryScores(tally)
-	categories := conf.significantCategories(scores)
 
 	content, err := ioutil.ReadAll(&io.LimitedReader{
 		R: resp.Body,
@@ -87,7 +86,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thisRule, _ := conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+	thisRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
 
 	modified := false
 	scoresNeedUpdate := false
@@ -125,14 +124,13 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 
 	if scoresNeedUpdate {
 		scores = conf.categoryScores(tally)
-		categories = conf.significantCategories(scores)
 	}
 
 	for _, c := range conf.ClassifierIgnoredCategories {
 		delete(scores, c)
 	}
 	for k, v := range scores {
-		if v < conf.Threshold {
+		if v < conf.Threshold || conf.Categories[k].action == ACL {
 			delete(scores, k)
 		}
 	}

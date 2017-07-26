@@ -38,7 +38,6 @@ func runURLTest(u string) {
 
 	tally := conf.URLRules.MatchingRules(URL)
 	scores := conf.categoryScores(tally)
-	categories := conf.significantCategories(scores)
 
 	if len(tally) == 0 {
 		fmt.Println("No URL rules match.")
@@ -69,7 +68,7 @@ func runURLTest(u string) {
 		}
 	}
 
-	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "block", "block-invisible")
+	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "allow", "block", "block-invisible")
 	fmt.Println()
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
@@ -108,7 +107,7 @@ func runURLTest(u string) {
 		fmt.Println()
 	}
 
-	thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
 
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
@@ -173,7 +172,6 @@ func runURLTest(u string) {
 	}
 
 	scores = conf.categoryScores(tally)
-	categories = conf.significantCategories(scores)
 
 	if len(scores) > 0 {
 		fmt.Println()
@@ -182,7 +180,7 @@ func runURLTest(u string) {
 	}
 	fmt.Println()
 
-	thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
 
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")

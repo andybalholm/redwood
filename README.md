@@ -80,6 +80,11 @@ the highest `block` category is greater than a certain configurable
 threshold. This prevents overblocks of pages with almost no textual
 content.
 
+A category's action may also be set to `acl`. Then the category is ignored
+in the process of finding the top-scoring category for the page, 
+but it is available for ACLs to act on it, whenever the page's score in that category
+is greater than zero.
+
 The categories are stored in a directory whose location is specified in
 the configuration file. Each subdirectory of that directory defines a
 category (with the same name as the directory).

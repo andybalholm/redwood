@@ -28,6 +28,7 @@ const (
 	BLOCK  action = -1
 	IGNORE action = 0
 	ALLOW  action = 1
+	ACL    action = 2
 )
 
 func (a action) String() string {
@@ -38,6 +39,8 @@ func (a action) String() string {
 		return "ignore"
 	case ALLOW:
 		return "allow"
+	case ACL:
+		return "acl"
 	}
 	return "<invalid action>"
 }
@@ -109,6 +112,8 @@ func loadCategory(dirname string) (c *category, err error) {
 		c.action = IGNORE
 	case "block":
 		c.action = BLOCK
+	case "acl":
+		c.action = ACL
 	case "":
 		// No-op.
 	default:
@@ -238,26 +243,4 @@ func (cf *config) categoryScores(tally map[rule]int) map[string]int {
 		}
 	}
 	return scores
-}
-
-// significantCategories returns a list of categories whose score is over the
-// threshold, sorted from highest to lowest.
-func (cf *config) significantCategories(scores map[string]int) []string {
-	return significantCategories(scores, cf.Threshold)
-}
-
-func significantCategories(scores map[string]int, threshold int) []string {
-	significantScores := make(map[string]int)
-
-	for k, v := range scores {
-		if v >= threshold {
-			significantScores[k] = v
-		}
-	}
-
-	if len(significantScores) == 0 {
-		return nil
-	}
-
-	return sortedKeys(significantScores)
 }

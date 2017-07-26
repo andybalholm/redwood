@@ -292,8 +292,7 @@ func (c *config) pruneFiltered(n *html.Node, fpr filteredPruningRule, acls map[s
 			tally := make(map[rule]int)
 			c.scanContent(buf.Bytes(), "text/html", "utf-8", tally)
 			scores := c.categoryScores(tally)
-			categories := significantCategories(scores, fpr.Threshold)
-			rule, _ := c.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+			rule, _ := c.ChooseACLCategoryAction(acls, scores, fpr.Threshold, "allow", "block", "block-invisible")
 			remove = rule.Action == "block" || rule.Action == "block-invisible"
 		}
 

@@ -289,9 +289,8 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// authenticated.
 	tally := conf.URLRules.MatchingRules(r.URL)
 	scores := conf.categoryScores(tally)
-	categories := conf.significantCategories(scores)
 	reqACLs := conf.ACLs.requestACLs(r, "")
-	thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, categories, "allow", "require-auth")
+	thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "allow", "require-auth")
 	if thisRule.Action != "require-auth" {
 		log.Printf("Allowing request in spite of missing authentication (url=%v, user=%s, port=%d, client=%s)", r.URL, p.User, p.Port, r.RemoteAddr)
 		p.Handler.ServeHTTP(w, r)

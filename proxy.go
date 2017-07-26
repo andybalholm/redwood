@@ -186,7 +186,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tally := conf.URLRules.MatchingRules(r.URL)
 	scores := conf.categoryScores(tally)
-	categories := conf.significantCategories(scores)
 
 	reqACLs := conf.ACLs.requestACLs(r, authUser)
 
@@ -202,7 +201,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		possibleActions = append(possibleActions, "ssl-bump")
 	}
 
-	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
 	if r.Method == "CONNECT" && conf.TLSReady && thisRule.Action == "" {
 		// If the result is unclear, go ahead and start to bump the connection.
 		// The ACLs will be checked one more time anyway.
@@ -265,7 +264,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thisRule, _ = conf.ChooseACLCategoryAction(reqACLs, categories, "disable-proxy-headers")
+	thisRule, _ = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "disable-proxy-headers")
 	if thisRule.Action != "disable-proxy-headers" {
 		viaHosts := r.Header["Via"]
 		viaHosts = append(viaHosts, strings.TrimPrefix(r.Proto, "HTTP/")+" Redwood")
@@ -320,7 +319,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)
 
-	thisRule, _ = conf.ChooseACLCategoryAction(acls, categories, "disable-proxy-headers")
+	thisRule, _ = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "disable-proxy-headers")
 	if thisRule.Action != "disable-proxy-headers" {
 		viaHosts := resp.Header["Via"]
 		viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
@@ -328,9 +327,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "HEAD" {
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
 	} else {
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
 	}
 	if thisRule.Action == "" {
 		thisRule.Action = "allow"
@@ -441,7 +440,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(contentType, "html") {
 			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, acls, &doc)
 
-			censorRule, _ := conf.ChooseACLCategoryAction(acls, categories, "censor-words")
+			censorRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "censor-words")
 			if censorRule.Action == "censor-words" {
 				if doc == nil {
 					doc, _ = parseHTML(content, cs)
@@ -482,8 +481,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scores = conf.categoryScores(tally)
-	categories = conf.significantCategories(scores)
-	thisRule, ignored = conf.ChooseACLCategoryAction(acls, categories, "allow", "block", "block-invisible")
+	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
 	if thisRule.Action == "" {
 		thisRule.Action = "allow"
 	}

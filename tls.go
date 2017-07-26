@@ -210,7 +210,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	tally := conf.URLRules.MatchingRules(cr.URL)
 	scores := conf.categoryScores(tally)
-	categories := conf.significantCategories(scores)
 	reqACLs := conf.ACLs.requestACLs(cr, authUser)
 
 	possibleActions := []string{
@@ -221,7 +220,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		possibleActions = append(possibleActions, "ssl-bump")
 	}
 
-	rule, ignored := conf.ChooseACLCategoryAction(reqACLs, categories, possibleActions...)
+	rule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
 	if r == nil {
 		logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored)
 	} else {

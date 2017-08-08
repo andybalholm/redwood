@@ -54,12 +54,16 @@ func runTransparentServer(addr string) error {
 		}
 
 		go func() {
+			user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+
 			serverAddr, err := realServerAddress(conn)
 			if err != nil {
-				log.Printf("Error getting original address for intercepted connection from %v: %v", conn.RemoteAddr(), err)
+				// We can't get the original address of the connnection; maybe it was intercepted
+				// remotely or by an unsupported firewall. But we'll proceed and hope it has Server
+				// Name Indication.
+				SSLBump(conn, "", user, "", nil)
 				return
 			}
-			user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
 			if isLocalAddress(serverAddr) {
 				// This is not an intercepted connection; it is a direct connection to

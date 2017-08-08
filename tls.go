@@ -115,6 +115,37 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	conf := getConfig()
 
+	obsoleteVersion := false
+	// Read the client hello so that we can find out the name of the server (not
+	// just the address).
+	clientHello, err := readClientHello(conn)
+	if err != nil {
+		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false)
+		if _, ok := err.(net.Error); ok {
+			conn.Close()
+			return
+		} else if err == ErrObsoleteSSLVersion {
+			obsoleteVersion = true
+			if conf.BlockObsoleteSSL {
+				conn.Close()
+				return
+			}
+		} else {
+			conn.Close()
+			return
+		}
+	}
+
+	serverName := ""
+	if !obsoleteVersion {
+		if sn, ok := clientHelloServerName(clientHello); ok {
+			serverName = sn
+			if serverAddr == "" {
+				serverAddr = net.JoinHostPort(sn, "443")
+			}
+		}
+	}
+
 	if serverAddr == localServer+":443" {
 		// The internal server gets special treatment, since there is no remote
 		// server to connect to.
@@ -153,40 +184,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		return
 	}
 
-	obsoleteVersion := false
-	// Read the client hello so that we can find out the name of the server (not
-	// just the address).
-	clientHello, err := readClientHello(conn)
-	if err != nil {
-		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false)
-		if _, ok := err.(net.Error); ok {
-			conn.Close()
-			return
-		} else if err == ErrObsoleteSSLVersion {
-			obsoleteVersion = true
-			if conf.BlockObsoleteSSL {
-				conn.Close()
-				return
-			}
-		} else {
-			conf = nil
-			connectDirect(conn, serverAddr, clientHello)
-			return
-		}
-	}
-
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
 		host = serverAddr
 		port = "443"
 	}
 
-	serverName := ""
-	if !obsoleteVersion {
-		if sn, ok := clientHelloServerName(clientHello); ok {
-			serverName = sn
-		}
-	}
 	if serverName == "" {
 		serverName = host
 		if ip := net.ParseIP(serverName); ip != nil {

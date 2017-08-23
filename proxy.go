@@ -186,6 +186,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tally := conf.URLRules.MatchingRules(r.URL)
 	scores := conf.categoryScores(tally)
+	reqScores := scores
 
 	reqACLs := conf.ACLs.requestACLs(r, authUser)
 
@@ -438,7 +439,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conf.scanContent(content, contentType, cs, tally)
 
 		if strings.Contains(contentType, "html") {
-			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, acls, &doc)
+			aclsWithCategories := copyACLSet(acls)
+			for name, score := range reqScores {
+				if conf.Categories[name].action == ACL && score > 0 {
+					aclsWithCategories[name] = true
+				}
+			}
+			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, aclsWithCategories, &doc)
 
 			censorRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "censor-words")
 			if censorRule.Action == "censor-words" {

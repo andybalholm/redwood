@@ -48,6 +48,7 @@ type config struct {
 	Threshold          int
 	URLRules           *URLMatcher
 	MaxContentScanSize int
+	PublicSuffixes     []string
 
 	ImageHashes    []dhashWithThreshold
 	DhashThreshold int
@@ -165,6 +166,7 @@ func loadConfiguration() (*config, error) {
 	c.stringListFlag("transparent-https", "address to listen for intercepted HTTPS connections on", &c.TransparentAddresses)
 
 	c.stringListFlag("classifier-ignore", "category to omit from classifier results", &c.ClassifierIgnoredCategories)
+	c.stringListFlag("public-suffix", "domain to treat as a public suffix", &c.PublicSuffixes)
 
 	c.newActiveFlag("virtual-host", "", "a hostname substitution to apply to HTTP requests (e.g. -virtual-host me.local localhost)", func(val string) error {
 		f := strings.Fields(val)
@@ -205,6 +207,10 @@ func loadConfiguration() (*config, error) {
 
 	c.loadCertificate()
 	c.startWebServer()
+
+	c.URLRules.publicSuffixes = c.PublicSuffixes
+	c.PruneMatcher.publicSuffixes = c.PublicSuffixes
+	c.FilteredPruneMatcher.publicSuffixes = c.PublicSuffixes
 
 	return c, nil
 }

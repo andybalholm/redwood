@@ -86,12 +86,13 @@ func (rm *regexMap) addRule(r rule) {
 }
 
 type URLMatcher struct {
-	fragments     map[string]rule // a set of domain or domain+path URL fragments to test against
-	regexes       *regexMap       // to match whole URL
-	hostRegexes   *regexMap       // to match hostname only
-	domainRegexes *regexMap
-	pathRegexes   *regexMap
-	queryRegexes  *regexMap
+	fragments      map[string]rule // a set of domain or domain+path URL fragments to test against
+	regexes        *regexMap       // to match whole URL
+	hostRegexes    *regexMap       // to match hostname only
+	domainRegexes  *regexMap
+	pathRegexes    *regexMap
+	queryRegexes   *regexMap
+	publicSuffixes []string
 }
 
 // finalize should be called after all rules have been added, but before
@@ -152,6 +153,11 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 
 	// Find the main domain name (e.g. "google" in "www.google.com").
 	suffix := publicsuffix.List.PublicSuffix(host)
+	for _, s := range m.publicSuffixes {
+		if strings.HasSuffix(host, s) && len(s) > len(suffix) && (host == s || strings.HasSuffix(host, "."+s)) {
+			suffix = s
+		}
+	}
 	if suffix != "" && suffix != host {
 		domain := host[:len(host)-len(suffix)-1]
 		dot := strings.LastIndex(domain, ".")

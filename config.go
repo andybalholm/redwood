@@ -19,6 +19,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"io/ioutil"
+	"path/filepath"
+	"regexp"
 
 	"github.com/andybalholm/dhash"
 )
@@ -102,6 +105,11 @@ type config struct {
 	HTTP2Downstream      bool
 
 	flags *flag.FlagSet
+
+	//!
+	InjectionPlace	string
+	Payload			[]byte
+	TagRegexp		*regexp.Regexp
 }
 
 type customPortInfo struct {
@@ -126,6 +134,10 @@ func loadConfiguration() (*config, error) {
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]customPortInfo{},
 	}
+
+	//!
+	//additional configuration flag
+	c.flags.StringVar(&c.InjectionPlace, "injection-place", "", "type of HTML injection place")
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.ACLs.load)
@@ -175,6 +187,7 @@ func loadConfiguration() (*config, error) {
 		return nil
 	})
 
+
 	// Read the default configuration file if none is specified with -c
 	specified := false
 	for _, arg := range os.Args {
@@ -190,7 +203,26 @@ func loadConfiguration() (*config, error) {
 		}
 	}
 
-	err := c.flags.Parse(os.Args[1:])
+	//!
+	//compile appropriate regex
+	c.TagRegexp = regexp.MustCompile("(?i)<body.*?>")
+	if (strings.Contains(c.InjectionPlace, "head")) {
+		c.TagRegexp = regexp.MustCompile("(?i)<head.*?>")
+	}
+
+	//set payload content
+	ex, err := os.Executable()
+	if err != nil {
+	    panic(err)
+	}
+	payload, err := ioutil.ReadFile(filepath.Dir(ex)+"/injection/payload.html")
+	if err != nil {
+		log.Printf("Payload reading error")
+		return nil, err;
+	}
+	c.Payload = payload;
+
+	err = c.flags.Parse(os.Args[1:])
 	if err != nil {
 		return nil, err
 	}

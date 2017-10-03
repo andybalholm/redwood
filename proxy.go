@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -339,35 +338,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	gzipOK = gzipOK && resp.Header.Get("Content-Encoding") == "" && resp.Header.Get("Content-Type") != ""
 
 	switch thisRule.Action {
-	case "allow":
-		var dest io.Writer = w
-		shouldGZIP := false
-		if gzipOK && (resp.ContentLength == -1 || resp.ContentLength > 1024) {
-			ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-			if err == nil {
-				switch ct {
-				case "application/javascript", "application/x-javascript", "application/json":
-					shouldGZIP = true
-				default:
-					shouldGZIP = strings.HasPrefix(ct, "text/")
-				}
-			}
-		}
-		if shouldGZIP {
-			resp.Header.Set("Content-Encoding", "gzip")
-			gzw := gzip.NewWriter(w)
-			defer gzw.Close()
-			dest = gzw
-		} else if resp.ContentLength > 0 {
-			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
-		}
-		copyResponseHeader(w, resp)
-		n, err := io.Copy(dest, resp.Body)
-		if err != nil {
-			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
-		}
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
-		return
 	case "block":
 		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
 		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
@@ -487,21 +457,48 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	scores = conf.categoryScores(tally)
-	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
-	if thisRule.Action == "" {
-		thisRule.Action = "allow"
-	}
+	//!
+	//inject HTML payload to page
 
-	switch thisRule.Action {
-	case "block":
-		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
-		return
-	case "block-invisible":
-		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
-		return
+	contentType := resp.Header.Get("Content-Type")
+
+	//patch only text/html content
+	if strings.Contains(contentType, "html") {
+
+		loc := configuration.TagRegexp.FindIndex(content)
+		if (loc != nil) {
+
+			//insert payload
+			new_content := make([]byte, len(content) + len(configuration.Payload))
+
+			copy(new_content[0:], content[:loc[1]])
+			copy(new_content[loc[1]:], configuration.Payload)
+			copy(new_content[loc[1]+len(configuration.Payload):], content[loc[1]:])
+
+			content = new_content;
+		}
+	} //patching html
+
+
+	if thisRule.Action != "allow" {
+
+		scores = conf.categoryScores(tally)
+		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
+		if thisRule.Action == "" {
+			thisRule.Action = "allow"
+		}
+
+		switch thisRule.Action {
+		case "block":
+			conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
+			logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+			return
+		case "block-invisible":
+			showInvisibleBlock(w)
+			logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+			return
+		}
+
 	}
 
 	if gzipOK && len(content) > 1000 {

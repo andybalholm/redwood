@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
+	"unicode/utf16"
 
 	"github.com/andybalholm/dhash"
 )
@@ -107,15 +108,51 @@ type config struct {
 	flags *flag.FlagSet
 
 	//!
-	InjectionPlace	string
-	Payload			[]byte
-	TagRegexp		*regexp.Regexp
+	InjectionPlace   string
+	Payload          []byte
+	PayloadUTF16LE   []byte
+	PayloadUTF16BE   []byte
+	TagRegexp        *regexp.Regexp
+	TagRegexpUTF16LE *regexp.Regexp
+	TagRegexpUTF16BE *regexp.Regexp
 }
 
 type customPortInfo struct {
 	Port             int
 	ClientPlatform   string
 	ExpectedNetworks []string
+}
+
+func string2utf16(r string, bomLE bool) string {
+	var buffer bytes.Buffer
+	var zero = byte(0)
+	for _, c := range r {
+		if !bomLE {
+			buffer.WriteByte(byte(zero))
+		}
+		buffer.WriteRune(c)
+		if bomLE {
+			buffer.WriteByte(byte(zero))
+		}
+	}
+	return buffer.String()
+}
+
+func byte_string2utf16(b []byte, bomLE bool) []byte {
+
+	codes := utf16.Encode([]rune(string(b)))
+	u := make([]byte, len(codes)*2)
+
+	shift := uint(8)
+	if bomLE {
+		shift = uint(0)
+	}
+	for i, r := range codes {
+		u[i*2] = byte(r >> shift)
+		u[i*2+1] = byte(r >> (shift ^ 8))
+	}
+
+	return u
 }
 
 func loadConfiguration() (*config, error) {
@@ -187,7 +224,6 @@ func loadConfiguration() (*config, error) {
 		return nil
 	})
 
-
 	// Read the default configuration file if none is specified with -c
 	specified := false
 	for _, arg := range os.Args {
@@ -204,23 +240,28 @@ func loadConfiguration() (*config, error) {
 	}
 
 	//!
-	//compile appropriate regex
-	c.TagRegexp = regexp.MustCompile("(?i)<body.*?>")
-	if (strings.Contains(c.InjectionPlace, "head")) {
-		c.TagRegexp = regexp.MustCompile("(?i)<head.*?>")
+	//compile appropriate regexes
+	tag := "body"
+	if strings.Contains(c.InjectionPlace, "head") {
+		tag = "head"
 	}
+	c.TagRegexp = regexp.MustCompile("(?i)<" + tag + ".*?>")
+	c.TagRegexpUTF16LE = regexp.MustCompile("(?i)" + string2utf16("<"+tag, true) + ".*?" + string2utf16(">", true))
+	c.TagRegexpUTF16BE = regexp.MustCompile("(?i)" + string2utf16("<"+tag, false) + ".*?" + string2utf16(">", false))
 
 	//set payload content
 	ex, err := os.Executable()
 	if err != nil {
-	    panic(err)
+		panic(err)
 	}
-	payload, err := ioutil.ReadFile(filepath.Dir(ex)+"/injection/payload.html")
+	payload, err := ioutil.ReadFile(filepath.Dir(ex) + "/injection/payload.html")
 	if err != nil {
 		log.Printf("Payload reading error")
-		return nil, err;
+		return nil, err
 	}
-	c.Payload = payload;
+	c.Payload = payload
+	c.PayloadUTF16LE = byte_string2utf16(payload, true)
+	c.PayloadUTF16BE = byte_string2utf16(payload, false)
 
 	err = c.flags.Parse(os.Args[1:])
 	if err != nil {

@@ -459,26 +459,47 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	//!
 	//inject HTML payload to page
-
 	contentType := resp.Header.Get("Content-Type")
 
 	//patch only text/html content
 	if strings.Contains(contentType, "html") {
 
-		loc := configuration.TagRegexp.FindIndex(content)
-		if (loc != nil) {
+		regex := configuration.TagRegexp
+		payload := configuration.Payload
+
+		//detect UTF16 encoding
+		if len(content) >= 4 {
+
+			//BOM or zeroes
+			if (content[0] == 0xFF && content[1] == 0xFE) ||
+				(content[1] == 0x00 && content[3] == 0x00) {
+
+				//UTF-16lLE
+				regex = configuration.TagRegexpUTF16LE
+				payload = configuration.PayloadUTF16LE
+
+			} else if (content[0] == 0xFE && content[1] == 0xFF) ||
+				(content[0] == 0x00 && content[2] == 0x00) {
+
+				//UTF-16BE
+				regex = configuration.TagRegexpUTF16BE
+				payload = configuration.PayloadUTF16BE
+			}
+		}
+
+		loc := regex.FindIndex(content)
+		if loc != nil {
 
 			//insert payload
-			new_content := make([]byte, len(content) + len(configuration.Payload))
+			new_content := make([]byte, len(content) + len(payload))
 
 			copy(new_content[0:], content[:loc[1]])
-			copy(new_content[loc[1]:], configuration.Payload)
-			copy(new_content[loc[1]+len(configuration.Payload):], content[loc[1]:])
+			copy(new_content[loc[1]:], payload)
+			copy(new_content[loc[1] + len(payload):], content[loc[1]:])
 
-			content = new_content;
+			content = new_content
 		}
 	} //patching html
-
 
 	if thisRule.Action != "allow" {
 

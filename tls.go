@@ -145,6 +145,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 		}
 	}
+	sni := serverName
 
 	if serverAddr == localServer+":443" {
 		// The internal server gets special treatment, since there is no remote
@@ -155,7 +156,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			NotAfter:    conf.ParsedTLSCert.NotAfter,
 			KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		}, false, conf)
+		}, false, conf, "")
 		if err != nil {
 			log.Printf("Error generating HTTPS certificate for local server (%s): %v", serverAddr, err)
 			conn.Close()
@@ -261,7 +262,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		serverCert := state.PeerCertificates[0]
 
 		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
-		cert, err = imitateCertificate(serverCert, !valid, conf)
+		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
 		if err != nil {
 			serverConn.Close()
 			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert)
@@ -389,11 +390,14 @@ func (s *singleListener) Addr() net.Addr {
 // imitateCertificate returns a new TLS certificate that has most of the same
 // data as serverCert but is signed by Redwood's root certificate, or
 // self-signed.
-func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *config) (cert tls.Certificate, err error) {
+func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *config, sni string) (cert tls.Certificate, err error) {
 	// Use a hash of the real certificate as the serial number.
 	h := md5.New()
 	h.Write(serverCert.Raw)
 	h.Write([]byte{2})
+	if sni != "" {
+		io.WriteString(h, sni)
+	}
 
 	template := &x509.Certificate{
 		SerialNumber:                big.NewInt(0).SetBytes(h.Sum(nil)),
@@ -409,6 +413,13 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 		PermittedDNSDomainsCritical: serverCert.PermittedDNSDomainsCritical,
 		PermittedDNSDomains:         serverCert.PermittedDNSDomains,
 		SignatureAlgorithm:          x509.UnknownSignatureAlgorithm,
+	}
+
+	// If sni is not blank, make a certificate that covers only that domain,
+	// instead of all the domains covered by the original certificate.
+	if sni != "" {
+		template.DNSNames = []string{sni}
+		template.Subject.CommonName = sni
 	}
 
 	var newCertBytes []byte

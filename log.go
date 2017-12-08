@@ -86,7 +86,7 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 		userAgent = req.Header.Get("User-Agent")
 	}
 
-	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")))
+	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")))
 
 	accessLog.Log(logLine)
 	return logLine
@@ -103,7 +103,7 @@ func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
 		cached = "cached certificate"
 	}
 
-	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000"), user, serverName, serverAddr, errStr, cached))
+	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, serverName, serverAddr, errStr, cached))
 }
 
 // toStrings converts its arguments into a slice of strings.

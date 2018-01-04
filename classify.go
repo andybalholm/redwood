@@ -77,7 +77,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 
 	content, err := ioutil.ReadAll(&io.LimitedReader{
 		R: resp.Body,
-		N: 1 << 28,
+		N: int64(conf.MaxContentScanSize),
 	})
 	if err != nil {
 		result.Error = err.Error()

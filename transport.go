@@ -110,6 +110,10 @@ func sameType(a, b interface{}) bool {
 }
 
 func (t *hardValidationTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Scheme == "http" {
+		req.URL.Scheme = "https"
+	}
+
 	resp, err := t.rt.RoundTrip(req)
 	if err != nil {
 		return resp, err

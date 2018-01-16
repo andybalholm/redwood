@@ -403,5 +403,5 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.AllowIP(ip)
-	fmt.Fprintf(w, "Added %s as an authenticated IP address for %s.", ip, user)
+	fmt.Fprintf(w, "Added %s as an authenticated IP address for %s via API.", ip, user)
 }

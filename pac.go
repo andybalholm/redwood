@@ -235,23 +235,31 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	user, pass, ok := ProxyCredentials(r)
 	if ok {
-		if user == p.User && conf.ValidCredentials(user, pass) {
+		switch {
+		case user != p.User:
+			log.Printf("Incorrect username for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, p.User)
+		case !conf.ValidCredentials(user, pass):
+			log.Printf("Incorrect password for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, password=%s)", r.RemoteAddr, p.Port, user, pass)
+		default:
+			log.Printf("Authenticating on custom port based on Proxy-Authorization header (client=%v, port=%d, user=%s)", r.RemoteAddr, p.Port, user)
 			p.AllowIP(host)
 			p.Handler.ServeHTTP(w, r)
 			return
-		} else {
-			log.Printf("Incorrect username or password in Proxy-Authorization header from %v: %s:%s, on port %d", r.RemoteAddr, user, pass, p.Port)
 		}
 	}
 
 	user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
 	if ok {
-		if user == p.User && conf.ValidCredentials(user, pass) {
+		switch {
+		case user != p.User:
+			log.Printf("Incorrect username for custom port in URL parameter (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, p.User)
+		case !conf.ValidCredentials(user, pass):
+			log.Printf("Incorrect password for custom port in URL parameter (client=%v, port=%d, user=%s, password=%s)", r.RemoteAddr, p.Port, user, pass)
+		default:
+			log.Printf("Authenticating on custom port based on URL parameter (client=%v, port=%d, user=%s)", r.RemoteAddr, p.Port, user)
 			p.AllowIP(host)
 			p.Handler.ServeHTTP(w, r)
 			return
-		} else {
-			log.Printf("Incorrect username or password in URL parameter from %v: %s:%s, on port %d", r.RemoteAddr, user, pass, p.Port)
 		}
 	}
 

@@ -265,8 +265,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	thisRule, _ = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "disable-proxy-headers")
-	if thisRule.Action != "disable-proxy-headers" {
+	headerRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "disable-proxy-headers")
+	if headerRule.Action != "disable-proxy-headers" {
 		viaHosts := r.Header["Via"]
 		viaHosts = append(viaHosts, strings.TrimPrefix(r.Proto, "HTTP/")+" Redwood")
 		r.Header.Set("Via", strings.Join(viaHosts, ", "))
@@ -320,8 +320,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	respACLs := conf.ACLs.responseACLs(resp)
 	acls := unionACLSets(reqACLs, respACLs)
 
-	thisRule, _ = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "disable-proxy-headers")
-	if thisRule.Action != "disable-proxy-headers" {
+	headerRule, _ = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "disable-proxy-headers")
+	if headerRule.Action != "disable-proxy-headers" {
 		viaHosts := resp.Header["Via"]
 		viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
 		resp.Header.Set("Via", strings.Join(viaHosts, ", "))

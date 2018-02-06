@@ -424,7 +424,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					t := titleSelector.MatchFirst(doc)
 					if t != nil {
 						if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
-							pageTitle = strings.TrimSpace(titleText.Data)
+							pageTitle = strings.Replace(strings.TrimSpace(titleText.Data), "\n", " ", -1)
 						}
 					}
 				}

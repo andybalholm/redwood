@@ -88,6 +88,10 @@ func main() {
 				}
 			}()
 		}
+		if conf.DisableKeepAlivesUpstream {
+			httpTransport.DisableKeepAlives = true
+			insecureHTTPTransport.DisableKeepAlives = true
+		}
 
 		// Wait forever (or until somebody calls log.Fatal).
 		select {}

@@ -493,7 +493,6 @@ func unionACLSets(sets ...map[string]bool) map[string]bool {
 // categories. The second return value is a list of the categories that were
 // ignored.
 func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string]int, threshold int, actions ...string) (ar ACLActionRule, ignored []string) {
-	actionsPlus := append(actions, "ignore-category")
 	choices := make(map[string]bool, len(actions))
 	for _, a := range actions {
 		choices[a] = true
@@ -513,12 +512,45 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 	categories := sortedKeys(significantScores)
 
 	for _, cat := range categories {
-		aclsPlus := copyACLSet(acls)
-		aclsPlus[cat] = true
-		r := c.ACLs.ChooseACLAction(aclsPlus, actionsPlus...)
-		if r.Action == "" {
+		var r ACLActionRule
+		found := false
+
+	ruleLoop:
+		for _, r = range c.ACLs.Actions {
+			okToIgnore := false
+			for _, a := range r.Needed {
+				if !acls[a] && a != cat {
+					continue ruleLoop
+				}
+				if a == cat {
+					// We should honor an ignore-category rule only if the category to be ignored
+					// is one of the conditions for the rule.
+					okToIgnore = true
+				}
+			}
+			for _, a := range r.Disallowed {
+				if acls[a] || a == cat {
+					continue ruleLoop
+				}
+			}
+
+			if choices[r.Action] {
+				found = true
+			}
+			if okToIgnore && r.Action == "ignore-category" {
+				found = true
+			}
+
+			if found {
+				break ruleLoop
+			}
+		}
+
+		if !found {
 			cg := c.Categories[cat]
-			r.Needed = []string{cat}
+			r = ACLActionRule{
+				Needed: []string{cat},
+			}
 			switch cg.action {
 			case BLOCK:
 				if cg.invisible && choices["block-invisible"] {

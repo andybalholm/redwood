@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -19,10 +20,10 @@ import (
 // pointing to this proxy server.
 func handlePACFile(w http.ResponseWriter, r *http.Request) {
 	proxyAddr := r.Host
+	conf := getConfig()
 
 	if a := r.FormValue("a"); a != "" {
 		if user, pass, ok := decodeBase64Credentials(a); ok {
-			conf := getConfig()
 			if conf.ValidCredentials(user, pass) {
 				proxyForUserLock.RLock()
 				p := proxyForUser[user]
@@ -43,11 +44,20 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	pacTemplate := conf.PACTemplate
+	if pacTemplate == "" {
+		pacTemplate = standardPACTemplate
+	}
+
 	w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
-	fmt.Fprintf(w, pacTemplate, proxyAddr)
+	if strings.Contains(pacTemplate, "%s") {
+		fmt.Fprintf(w, pacTemplate, proxyAddr)
+	} else {
+		fmt.Fprint(w, pacTemplate)
+	}
 }
 
-var pacTemplate = `function FindProxyForURL(url, host) {
+const standardPACTemplate = `function FindProxyForURL(url, host) {
 	if (
 		shExpMatch(url, "ftp:*") ||
 		host == "localhost" ||
@@ -61,6 +71,15 @@ var pacTemplate = `function FindProxyForURL(url, host) {
 
 	return "PROXY %s";
 }`
+
+func (c *config) loadPACTemplate(filename string) error {
+	t, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	c.PACTemplate = string(t)
+	return nil
+}
 
 type perUserProxy struct {
 	User          string

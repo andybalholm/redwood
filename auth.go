@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 // HTTP proxy authentication.
@@ -140,32 +139,11 @@ func (conf *config) ValidCredentials(user, password string) bool {
 	return false
 }
 
-func (cf *config) startAuthHelper(cmd string) error {
-	c := exec.Command(cmd)
-	in, err := c.StdinPipe()
-	if err != nil {
-		return err
-	}
-	out, err := c.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	err = c.Start()
-	if err != nil {
-		return err
-	}
-
-	var m sync.Mutex
-	cf.Authenticators = append(cf.Authenticators, func(user, password string) bool {
-		m.Lock()
-		defer m.Unlock()
-		fmt.Fprintln(in, user, password)
-		var response string
-		fmt.Fscanln(out, &response)
-		if response == "OK" {
-			return true
-		}
-		return false
+func (conf *config) addAuthenticator(path string) error {
+	conf.Authenticators = append(conf.Authenticators, func(user, password string) bool {
+		cmd := exec.Command(path, user, password)
+		err := cmd.Run()
+		return err == nil
 	})
 
 	return nil

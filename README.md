@@ -568,10 +568,11 @@ consists of a username, a password, and some optional items,
 separated by spaces or tabs.
 Alternatively,
 a program can be specified to perform authentication with
-`--auth-helper`. Each line of the program’s input will be a username and
-a password, separated by a space. It should respond with `OK` if the
-password is correct, or `ERR` if it is not. One such program is
-`basic_pam_auth`, which is included with Squid.
+`--authenticator`.
+The program will be invoked with the username and password as 
+command-line arguments.
+Its exit status determines whether the authentication is successful;
+if the exit status is zero, the user will be accepted.
 
 The optional items in the password file are for setting up a custom proxy port
 for that individual user, to make authentication easier.

@@ -21,6 +21,7 @@ type classificationResponse struct {
 	URL        string         `json:"url,omitempty"`
 	Text       string         `json:"text,omitempty"`
 	Categories map[string]int `json:"categories,omitempty"`
+	Rules      map[string]int `json:"rules,omitempty"`
 	Error      string         `json:"error,omitempty"`
 	LogLine    []string       `json:"logLine,omitempty"`
 }
@@ -165,6 +166,13 @@ func handleClassifyText(w http.ResponseWriter, r *http.Request) {
 		delete(scores, c)
 	}
 	result.Categories = scores
+
+	if r.URL.Path == "/classify-text/verbose" {
+		result.Rules = make(map[string]int)
+		for r, n := range tally {
+			result.Rules[r.String()] = n
+		}
+	}
 
 	ServeJSON(w, r, result)
 }

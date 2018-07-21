@@ -92,6 +92,7 @@ type config struct {
 	PasswordLock   sync.RWMutex
 	AuthRealm      string
 	CustomPorts    map[string]customPortInfo
+	PACTemplate    string
 
 	AccessLog    string
 	LogTitle     bool
@@ -151,6 +152,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.BoolVar(&c.LogTitle, "log-title", false, "Include page title in access log.")
 	c.flags.BoolVar(&c.LogUserAgent, "log-user-agent", false, "Include User-Agent header in access log.")
 	c.flags.IntVar(&c.MaxContentScanSize, "max-content-scan-size", 1e6, "maximum size (in bytes) of page to do content scan on")
+	c.newActiveFlag("pac-template", "", "path to template for PAC file (%s will be replaced by proxy host:port)", c.loadPACTemplate)
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)

@@ -132,7 +132,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.ACLs.load)
 	c.newActiveFlag("api-acls", "", "ACL rule file for API requests", c.APIACLs.load)
-	c.newActiveFlag("auth-helper", "", "program to authenticate users", c.startAuthHelper)
+	c.newActiveFlag("authenticator", "", "program to authenticate users", c.addAuthenticator)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)

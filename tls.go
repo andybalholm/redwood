@@ -245,7 +245,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	cert, rt := conf.CertCache.Get(serverName, serverAddr)
 	cachedCert := rt != nil
 	if !cachedCert {
-		serverConn, err := tls.Dial("tcp", serverAddr, &tls.Config{
+		serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, &tls.Config{
 			ServerName:         serverName,
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"h2", "http/1.1"},

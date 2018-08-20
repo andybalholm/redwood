@@ -309,7 +309,7 @@ The following attributes are available:
 	Instead of interpreting the remainder of the line as a list of values,
 	this attribute interprets it as a single regular expression to be
 	matched against the User-Agent string.
-	The matching is case-sensitive.
+	The matching is case-insensitive.
 
 - user-ip
 

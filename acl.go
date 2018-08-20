@@ -140,7 +140,7 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 
 	case "user-agent":
 		exp := strings.Join(args, " ")
-		r, err := regexp.Compile(exp)
+		r, err := regexp.Compile("(?i)" + exp)
 		if err != nil {
 			return err
 		}

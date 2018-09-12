@@ -12,6 +12,7 @@ var platformStrings = []string{
 	"iPad",
 	"iPod",
 	"iPhone",
+	"iOS",
 	"Darwin",
 	"Windows",
 	"Blackberry",
@@ -38,6 +39,7 @@ var platformAliases = map[string]string{
 	"okhttp":                "Android",
 	"CaptiveNetworkSupport": "Darwin",
 	"MobileAsset":           "Darwin",
+	"iOS":                   "Darwin",
 }
 
 var darwinPlatforms = map[string]bool{

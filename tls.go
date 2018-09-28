@@ -225,11 +225,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	}
 
 	rule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-	if r == nil {
-		logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored)
-	} else {
-		logAccess(r, nil, 0, false, user, tally, scores, rule, "", ignored)
-	}
+	logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored)
 
 	switch rule.Action {
 	case "allow", "":

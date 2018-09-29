@@ -1,0 +1,72 @@
+<script language="JavaScript">
+(function (callback){
+
+    var ready = false;
+
+    function onReady() {
+        if (!ready) {
+            ready = true;
+            callback();
+        }
+    }
+
+    // Mozilla, Opera and webkit nightlies currently support this event
+    if ( document.addEventListener ) {
+        // Use the handy event callback
+        document.addEventListener( "DOMContentLoaded", function(){
+            document.removeEventListener( "DOMContentLoaded", arguments.callee, false );
+            onReady();
+        }, false );
+
+    // If IE event model is used
+    } else if ( document.attachEvent ) {
+        // ensure firing before onload,
+        // maybe late but safe also for iframes
+        document.attachEvent("onreadystatechange", function(){
+            if ( document.readyState === "complete" ) {
+                document.detachEvent( "onreadystatechange", arguments.callee );
+                onReady();
+            }
+        });
+
+        // If IE and not an iframe
+        // continually check to see if the document is ready
+        if ( document.documentElement.doScroll && window == window.top ) (function(){            
+            try {
+                // If IE is used, use the trick by Diego Perini
+                // http://javascript.nwbox.com/IEContentLoaded/
+                document.documentElement.doScroll("left");
+            } catch( error ) {
+                setTimeout( arguments.callee, 0 );
+                return;
+            }
+
+            // and execute any waiting functions
+            onReady();
+        })();
+    }
+
+    // A fallback to window.onload, that will always work
+    window.load = onReady;
+})(function() {
+
+    try {
+        if (window.self === window.top) {            
+            //create banner
+            var d=document.createElement('div');
+            d.style.width='100%';        
+            d.style.background='red';
+            d.style.color='white';
+            d.style.padding='30px';
+            d.innerHTML = "Injected JavaScript banner.";
+
+            //show them
+            document.body.insertBefore(d, document.body.firstChild);
+        }
+    } catch (e) { 
+
+    }
+
+});
+
+</script>

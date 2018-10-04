@@ -129,7 +129,7 @@ func listTally(tally map[string]int) string {
 	b := new(bytes.Buffer)
 	for i, rule := range sortedKeys(tally) {
 		if i > 0 {
-			b.WriteString(", ")
+			b.WriteString(" | ")
 		}
 		fmt.Fprint(b, rule, " ", tally[rule])
 	}

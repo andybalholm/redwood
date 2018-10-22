@@ -296,7 +296,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := rt.RoundTrip(r)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		log.Printf("error fetching %s: %s", r.URL, err)
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
@@ -325,6 +325,18 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		viaHosts := resp.Header["Via"]
 		viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
 		resp.Header.Set("Via", strings.Join(viaHosts, ", "))
+	}
+
+	contentRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "log-content")
+	if contentRule.Action == "log-content" {
+		content, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		resp.Body = ioutil.NopCloser(bytes.NewReader(content))
+		logContent(r.URL, content)
 	}
 
 	if r.Method == "HEAD" {
@@ -385,6 +397,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	content, err := ioutil.ReadAll(lr)
 	if err != nil {
 		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)

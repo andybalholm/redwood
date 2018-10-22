@@ -10,6 +10,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -23,6 +24,7 @@ func main() {
 
 	accessLog.Open(conf.AccessLog)
 	tlsLog.Open(conf.TLSLog)
+	contentLog.Open(filepath.Join(conf.ContentLogDir, "index.csv"))
 
 	if conf.PIDFile != "" {
 		pid := os.Getpid()

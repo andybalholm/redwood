@@ -376,6 +376,13 @@ as {{.RuleDescription}}.
     Drop the highest-scoring category off the list of categories, and go
     through the ACL files again.
 
+- log-content
+
+	Log the page's content. 
+	The `content-log-dir` configuration directive must be set.
+	The page's content will be saved in that directory, with its MD5 hash as the filename.
+	A line will be added to `index.csv` in that directory, linking the page's URL to its MD5 hash.
+
 - phrase-scan
 
     (response only) Run a phrase scan on the page content. Normally this

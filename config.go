@@ -94,10 +94,11 @@ type config struct {
 	CustomPorts    map[string]customPortInfo
 	PACTemplate    string
 
-	AccessLog    string
-	LogTitle     bool
-	LogUserAgent bool
-	TLSLog       string
+	AccessLog     string
+	LogTitle      bool
+	LogUserAgent  bool
+	TLSLog        string
+	ContentLogDir string
 
 	CloseIdleConnections      time.Duration
 	HTTP2Upstream             bool
@@ -143,6 +144,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.DurationVar(&c.CertCache.TTL, "cert-cache-ttl", time.Hour, "how long to cache generated TLS certificates")
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
 	c.flags.DurationVar(&c.CloseIdleConnections, "close-idle-connections", time.Minute, "how often to close idle HTTP connections")
+	c.flags.StringVar(&c.ContentLogDir, "content-log-dir", "", "directory to log page content in (when directed to by log-content ACL action)")
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")

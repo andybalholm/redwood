@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/csv"
 	"fmt"
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,8 +19,9 @@ import (
 // recording pages filtered to access log
 
 var (
-	accessLog CSVLog
-	tlsLog    CSVLog
+	accessLog  CSVLog
+	tlsLog     CSVLog
+	contentLog CSVLog
 )
 
 type CSVLog struct {
@@ -37,7 +41,7 @@ func (l *CSVLog) Open(filename string) {
 	if filename != "" {
 		logfile, err := os.OpenFile(filename, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 		if err != nil {
-			log.Printf("Could not open log file (%s): %s\n Sending access log messages to standard output instead.", filename, err)
+			log.Printf("Could not open log file (%s): %s\n Sending log messages to standard output instead.", filename, err)
 		} else {
 			l.file = logfile
 		}
@@ -104,6 +108,25 @@ func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
 	}
 
 	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, serverName, serverAddr, errStr, cached))
+}
+
+func logContent(u *url.URL, content []byte) {
+	conf := getConfig()
+	if conf.ContentLogDir == "" {
+		return
+	}
+
+	filename := fmt.Sprintf("%x", md5.Sum(content))
+	path := filepath.Join(conf.ContentLogDir, filename)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Error creating content log file (%s): %v", path, err)
+		return
+	}
+	defer f.Close()
+
+	f.Write(content)
+	contentLog.Log([]string{u.String(), filename})
 }
 
 // toStrings converts its arguments into a slice of strings.

@@ -79,7 +79,7 @@ type hardValidationTransport struct {
 	expectedErrOriginal error
 }
 
-var errCouldNotVerify = errors.New("could not verify server certificate")
+var errCouldNotVerify = errors.New("server certificate changed; can't verify the new certificate")
 
 func newHardValidationTransport(rt http.RoundTripper, serverName string, certificates []*x509.Certificate) *hardValidationTransport {
 	t := &hardValidationTransport{

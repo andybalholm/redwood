@@ -332,8 +332,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		content, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
 		}
 		resp.Body = ioutil.NopCloser(bytes.NewReader(content))
 		logContent(r.URL, content)
@@ -397,7 +395,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	content, err := ioutil.ReadAll(lr)
 	if err != nil {
 		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
-		http.Error(w, err.Error(), http.StatusBadGateway)
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)

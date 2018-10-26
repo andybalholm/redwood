@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -110,7 +111,7 @@ func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
 	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, serverName, serverAddr, errStr, cached))
 }
 
-func logContent(u *url.URL, content []byte) {
+func logContent(u *url.URL, content []byte, scores map[string]int) {
 	conf := getConfig()
 	if conf.ContentLogDir == "" {
 		return
@@ -125,8 +126,16 @@ func logContent(u *url.URL, content []byte) {
 	}
 	defer f.Close()
 
+	topCategory, topScore := "", 0
+	for c, s := range scores {
+		if s > topScore && conf.Categories[c] != nil && conf.Categories[c].action != ACL {
+			topCategory = c
+			topScore = s
+		}
+	}
+
 	f.Write(content)
-	contentLog.Log([]string{u.String(), filename})
+	contentLog.Log([]string{u.String(), filename, topCategory, strconv.Itoa(topScore)})
 }
 
 // toStrings converts its arguments into a slice of strings.

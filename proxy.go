@@ -334,7 +334,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
 		}
 		resp.Body = ioutil.NopCloser(bytes.NewReader(content))
-		logContent(r.URL, content)
+		logContent(r.URL, content, scores)
 	}
 
 	if r.Method == "HEAD" {

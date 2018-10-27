@@ -327,16 +327,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp.Header.Set("Via", strings.Join(viaHosts, ", "))
 	}
 
-	contentRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "log-content")
-	if contentRule.Action == "log-content" {
-		content, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
-		}
-		resp.Body = ioutil.NopCloser(bytes.NewReader(content))
-		logContent(r.URL, content, scores)
-	}
-
 	if r.Method == "HEAD" {
 		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
 	} else {
@@ -498,6 +488,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scores = conf.categoryScores(tally)
+
+	contentRule, _ := conf.ChooseACLCategoryAction(acls, scores, 1, "log-content")
+	if contentRule.Action == "log-content" {
+		logContent(r.URL, content, scores)
+	}
+
 	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
 	if thisRule.Action == "" {
 		thisRule.Action = "allow"

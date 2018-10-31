@@ -285,6 +285,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		rt = h.rt
 	}
 
+	// Fetching apps from the Mac app store gives us ErrUnexpectedTrailer with
+	// a regular http.Transport. So use a simpleTransport instead.
+	if r.Method == "GET" && r.URL.Scheme == "http" && r.URL.Host == "osxapps.itunes.apple.com" {
+		rt = simpleTransport{}
+	}
+
 	// Some HTTP/2 servers don't like having a body on a GET request, even if
 	// it is empty.
 	if r.ContentLength == 0 {

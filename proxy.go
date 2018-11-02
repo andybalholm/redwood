@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/flate"
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -369,7 +370,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(dest, resp.Body)
-		if err != nil {
+		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
 		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
@@ -406,7 +407,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		copyResponseHeader(w, resp)
 		dest.Write(content)
 		n, err := io.Copy(dest, resp.Body)
-		if err != nil {
+		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
 		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored)

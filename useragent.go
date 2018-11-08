@@ -14,7 +14,7 @@ var platformStrings = []string{
 	"iPhone",
 	"iOS",
 	"Darwin",
-        "dataaccessd",
+	"dataaccessd",
 	"Windows",
 	"Blackberry",
 	"BlackBerry",
@@ -27,12 +27,13 @@ var platformStrings = []string{
 	"WIN",
 	"Win",
 	"GoogleAuth",
-        "Gms-Backup",
-        "GmsCore",
+	"Gms-Backup",
+	"GmsCore",
 	"okhttp",
 	"CaptiveNetworkSupport",
-        "CloudKit",
+	"CloudKit",
 	"CFNetwork",
+	"com.apple",
 }
 
 var platformAliases = map[string]string{
@@ -54,6 +55,7 @@ var platformAliases = map[string]string{
 	"CFNetwork":             "Darwin",
 	"dataaccessd":           "Darwin",
 	"iOS":                   "Darwin",
+	"com.apple":             "Darwin",
 }
 
 var darwinPlatforms = map[string]bool{

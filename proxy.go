@@ -23,6 +23,7 @@ import (
 
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
+	"github.com/dsnet/compress/brotli"
 	"github.com/klauspost/compress/gzip"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -275,7 +276,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && !lanAddress(client)
-	r.Header.Del("Accept-Encoding")
+	r.Header.Set("Accept-Encoding", "br, gzip")
 
 	conf.changeQuery(r.URL)
 
@@ -310,12 +311,40 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	if resp.Header.Get("Content-Encoding") == "deflate" && r.Method != "HEAD" {
-		resp.Body = flate.NewReader(resp.Body)
-		defer resp.Body.Close()
-		resp.Header.Del("Content-Encoding")
-		resp.Header.Del("Content-Length")
-		resp.ContentLength = -1
+	if resp.ContentLength != 0 && r.Method != "HEAD" {
+		decompressing := false
+		switch resp.Header.Get("Content-Encoding") {
+		case "":
+			// No Content-Encoding; don't do anything special.
+		case "br":
+			br, err := brotli.NewReader(resp.Body, nil)
+			if err != nil {
+				log.Printf("Error creating brotli.Reader for %v: %v", r.URL, err)
+			} else {
+				resp.Body = br
+				decompressing = true
+			}
+		case "deflate":
+			resp.Body = flate.NewReader(resp.Body)
+			decompressing = true
+		case "gzip":
+			gr, err := gzip.NewReader(resp.Body)
+			if err != nil {
+				log.Printf("Error creating gzip.Reader for %v: %v", r.URL, err)
+			} else {
+				resp.Body = gr
+				decompressing = true
+			}
+		default:
+			log.Printf("Unrecognized Content-Encoding (%q) at %v", resp.Header.Get("Content-Encoding"), r.URL)
+			gzipOK = false
+		}
+		if decompressing {
+			defer resp.Body.Close()
+			resp.Header.Del("Content-Encoding")
+			resp.Header.Del("Content-Length")
+			resp.ContentLength = -1
+		}
 	}
 
 	// Prevent switching to QUIC.

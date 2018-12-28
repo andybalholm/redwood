@@ -531,6 +531,7 @@ func (conf *config) validCert(cert *x509.Certificate, intermediates []*x509.Cert
 }
 
 var ErrObsoleteSSLVersion = errors.New("obsolete SSL protocol version")
+var ErrInvalidSSL = errors.New("invalid first byte for SSL connection; possibly some other protocol")
 
 func readClientHello(conn net.Conn) (hello []byte, err error) {
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
@@ -547,7 +548,7 @@ func readClientHello(conn net.Conn) (hello []byte, err error) {
 		if header[0] == 128 {
 			return hello, ErrObsoleteSSLVersion
 		}
-		return hello, fmt.Errorf("expected content type of 22, got %d", header[0])
+		return hello, ErrInvalidSSL
 	}
 	if header[1] != 3 {
 		return hello, fmt.Errorf("expected major version of 3, got %d", header[1])

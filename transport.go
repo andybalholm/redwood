@@ -34,6 +34,7 @@ var httpTransport = &http.Transport{
 	DialContext:           dialer.DialContext,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
+	MaxConnsPerHost:       8,
 }
 
 func init() {
@@ -46,6 +47,7 @@ var insecureHTTPTransport = &http.Transport{
 	Dial:                  dialer.Dial,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
+	MaxConnsPerHost:       8,
 }
 
 var http2Transport = &http2.Transport{

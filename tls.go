@@ -116,6 +116,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	conf := getConfig()
 
 	obsoleteVersion := false
+	invalidSSL := false
 	// Read the client hello so that we can find out the name of the server (not
 	// just the address).
 	clientHello, err := readClientHello(conn)
@@ -130,6 +131,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				conn.Close()
 				return
 			}
+		} else if err == ErrInvalidSSL {
+			invalidSSL = true
 		} else {
 			conn.Close()
 			return
@@ -137,7 +140,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	}
 
 	serverName := ""
-	if !obsoleteVersion {
+	if !obsoleteVersion && !invalidSSL {
 		if sn, ok := clientHelloServerName(clientHello); ok {
 			serverName = sn
 			if serverAddr == "" {
@@ -215,12 +218,15 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tally := conf.URLRules.MatchingRules(cr.URL)
 	scores := conf.categoryScores(tally)
 	reqACLs := conf.ACLs.requestACLs(cr, authUser)
+	if invalidSSL {
+		reqACLs["invalid-ssl"] = true
+	}
 
 	possibleActions := []string{
 		"allow",
 		"block",
 	}
-	if conf.TLSReady && !obsoleteVersion {
+	if conf.TLSReady && !obsoleteVersion && !invalidSSL {
 		possibleActions = append(possibleActions, "ssl-bump")
 	}
 

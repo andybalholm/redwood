@@ -254,7 +254,10 @@ it with a line like `describe tag-name A long description`.
 
 In addition to the tags assigned by `acl` lines, a request is assigned a
 tag for its highest-scoring category (if the score is above the
-threshold).
+threshold). 
+There is also an ACL `invalid-ssl`, which is automatically assigned to
+CONNECT requests when the data being sent over the connection is not
+valid SSL or TLS.
 
 The following attributes are available:
 

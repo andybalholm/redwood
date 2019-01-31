@@ -24,16 +24,15 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
-	ConnectPorts    map[int][]string
-	ContentTypes    map[string][]string
-	Methods         map[string][]string
-	Referers        map[string][]string
-	StatusCodes     map[int][]string
-	URLs            *URLMatcher
-	URLTags         map[string][]string
-	UserIPAddresses map[string][]string
-	UserIPRanges    []rangeToGroup
-	UserNames       map[string][]string
+	ConnectPorts map[int][]string
+	ContentTypes map[string][]string
+	Methods      map[string][]string
+	Referers     map[string][]string
+	StatusCodes  map[int][]string
+	URLs         *URLMatcher
+	URLTags      map[string][]string
+	UserIPs      IPMap
+	UserNames    map[string][]string
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -150,20 +149,10 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 		}{r, acl})
 
 	case "user-ip":
-		if a.UserIPAddresses == nil {
-			a.UserIPAddresses = make(map[string][]string)
-		}
 		for _, addr := range args {
-			if ip := net.ParseIP(addr); ip != nil {
-				s := ip.String()
-				a.UserIPAddresses[s] = append(a.UserIPAddresses[s], acl)
-				continue
+			if err := a.UserIPs.add(addr, acl); err != nil {
+				return err
 			}
-			r, err := ParseIPRange(addr)
-			if err != nil {
-				return fmt.Errorf("invalid IP address or range: %s", addr)
-			}
-			a.UserIPRanges = append(a.UserIPRanges, rangeToGroup{r, acl})
 		}
 
 	case "user-name":
@@ -276,13 +265,8 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		if ip := net.ParseIP(host); ip != nil {
-			for _, a := range a.UserIPAddresses[ip.String()] {
+			for _, a := range a.UserIPs.matches(ip) {
 				acls[a] = true
-			}
-			for _, r := range a.UserIPRanges {
-				if r.r.Contains(ip) {
-					acls[r.group] = true
-				}
 			}
 		}
 	}

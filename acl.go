@@ -33,6 +33,7 @@ type ACLDefinitions struct {
 	URLTags      map[string][]string
 	UserIPs      IPMap
 	UserNames    map[string][]string
+	ServerIPs    IPMap
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -100,6 +101,13 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			u = strings.ToLower(u)
 			a.URLs.AddRule(rule{t: urlMatch, content: u})
 			a.Referers[u] = append(a.Referers[u], acl)
+		}
+
+	case "server-ip":
+		for _, addr := range args {
+			if err := a.ServerIPs.add(addr, acl); err != nil {
+				return err
+			}
 		}
 
 	case "http-status":
@@ -318,6 +326,16 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 					}
 				}
 			}
+		}
+	}
+
+	server := r.URL.Host
+	if host, _, err := net.SplitHostPort(server); err == nil {
+		server = host
+	}
+	if ip := net.ParseIP(server); ip != nil {
+		for _, acl := range a.ServerIPs.matches(ip) {
+			acls[acl] = true
 		}
 	}
 

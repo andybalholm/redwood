@@ -288,6 +288,15 @@ The following attributes are available:
     The request’s Referer header. (This matches the same way as regular
     URL matching rules.)
 
+- server-ip
+	
+	The server’s IP address, or a range of addresses
+	(in CIDR format, or with a dash).
+	This attribute only matches if the request URL contains a literal IP address;
+	it does not do a DNS lookup.
+
+		acl google server-ip 172.217.0.0/16
+
 - time
 
     The current time.

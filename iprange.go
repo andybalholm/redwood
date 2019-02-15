@@ -102,3 +102,38 @@ type rangeToGroup struct {
 	r     IPRange
 	group string
 }
+
+// An IPMap maps IP addresses and ranges to ACL names.
+type IPMap struct {
+	addresses map[string][]string
+	ranges    []rangeToGroup
+}
+
+// add adds an address/ACL mapping.
+func (m *IPMap) add(addr, acl string) error {
+	if m.addresses == nil {
+		m.addresses = make(map[string][]string)
+	}
+	if ip := net.ParseIP(addr); ip != nil {
+		s := ip.String()
+		m.addresses[s] = append(m.addresses[s], acl)
+		return nil
+	}
+	r, err := ParseIPRange(addr)
+	if err != nil {
+		return fmt.Errorf("invalid IP address or range: %s", addr)
+	}
+	m.ranges = append(m.ranges, rangeToGroup{r, acl})
+	return nil
+}
+
+// matches returns a list of the ACLs that addr belongs to.
+func (m *IPMap) matches(addr net.IP) (result []string) {
+	result = append(result, m.addresses[addr.String()]...)
+	for _, r := range m.ranges {
+		if r.r.Contains(addr) {
+			result = append(result, r.group)
+		}
+	}
+	return result
+}

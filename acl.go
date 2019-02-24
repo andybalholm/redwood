@@ -503,7 +503,7 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 	acls = copyACLSet(acls)
 	significantScores := make(map[string]int)
 	for k, v := range scores {
-		if v > 0 && c.Categories[k].action == ACL {
+		if v > 0 && c.Categories[k] != nil && c.Categories[k].action == ACL {
 			acls[k] = true
 			continue
 		}

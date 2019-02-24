@@ -105,6 +105,8 @@ type config struct {
 	HTTP2Downstream           bool
 	DisableKeepAlivesUpstream bool
 
+	ExternalClassifiers []string
+
 	flags *flag.FlagSet
 }
 
@@ -173,6 +175,7 @@ func loadConfiguration() (*config, error) {
 
 	c.stringListFlag("classifier-ignore", "category to omit from classifier results", &c.ClassifierIgnoredCategories)
 	c.stringListFlag("public-suffix", "domain to treat as a public suffix", &c.PublicSuffixes)
+	c.stringListFlag("external-classifier", "HTTP API endpoint to check URLs against", &c.ExternalClassifiers)
 
 	c.newActiveFlag("virtual-host", "", "a hostname substitution to apply to HTTP requests (e.g. -virtual-host me.local localhost)", func(val string) error {
 		f := strings.Fields(val)

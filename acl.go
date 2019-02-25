@@ -553,18 +553,20 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 			r = ACLActionRule{
 				Needed: []string{cat},
 			}
-			switch cg.action {
-			case BLOCK:
-				if cg.invisible && choices["block-invisible"] {
-					r.Action = "block-invisible"
-				} else if choices["block"] {
-					r.Action = "block"
-				}
-			case IGNORE:
-				r.Action = "ignore-category"
-			case ALLOW:
-				if choices["allow"] {
-					r.Action = "allow"
+			if cg != nil {
+				switch cg.action {
+				case BLOCK:
+					if cg.invisible && choices["block-invisible"] {
+						r.Action = "block-invisible"
+					} else if choices["block"] {
+						r.Action = "block"
+					}
+				case IGNORE:
+					r.Action = "ignore-category"
+				case ALLOW:
+					if choices["allow"] {
+						r.Action = "allow"
+					}
 				}
 			}
 		}

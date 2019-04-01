@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
-	"github.com/dsnet/compress/brotli"
 	"github.com/klauspost/compress/gzip"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -317,13 +317,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "":
 			// No Content-Encoding; don't do anything special.
 		case "br":
-			br, err := brotli.NewReader(resp.Body, nil)
-			if err != nil {
-				log.Printf("Error creating brotli.Reader for %v: %v", r.URL, err)
-			} else {
-				resp.Body = br
-				decompressing = true
-			}
+			br := brotli.NewReader(resp.Body)
+			resp.Body = ioutil.NopCloser(br)
+			decompressing = true
 		case "deflate":
 			resp.Body = flate.NewReader(resp.Body)
 			decompressing = true

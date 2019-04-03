@@ -1,11 +1,15 @@
+github.com/andybalholm/brotli v0.0.0-20190329221744-1b2ddcf9b79a h1:BkHnN+2M0U+MrswXT9mK3DpK7g34PpDvPQNVZlmrrjA=
+github.com/andybalholm/brotli v0.0.0-20190329221744-1b2ddcf9b79a/go.mod h1:/M9bY11bdGUFkhg0Lf4OIyXcViLNSjkpPamjp6l0yck=
 github.com/andybalholm/cascadia v1.0.0 h1:hOCXnnZ5A+3eVDX8pvgl4kofXv2ELss0bKcqRySc45o=
 github.com/andybalholm/cascadia v1.0.0/go.mod h1:GsXiBklL0woXo1j/WYWtSYYC4ouU9PqHO0sqidkEA4Y=
 github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b h1:/qKwj+YX2BKAQWpGjF46ltVEBeAqOA3TpkYwiYJNYC4=
 github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b/go.mod h1:pEJ3YFav0jhslvUtQoWYFursrHsi1J3WpvMP3Bk7aCU=
 github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a h1:yE4/B7ng2G9tr5DdT/x2bj3u6p3Rze2Ha/61eChret8=
 github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a/go.mod h1:xPmFQkJW5/HS/ZMM6soMdODwdIOO9zs3yAhksnFQJE0=
-github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76 h1:eX+pdPPlD279OWgdx7f6KqIRSONuK7egk+jDx7OM3Ac=
-github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76/go.mod h1:KjxHHirfLaw19iGT70HvVjHQsL1vq1SRQB4yOsAfy2s=
+github.com/golang/gddo v0.0.0-20190312205958-5a2505f3dbf0 h1:CfaPdCDbZu8jSwjq0flJv2u+WreQM0KqytUQahZ6Xf4=
+github.com/golang/gddo v0.0.0-20190312205958-5a2505f3dbf0/go.mod h1:xEhNfoBDX1hzLm2Nf80qUvZ2sVwoMZ8d6IE2SrsQfh4=
+github.com/google/go-cmp v0.2.0 h1:+dTQ8DZQJz0Mb/HjFlkptS1FeQ4cWSnN941F8aEG4SQ=
+github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
 github.com/klauspost/compress v1.4.1 h1:8VMb5+0wMgdBykOV96DwNwKFQ+WTI4pzYURP99CcB9E=
 github.com/klauspost/compress v1.4.1/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0guNDohfE1A=
 github.com/klauspost/cpuid v1.2.0 h1:NMpwD2G9JSFOE1/TJjGSo5zG7Yb2bTe7eq1jH+irmeE=

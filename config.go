@@ -44,7 +44,6 @@ type config struct {
 	Categories         map[string]*category
 	ContentPhraseList  phraseList
 	CountOnce          bool
-	DisableGZIP        bool
 	Threshold          int
 	URLRules           *URLMatcher
 	MaxContentScanSize int
@@ -148,7 +147,6 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
-	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
 	c.flags.BoolVar(&c.DisableKeepAlivesUpstream, "disable-keepalives-upstream", false, "Disable reuse of HTTP connections to upstream servers.")
 	c.flags.BoolVar(&c.HTTP2Downstream, "http2-downstream", true, "Use HTTP/2 for connections to clients.")
 	c.flags.BoolVar(&c.HTTP2Upstream, "http2-upstream", true, "Use HTTP/2 for connections to upstream servers.")

@@ -104,6 +104,9 @@ type config struct {
 	HTTP2Downstream           bool
 	DisableKeepAlivesUpstream bool
 
+	GZIPLevel   int
+	BrotliLevel int
+
 	flags *flag.FlagSet
 }
 
@@ -137,6 +140,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
 	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
+	c.flags.IntVar(&c.BrotliLevel, "brotli-level", 5, "level to use for brotli compression of content")
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
 	c.newActiveFlag("censored-words", "", "file of words to remove from pages", c.readCensoredWordsFile)
@@ -148,6 +152,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
 	c.flags.BoolVar(&c.DisableKeepAlivesUpstream, "disable-keepalives-upstream", false, "Disable reuse of HTTP connections to upstream servers.")
+	c.flags.IntVar(&c.GZIPLevel, "gzip-level", 6, "level to use for gzip compression of content")
 	c.flags.BoolVar(&c.HTTP2Downstream, "http2-downstream", true, "Use HTTP/2 for connections to clients.")
 	c.flags.BoolVar(&c.HTTP2Upstream, "http2-upstream", true, "Use HTTP/2 for connections to upstream servers.")
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)

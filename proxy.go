@@ -23,6 +23,7 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
+	"github.com/golang/gddo/httputil"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
 	"golang.org/x/net/html"
@@ -491,6 +492,33 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 				resp.Header.Del("Content-Encoding")
 				compressedContent = nil
+			}
+		}
+
+		if compressedContent == nil && len(content) > 1000 {
+			// Either the content was not compressed from upstream,
+			// or we invalidated the original compressed content due to pruning.
+			// So we should probably compress the content now.
+			encoding := httputil.NegotiateContentEncoding(r, []string{"br", "gzip"})
+			buf := new(bytes.Buffer)
+			var compressor io.WriteCloser
+			switch encoding {
+			case "br":
+				compressor = brotli.NewWriter(buf, brotli.WriterOptions{Quality: conf.BrotliLevel})
+			case "gzip":
+				compressor, err = gzip.NewWriterLevel(buf, conf.GZIPLevel)
+				if err != nil {
+					log.Println("Error creating gzip compressor:", err)
+				}
+			}
+			if compressor != nil {
+				compressor.Write(content)
+				if err := compressor.Close(); err != nil {
+					log.Printf("Error compressing content of %v: %v", r.URL, err)
+				} else {
+					compressedContent = buf.Bytes()
+					resp.Header.Set("Content-Encoding", encoding)
+				}
 			}
 		}
 

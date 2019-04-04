@@ -509,6 +509,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				compressor, err = gzip.NewWriterLevel(buf, conf.GZIPLevel)
 				if err != nil {
 					log.Println("Error creating gzip compressor:", err)
+					compressor = nil
 				}
 			}
 			if compressor != nil {

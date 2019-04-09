@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -139,60 +138,20 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 
-	serverName := ""
-	if !obsoleteVersion && !invalidSSL {
-		if sn, ok := clientHelloServerName(clientHello); ok {
-			serverName = sn
-			if serverAddr == "" {
-				serverAddr = net.JoinHostPort(sn, "443")
-			}
-		}
-	}
-	sni := serverName
-
-	if serverAddr == localServer+":443" {
-		// The internal server gets special treatment, since there is no remote
-		// server to connect to.
-		cert, err := imitateCertificate(&x509.Certificate{
-			Subject:     pkix.Name{CommonName: localServer},
-			NotBefore:   conf.ParsedTLSCert.NotBefore,
-			NotAfter:    conf.ParsedTLSCert.NotAfter,
-			KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		}, false, conf, "")
-		if err != nil {
-			log.Printf("Error generating HTTPS certificate for local server (%s): %v", serverAddr, err)
-			conn.Close()
-			return
-		}
-
-		config := &tls.Config{
-			NextProtos:   []string{"http/1.1"},
-			Certificates: []tls.Certificate{cert, conf.TLSCert},
-		}
-		tlsConn := tls.Server(conn, config)
-		err = tlsConn.Handshake()
-		if err != nil {
-			logTLS(user, serverAddr, localServer, fmt.Errorf("error in handshake with client: %v", err), false)
-			conn.Close()
-			return
-		}
-		listener := &singleListener{conn: tlsConn}
-		server := http.Server{
-			Handler:     conf.ServeMux,
-			IdleTimeout: conf.CloseIdleConnections,
-		}
-		conf = nil
-		logTLS(user, serverAddr, localServer, nil, false)
-		server.Serve(listener)
-		return
-	}
-
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
 		host = serverAddr
 		port = "443"
 	}
+
+	serverName := ""
+	if !obsoleteVersion && !invalidSSL {
+		if sn, ok := clientHelloServerName(clientHello); ok && sn != "" {
+			serverName = sn
+			serverAddr = net.JoinHostPort(sn, port)
+		}
+	}
+	sni := serverName
 
 	if serverName == "" {
 		serverName = host

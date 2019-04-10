@@ -14,16 +14,17 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"mime"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
-	"github.com/dsnet/compress/brotli"
+	"github.com/golang/gddo/httputil"
+	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -275,8 +276,29 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Header.Add("X-Forwarded-For", client)
 	}
 
-	gzipOK := !conf.DisableGZIP && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") && !lanAddress(client)
-	r.Header.Set("Accept-Encoding", "br, gzip")
+	// Limit Accept-Encoding header to encodings we can handle.
+	acceptEncoding := header.ParseAccept(r.Header, "Accept-Encoding")
+	filteredEncodings := make([]header.AcceptSpec, 0, len(acceptEncoding))
+	for _, a := range acceptEncoding {
+		switch a.Value {
+		case "br", "gzip", "deflate":
+			filteredEncodings = append(filteredEncodings, a)
+		}
+	}
+	switch {
+	case len(filteredEncodings) == 0:
+		r.Header.Del("Accept-Encoding")
+	case len(filteredEncodings) != len(acceptEncoding):
+		specs := make([]string, len(filteredEncodings))
+		for i, a := range filteredEncodings {
+			if a.Q == 1 {
+				specs[i] = a.Value
+			} else {
+				specs[i] = fmt.Sprintf("%s;q=%f", a.Value, a.Q)
+			}
+		}
+		r.Header.Set("Accept-Encoding", strings.Join(specs, ", "))
+	}
 
 	conf.changeQuery(r.URL)
 
@@ -311,42 +333,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	if resp.ContentLength != 0 && r.Method != "HEAD" {
-		decompressing := false
-		switch resp.Header.Get("Content-Encoding") {
-		case "":
-			// No Content-Encoding; don't do anything special.
-		case "br":
-			br, err := brotli.NewReader(resp.Body, nil)
-			if err != nil {
-				log.Printf("Error creating brotli.Reader for %v: %v", r.URL, err)
-			} else {
-				resp.Body = br
-				decompressing = true
-			}
-		case "deflate":
-			resp.Body = flate.NewReader(resp.Body)
-			decompressing = true
-		case "gzip":
-			gr, err := gzip.NewReader(resp.Body)
-			if err != nil {
-				log.Printf("Error creating gzip.Reader for %v: %v", r.URL, err)
-			} else {
-				resp.Body = gr
-				decompressing = true
-			}
-		default:
-			log.Printf("Unrecognized Content-Encoding (%q) at %v", resp.Header.Get("Content-Encoding"), r.URL)
-			gzipOK = false
-		}
-		if decompressing {
-			defer resp.Body.Close()
-			resp.Header.Del("Content-Encoding")
-			resp.Header.Del("Content-Length")
-			resp.ContentLength = -1
-		}
-	}
-
 	// Prevent switching to QUIC.
 	resp.Header.Del("Alternate-Protocol")
 	resp.Header.Del("Alt-Svc")
@@ -372,33 +358,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		thisRule.Action = "allow"
 	}
 
-	gzipOK = gzipOK && resp.Header.Get("Content-Encoding") == "" && resp.Header.Get("Content-Type") != ""
-
 	switch thisRule.Action {
 	case "allow":
-		var dest io.Writer = w
-		shouldGZIP := false
-		if gzipOK && (resp.ContentLength == -1 || resp.ContentLength > 1024) {
-			ct, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
-			if err == nil {
-				switch ct {
-				case "application/javascript", "application/x-javascript", "application/json":
-					shouldGZIP = true
-				default:
-					shouldGZIP = strings.HasPrefix(ct, "text/")
-				}
-			}
-		}
-		if shouldGZIP {
-			resp.Header.Set("Content-Encoding", "gzip")
-			gzw := gzip.NewWriter(w)
-			defer gzw.Close()
-			dest = gzw
-		} else if resp.ContentLength > 0 {
+		if resp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)
-		n, err := io.Copy(dest, resp.Body)
+		n, err := io.Copy(w, resp.Body)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
@@ -424,18 +390,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)
-		var dest io.Writer = w
-		if gzipOK {
-			resp.Header.Set("Content-Encoding", "gzip")
-			gzw := gzip.NewWriter(w)
-			defer gzw.Close()
-			dest = gzw
-		} else if resp.ContentLength > 0 {
+		if resp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)
-		dest.Write(content)
-		n, err := io.Copy(dest, resp.Body)
+		w.Write(content)
+		n, err := io.Copy(w, resp.Body)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 		}
@@ -445,6 +405,32 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	modified := false
 	pageTitle := ""
+
+	var compressedContent []byte
+	if ce := resp.Header.Get("Content-Encoding"); ce != "" {
+		compressedContent = content
+		br := bytes.NewReader(compressedContent)
+		var decompressor io.Reader
+		switch ce {
+		case "br":
+			decompressor = brotli.NewReader(br)
+		case "deflate":
+			decompressor = flate.NewReader(br)
+		case "gzip":
+			decompressor, err = gzip.NewReader(br)
+			if err != nil {
+				log.Printf("Error creating gzip.Reader for %v: %v", r.URL, err)
+				decompressor = br
+			}
+		default:
+			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, r.URL)
+			decompressor = br
+		}
+		content, err = ioutil.ReadAll(decompressor)
+		if err != nil {
+			log.Printf("Error decompressing response body from %v: %v", r.URL, err)
+		}
+	}
 
 	switch thisRule.Action {
 	case "phrase-scan":
@@ -504,6 +490,36 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if modified {
 				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
+				resp.Header.Del("Content-Encoding")
+				compressedContent = nil
+			}
+		}
+
+		if compressedContent == nil && len(content) > 1000 {
+			// Either the content was not compressed from upstream,
+			// or we invalidated the original compressed content due to pruning.
+			// So we should probably compress the content now.
+			encoding := httputil.NegotiateContentEncoding(r, []string{"br", "gzip"})
+			buf := new(bytes.Buffer)
+			var compressor io.WriteCloser
+			switch encoding {
+			case "br":
+				compressor = brotli.NewWriter(buf, brotli.WriterOptions{Quality: conf.BrotliLevel})
+			case "gzip":
+				compressor, err = gzip.NewWriterLevel(buf, conf.GZIPLevel)
+				if err != nil {
+					log.Println("Error creating gzip compressor:", err)
+					compressor = nil
+				}
+			}
+			if compressor != nil {
+				compressor.Write(content)
+				if err := compressor.Close(); err != nil {
+					log.Printf("Error compressing content of %v: %v", r.URL, err)
+				} else {
+					compressedContent = buf.Bytes()
+					resp.Header.Set("Content-Encoding", encoding)
+				}
 			}
 		}
 
@@ -546,17 +562,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if gzipOK && len(content) > 1000 {
-		resp.Header.Set("Content-Encoding", "gzip")
-		copyResponseHeader(w, resp)
-		gzw := gzip.NewWriter(w)
-		gzw.Write(content)
-		gzw.Close()
-	} else {
+	if compressedContent == nil {
 		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
-		copyResponseHeader(w, resp)
-		w.Write(content)
+	} else {
+		content = compressedContent
 	}
+	copyResponseHeader(w, resp)
+	w.Write(content)
 
 	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
 }

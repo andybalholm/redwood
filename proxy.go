@@ -495,7 +495,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if compressedContent == nil && len(content) > 1000 {
+		if compressedContent == nil && len(content) > 1000 && resp.Header.Get("Content-Type") != "" {
 			// Either the content was not compressed from upstream,
 			// or we invalidated the original compressed content due to pruning.
 			// So we should probably compress the content now.

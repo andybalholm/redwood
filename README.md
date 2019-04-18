@@ -717,3 +717,34 @@ in the PAC request URL (e.g. `/proxy.pac?a=dXNlcm5hbWU6cGFzc3dvcmQ=`).
 (Generate it by typing a command like `echo -n username:password | base64` at a UNIX command prompt.)
 All requests received on that port from the same IP address as the PAC file request will be automatically
 authenticated as that user.
+
+Scripting
+=========
+
+For more specialized rules than the ones that are supported by normal ACLs,
+you can write scripts (in JavaScript) that assign ACLs to requests.
+For example, suppose you want to block the sites that OpenDNS classifies
+as adult or phishing sites,
+but you want to have your own block page instead of the one OpenDNS provides.
+You could put a script like this in `/etc/redwood/opendns.js`:
+
+```js
+var openDNSResult = lookupHost(request.URL.Host, "208.67.222.123");
+
+if (openDNSResult == "146.112.61.106") {
+	addACL("opendns-adult");
+} else if (openDNSResult == "146.112.61.108") {
+	addACL("opendns-phishing");
+}
+```
+
+Put the following line in `redwood.conf`:
+
+    request-acl-script /etc/redwood/opendns.js
+
+And in your ACL configuration file:
+
+    block opendns-adult
+    block opendns-phishing
+
+

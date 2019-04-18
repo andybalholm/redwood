@@ -163,6 +163,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)
+	c.newActiveFlag("request-acl-script", "", "script to assign ACLs to requests", c.loadRequestACLScript)
 	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")
 	c.flags.StringVar(&c.TestURL, "test", "", "URL to test instead of running proxy server")
 	c.flags.IntVar(&c.Threshold, "threshold", 0, "minimum score for a blocked category to block a page")

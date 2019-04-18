@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dop251/goja"
 )
 
 // Access Control Lists (ACLs)
@@ -34,6 +36,8 @@ type ACLDefinitions struct {
 	UserIPs      IPMap
 	UserNames    map[string][]string
 	ServerIPs    IPMap
+
+	RequestScripts []*goja.Program
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -344,6 +348,17 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 			if u.regexp.MatchString(userAgent) {
 				acls[u.acl] = true
 			}
+		}
+	}
+
+	for _, s := range a.RequestScripts {
+		rt := jsRuntime()
+		rt.Set("request", r)
+		rt.Set("user", user)
+		rt.Set("addACL", func(a string) { acls[a] = true })
+		_, err := rt.RunProgram(s)
+		if err != nil {
+			log.Printf("Error in request ACL script for %v: %v", r.URL, err)
 		}
 	}
 

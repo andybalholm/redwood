@@ -94,6 +94,8 @@ func main() {
 			httpTransport.DisableKeepAlives = true
 			insecureHTTPTransport.DisableKeepAlives = true
 		}
+		httpTransport.MaxConnsPerHost = conf.MaxConnsPerHost
+		insecureHTTPTransport.MaxConnsPerHost = conf.MaxConnsPerHost
 
 		// Wait forever (or until somebody calls log.Fatal).
 		select {}

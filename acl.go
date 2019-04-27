@@ -304,8 +304,10 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 	}
 
 	now := time.Now()
+	day := now.Weekday()
+	h, m, _ := now.Clock()
 	for _, t := range a.Times {
-		if t.schedule.Contains(now) {
+		if t.schedule.Contains(day, h, m) {
 			acls[t.acl] = true
 		}
 	}

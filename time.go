@@ -35,31 +35,24 @@ func ParseWeekdayList(list string) (days [7]bool, err error) {
 	return days, nil
 }
 
-// A TimeRange is a range of times within a day.
+// A TimeRange is a range of times within a day. Start and End are expressed in
+// minutes since midnight.
 type TimeRange struct {
-	Start, End time.Time
+	Start, End int
 }
 
 // ParseTimeRange parses a time range in the format hh:mm-hh:mm (24-hour).
 func ParseTimeRange(s string) (r TimeRange, err error) {
-	dash := strings.Index(s, "-")
-	if dash == -1 {
-		return TimeRange{}, fmt.Errorf("invalid time range string %q: no hyphen", s)
+	var startH, startM, endH, endM int
+	n, err := fmt.Sscanf(s, "%d:%d-%d:%d", &startH, &startM, &endH, &endM)
+	if err != nil || n != 4 {
+		return TimeRange{}, fmt.Errorf("invalid time range string %q", s)
 	}
 
-	start := s[:dash]
-	end := s[dash+1:]
+	r.Start = startH*60 + startM
+	r.End = endH*60 + endM
 
-	r.Start, err = time.Parse("15:04", start)
-	if err != nil {
-		return TimeRange{}, fmt.Errorf("invalid time range string %q: %v", s, err)
-	}
-	r.End, err = time.Parse("15:04", end)
-	if err != nil {
-		return TimeRange{}, fmt.Errorf("invalid time range string %q: %v", s, err)
-	}
-
-	if !r.Start.Before(r.End) {
+	if r.Start >= r.End {
 		return TimeRange{}, fmt.Errorf("invalid time range %q (Did you forget to use 24-hour clock?)", s)
 	}
 
@@ -103,8 +96,8 @@ func ParseWeeklySchedule(src []string) (schedule WeeklySchedule, err error) {
 	return schedule, nil
 }
 
-func (w WeeklySchedule) Contains(t time.Time) bool {
-	if !w.Days[t.Weekday()] {
+func (w WeeklySchedule) Contains(day time.Weekday, hour int, min int) bool {
+	if !w.Days[day] {
 		return false
 	}
 
@@ -112,11 +105,10 @@ func (w WeeklySchedule) Contains(t time.Time) bool {
 		return true
 	}
 
-	h, m, _ := t.Clock()
-	clockTime := time.Date(0, 1, 1, h, m, 0, 0, time.UTC)
+	minuteOfDay := hour*60 + min
 
 	for _, tr := range w.Times {
-		if !(clockTime.Before(tr.Start) || clockTime.After(tr.End)) {
+		if tr.Start <= minuteOfDay && minuteOfDay <= tr.End {
 			return true
 		}
 	}

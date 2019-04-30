@@ -255,6 +255,7 @@ func (a *ACLDefinitions) load(filename string) error {
 					break argLoop
 				default:
 					r.Needed = append(r.Needed, a)
+					r.Bloom.Add(a)
 				}
 			}
 			a.Actions = append(a.Actions, r)
@@ -418,6 +419,9 @@ type ACLActionRule struct {
 	// Description is an explanation of why the action was chosen, suitable for
 	// display to end users.
 	Description string
+
+	// Bloom is a bloomFilter containing the Needed ACLs.
+	Bloom bloomFilter
 }
 
 // Conditions returns a string summarizing r's conditions.
@@ -441,8 +445,17 @@ func (a *ACLDefinitions) ChooseACLAction(acls map[string]bool, actions ...string
 		choices[a] = true
 	}
 
+	var bloom bloomFilter
+	for a := range acls {
+		bloom.Add(a)
+	}
+
 ruleLoop:
 	for _, r := range a.Actions {
+		if !bloom.Superset(&r.Bloom) {
+			continue ruleLoop
+		}
+
 		if !choices[r.Action] {
 			continue ruleLoop
 		}
@@ -515,12 +528,23 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 	}
 	categories := sortedKeys(significantScores)
 
+	var masterBloom bloomFilter
+	for a := range acls {
+		masterBloom.Add(a)
+	}
+
 	for _, cat := range categories {
+		bloom := masterBloom
+		bloom.Add(cat)
 		var r ACLActionRule
 		found := false
 
 	ruleLoop:
 		for _, r = range c.ACLs.Actions {
+			if !bloom.Superset(&r.Bloom) {
+				continue ruleLoop
+			}
+
 			okToIgnore := false
 			for _, a := range r.Needed {
 				if !acls[a] && a != cat {

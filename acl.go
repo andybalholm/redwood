@@ -37,7 +37,8 @@ type ACLDefinitions struct {
 	UserNames    map[string][]string
 	ServerIPs    IPMap
 
-	RequestScripts []*goja.Program
+	RequestScripts  []*goja.Program
+	ResponseScripts []*goja.Program
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -413,6 +414,16 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 	status = status / 100 * 100
 	for _, acl := range a.StatusCodes[status] {
 		acls[acl] = true
+	}
+
+	for _, s := range a.ResponseScripts {
+		rt := jsRuntime()
+		rt.Set("response", resp)
+		rt.Set("addACL", func(a string) { acls[a] = true })
+		_, err := rt.RunProgram(s)
+		if err != nil {
+			log.Printf("Error in response ACL script for %v: %v", resp.Request.URL, err)
+		}
 	}
 
 	return acls

@@ -20,11 +20,6 @@ func (c *config) loadBlockPage(path string) error {
 	if err != nil {
 		return fmt.Errorf("error loading block page template: %v", err)
 	}
-	bt.Funcs(template.FuncMap{
-		"eq": func(a, b interface{}) bool {
-			return a == b
-		},
-	})
 	_, err = bt.Parse(string(content))
 	if err != nil {
 		return fmt.Errorf("error parsing block page template: %v", err)

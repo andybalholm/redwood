@@ -62,8 +62,8 @@ func (c *config) aclDescription(name string) string {
 
 // showBlockPage shows a block page for a page that was blocked by an ACL.
 func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
-	w.WriteHeader(http.StatusForbidden)
 	if c.BlockTemplate == nil {
+		http.Error(w, "", http.StatusForbidden)
 		return
 	}
 	data := blockData{
@@ -77,6 +77,7 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 		Response:        resp,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
 
 	// Convert rule conditions into category descriptions as much as possible.
 	var categories []string

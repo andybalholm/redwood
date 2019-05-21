@@ -41,6 +41,7 @@ func (d dhashWithThreshold) String() string {
 // A config object holds a complete set of Redwood's configuration settings.
 type config struct {
 	BlockTemplate      *template.Template
+	BlockpageURL       string
 	Categories         map[string]*category
 	ContentPhraseList  phraseList
 	CountOnce          bool
@@ -140,7 +141,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("authenticator", "", "program to authenticate users", c.addAuthenticator)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
-	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
+	c.newActiveFlag("blockpage", "", "path to template for block page, or URL of dynamic block page", c.loadBlockPage)
 	c.flags.IntVar(&c.BrotliLevel, "brotli-level", 5, "level to use for brotli compression of content")
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
 	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)

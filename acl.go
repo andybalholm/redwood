@@ -421,7 +421,7 @@ type ACLActionRule struct {
 	Description string
 
 	// Bloom is a bloomFilter containing the Needed ACLs.
-	Bloom bloomFilter
+	Bloom bloomFilter `json:"-"`
 }
 
 // Conditions returns a string summarizing r's conditions.

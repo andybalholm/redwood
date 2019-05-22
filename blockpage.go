@@ -99,13 +99,19 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 		}
 
 	case c.BlockpageURL != "":
-		data, err := json.Marshal(map[string]interface{}{
-			"url":    r.URL.String(),
-			"rule":   rule,
-			"user":   user,
-			"tally":  stringTally(tally),
-			"scores": scores,
-		})
+		d := map[string]interface{}{
+			"url":            r.URL.String(),
+			"rule":           rule,
+			"user":           user,
+			"tally":          stringTally(tally),
+			"scores":         scores,
+			"method":         r.Method,
+			"request-header": r.Header,
+		}
+		if resp != nil {
+			d["response-header"] = resp.Header
+		}
+		data, err := json.Marshal(d)
 		if err != nil {
 			log.Println("Error generating JSON info for block page:", err)
 			http.Error(w, "", http.StatusForbidden)

@@ -66,6 +66,20 @@ func (c *config) aclDescription(name string) string {
 	return name
 }
 
+// Convert rule conditions into category descriptions as much as possible.
+func (c *config) aclDescriptions(rule ACLActionRule) []string {
+
+	var categories []string
+	for _, acl := range rule.Needed {
+		categories = append(categories, c.aclDescription(acl))
+	}
+	for _, acl := range rule.Disallowed {
+		categories = append(categories, "not "+c.aclDescription(acl))
+	}
+
+	return categories
+}
+
 // showBlockPage shows a block page for a page that was blocked by an ACL.
 func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
 	switch {
@@ -76,22 +90,13 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 			User:            user,
 			Tally:           listTally(stringTally(tally)),
 			Scores:          listTally(scores),
+			Categories:      strings.Join(c.aclDescriptions(rule), ", "),
 			RuleDescription: rule.Description,
 			Request:         r,
 			Response:        resp,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusForbidden)
-
-		// Convert rule conditions into category descriptions as much as possible.
-		var categories []string
-		for _, acl := range rule.Needed {
-			categories = append(categories, c.aclDescription(acl))
-		}
-		for _, acl := range rule.Disallowed {
-			categories = append(categories, "not "+c.aclDescription(acl))
-		}
-		data.Categories = strings.Join(categories, ", ")
 
 		err := c.BlockTemplate.Execute(w, data)
 		if err != nil {
@@ -105,6 +110,7 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 			"user":           user,
 			"tally":          stringTally(tally),
 			"scores":         scores,
+			"categories":     c.aclDescriptions(rule),
 			"method":         r.Method,
 			"request-header": r.Header,
 		}

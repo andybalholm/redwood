@@ -68,7 +68,6 @@ func (c *config) aclDescription(name string) string {
 
 // Convert rule conditions into category descriptions as much as possible.
 func (c *config) aclDescriptions(rule ACLActionRule) []string {
-
 	var categories []string
 	for _, acl := range rule.Needed {
 		categories = append(categories, c.aclDescription(acl))

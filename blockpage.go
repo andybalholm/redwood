@@ -135,8 +135,8 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 		if blockResp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(blockResp.ContentLength, 10))
 		}
+		blockResp.StatusCode = http.StatusForbidden
 		copyResponseHeader(w, blockResp)
-		w.WriteHeader(http.StatusForbidden)
 		_, err = io.Copy(w, blockResp.Body)
 		if err != nil {
 			log.Printf("Error copying blockpage: %v", err)

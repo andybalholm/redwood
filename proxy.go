@@ -26,6 +26,7 @@ import (
 	"github.com/golang/gddo/httputil"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
+	_ "golang.org/x/image/webp"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )

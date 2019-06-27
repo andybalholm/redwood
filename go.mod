@@ -13,8 +13,11 @@ require (
 	github.com/miekg/dns v1.1.4
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67 // indirect
+	golang.org/x/image v0.0.0-20190622003408-7e034cad6442
 	golang.org/x/net v0.0.0-20190213061140-3a22650c66bd
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
 	golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a // indirect
 	golang.org/x/text v0.3.0
 )
+
+go 1.13

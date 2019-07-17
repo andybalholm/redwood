@@ -535,7 +535,15 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 
 	for _, cat := range categories {
 		bloom := masterBloom
+		categoryAndParents := make(map[string]bool)
 		bloom.Add(cat)
+		categoryAndParents[cat] = true
+		parent := cat
+		for strings.Contains(parent, "/") {
+			parent = parent[:strings.LastIndex(parent, "/")]
+			bloom.Add(parent)
+			categoryAndParents[parent] = true
+		}
 		var r ACLActionRule
 		found := false
 
@@ -547,17 +555,17 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 
 			okToIgnore := false
 			for _, a := range r.Needed {
-				if !acls[a] && a != cat {
+				if !acls[a] && !categoryAndParents[a] {
 					continue ruleLoop
 				}
-				if a == cat {
+				if categoryAndParents[a] {
 					// We should honor an ignore-category rule only if the category to be ignored
 					// is one of the conditions for the rule.
 					okToIgnore = true
 				}
 			}
 			for _, a := range r.Disallowed {
-				if acls[a] || a == cat {
+				if acls[a] || categoryAndParents[a] {
 					continue ruleLoop
 				}
 			}

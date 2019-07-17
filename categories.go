@@ -54,12 +54,15 @@ type category struct {
 	invisible   bool            // use invisible GIF instead of block page
 }
 
-// loadCategories loads the category configuration files
-func (cf *config) loadCategories(dirName string) error {
+// LoadCategories loads the category configuration files
+func (cf *config) LoadCategories(dirName string) error {
 	if cf.Categories == nil {
 		cf.Categories = map[string]*category{}
 	}
+	return cf.loadCategories(dirName, nil)
+}
 
+func (cf *config) loadCategories(dirName string, parent *category) error {
 	dir, err := os.Open(dirName)
 	if err != nil {
 		return fmt.Errorf("Could not open category directory: %v", err)
@@ -74,11 +77,17 @@ func (cf *config) loadCategories(dirName string) error {
 	for _, fi := range info {
 		if name := fi.Name(); fi.IsDir() && name[0] != '.' {
 			categoryPath := filepath.Join(dirName, name)
-			c, err := loadCategory(categoryPath)
-			if err == nil {
-				cf.Categories[c.name] = c
-			} else {
+			c, err := loadCategory(categoryPath, parent)
+			if err != nil {
 				log.Printf("Error loading category %s: %v", name, err)
+				continue
+			}
+			cf.Categories[c.name] = c
+
+			// Load child categories.
+			err = cf.loadCategories(categoryPath, c)
+			if err != nil {
+				log.Printf("Error loading child categories of %s: %v", c.name, err)
 			}
 		}
 	}
@@ -87,10 +96,13 @@ func (cf *config) loadCategories(dirName string) error {
 }
 
 // loadCategory loads the configuration for one category
-func loadCategory(dirname string) (c *category, err error) {
+func loadCategory(dirname string, parent *category) (c *category, err error) {
 	c = new(category)
 	c.weights = make(map[rule]weight)
 	c.name = filepath.Base(dirname)
+	if parent != nil {
+		c.name = parent.name + "/" + c.name
+	}
 	c.description = c.name
 
 	confFile := filepath.Join(dirname, "category.conf")
@@ -125,6 +137,13 @@ func loadCategory(dirname string) (c *category, err error) {
 		c.invisible, err = strconv.ParseBool(strings.TrimSpace(s))
 		if err != nil {
 			log.Printf("Invalid setting for 'invisible' in %s: %q", confFile, s)
+		}
+	}
+
+	if parent != nil {
+		// Copy rules from parent category.
+		for r, w := range parent.weights {
+			c.weights[r] = w
 		}
 	}
 

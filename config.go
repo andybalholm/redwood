@@ -144,7 +144,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("blockpage", "", "path to template for block page, or URL of dynamic block page", c.loadBlockPage)
 	c.flags.IntVar(&c.BrotliLevel, "brotli-level", 5, "level to use for brotli compression of content")
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
-	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
+	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.LoadCategories)
 	c.newActiveFlag("censored-words", "", "file of words to remove from pages", c.readCensoredWordsFile)
 	c.flags.DurationVar(&c.CertCache.TTL, "cert-cache-ttl", time.Hour, "how long to cache generated TLS certificates")
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
@@ -210,7 +210,7 @@ func loadConfiguration() (*config, error) {
 	}
 
 	if c.Categories == nil {
-		err := c.loadCategories("/etc/redwood/categories")
+		err := c.LoadCategories("/etc/redwood/categories")
 		if err != nil {
 			log.Println(err)
 		}

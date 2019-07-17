@@ -14,7 +14,14 @@ func (sm *sortedMap) Len() int {
 }
 
 func (sm *sortedMap) Less(i, j int) bool {
-	return sm.m[sm.s[i]] > sm.m[sm.s[j]]
+	switch {
+	case sm.m[sm.s[i]] > sm.m[sm.s[j]]:
+		return true
+	case sm.m[sm.s[i]] == sm.m[sm.s[j]]:
+		return sm.s[i] < sm.s[j]
+	default:
+		return false
+	}
 }
 
 func (sm *sortedMap) Swap(i, j int) {

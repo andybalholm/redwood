@@ -82,11 +82,9 @@ func (c *config) loadPACTemplate(filename string) error {
 }
 
 type perUserProxy struct {
-	User          string
-	Port          int
-	Handler       http.Handler
-	allowedIPs    map[string]bool
-	allowedIPLock sync.RWMutex
+	User    string
+	Port    int
+	Handler http.Handler
 
 	expectedDomains  map[string]bool
 	expectedIPBlocks []*net.IPNet
@@ -120,7 +118,6 @@ func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUser
 		Port:            portInfo.Port,
 		ClientPlatform:  portInfo.ClientPlatform,
 		Handler:         proxyHandler{user: user},
-		allowedIPs:      map[string]bool{},
 		expectedDomains: map[string]bool{},
 	}
 
@@ -153,9 +150,9 @@ func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUser
 }
 
 func (p *perUserProxy) AllowIP(ip string) {
-	p.allowedIPLock.Lock()
-	p.allowedIPs[ip] = true
-	p.allowedIPLock.Unlock()
+	authCacheLock.Lock()
+	authCache[authCacheKey{ip, p.Port}] = p.User
+	authCacheLock.Unlock()
 	log.Printf("Added IP address %s, authenticated as %s, on port %d", ip, p.User, p.Port)
 
 	domain := rdnsDomain(ip)
@@ -237,11 +234,11 @@ func rdnsSOA(ip string) (server string, err error) {
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	p.allowedIPLock.RLock()
-	ok := p.allowedIPs[host]
-	p.allowedIPLock.RUnlock()
+	authCacheLock.RLock()
+	cachedUser := authCache[authCacheKey{host, p.Port}]
+	authCacheLock.RUnlock()
 
-	if ok {
+	if cachedUser == p.User {
 		p.Handler.ServeHTTP(w, r)
 		return
 	}
@@ -362,20 +359,10 @@ type portListEntry struct {
 }
 
 func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
-	var data []portListEntry
+	entries := map[string]*portListEntry{}
 
 	proxyForUserLock.RLock()
-
 	for _, p := range proxyForUser {
-		var clients []string
-		p.allowedIPLock.RLock()
-
-		for c := range p.allowedIPs {
-			clients = append(clients, c)
-		}
-
-		p.allowedIPLock.RUnlock()
-
 		var networks []string
 		p.expectedNetLock.RLock()
 		for d := range p.expectedDomains {
@@ -387,16 +374,28 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 		clientPlatform := p.ClientPlatform
 		p.expectedNetLock.RUnlock()
 
-		data = append(data, portListEntry{
-			User:                 p.User,
-			Port:                 p.Port,
-			Platform:             clientPlatform,
-			AuthenticatedClients: clients,
-			ExpectedNetworks:     networks,
-		})
+		entries[p.User] = &portListEntry{
+			User:             p.User,
+			Port:             p.Port,
+			Platform:         clientPlatform,
+			ExpectedNetworks: networks,
+		}
 	}
-
 	proxyForUserLock.RUnlock()
+
+	authCacheLock.RLock()
+	for k, user := range authCache {
+		e := entries[user]
+		if e != nil && e.User == user {
+			e.AuthenticatedClients = append(e.AuthenticatedClients, k.remoteIP)
+		}
+	}
+	authCacheLock.RUnlock()
+
+	var data []*portListEntry
+	for _, e := range entries {
+		data = append(data, e)
+	}
 
 	ServeJSON(w, r, data)
 }
@@ -425,3 +424,12 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 	p.AllowIP(ip)
 	fmt.Fprintf(w, "Added %s as an authenticated IP address for %s.", ip, user)
 }
+
+type authCacheKey struct {
+	remoteIP  string
+	localPort int
+}
+
+// authCache maps from connection information to the authenticated username.
+var authCache = map[authCacheKey]string{}
+var authCacheLock sync.RWMutex

@@ -25,9 +25,10 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 	if a := r.FormValue("a"); a != "" {
 		if user, pass, ok := decodeBase64Credentials(a); ok {
 			if conf.ValidCredentials(user, pass) {
-				proxyForUserLock.RLock()
-				p := proxyForUser[user]
-				proxyForUserLock.RUnlock()
+				port := conf.CustomPorts[user].Port
+				customPortLock.RLock()
+				p := customPorts[port]
+				customPortLock.RUnlock()
 				if p != nil {
 					client := r.RemoteAddr
 					host, _, err := net.SplitHostPort(client)
@@ -121,9 +122,9 @@ func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUser
 		p.addExpectedNetwork(network)
 	}
 
-	proxyForUserLock.Lock()
-	proxyForUser[user] = p
-	proxyForUserLock.Unlock()
+	customPortLock.Lock()
+	customPorts[portInfo.Port] = p
+	customPortLock.Unlock()
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", portInfo.Port))
 	if err != nil {
 		return nil, err
@@ -330,14 +331,14 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conf.send407(w)
 }
 
-var proxyForUser = make(map[string]*perUserProxy)
-var proxyForUserLock sync.RWMutex
+var customPorts = make(map[int]*perUserProxy)
+var customPortLock sync.RWMutex
 
 func (c *config) openPerUserPorts() {
 	for user, portInfo := range c.CustomPorts {
-		proxyForUserLock.RLock()
-		p := proxyForUser[user]
-		proxyForUserLock.RUnlock()
+		customPortLock.RLock()
+		p := customPorts[portInfo.Port]
+		customPortLock.RUnlock()
 		if p == nil {
 			_, err := c.newPerUserProxy(user, portInfo)
 			if err != nil {
@@ -367,8 +368,8 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 	entries := map[string]*portListEntry{}
 	conf := getConfig()
 
-	proxyForUserLock.RLock()
-	for _, p := range proxyForUser {
+	customPortLock.RLock()
+	for _, p := range customPorts {
 		var networks []string
 		p.expectedNetLock.RLock()
 		for d := range p.expectedDomains {
@@ -391,7 +392,7 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 			ExpectedNetworks: networks,
 		}
 	}
-	proxyForUserLock.RUnlock()
+	customPortLock.RUnlock()
 
 	authCacheLock.RLock()
 	for k, user := range authCache {
@@ -416,11 +417,18 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `You must specify which user to authenticate with the "user" form parameter.`, 400)
 		return
 	}
-	proxyForUserLock.RLock()
-	p := proxyForUser[user]
-	proxyForUserLock.RUnlock()
-	if p == nil {
+	conf := getConfig()
+	port := conf.CustomPorts[user].Port
+	if port == 0 {
 		http.Error(w, user+" does not have a per-user proxy port set up.", 500)
+		return
+	}
+
+	customPortLock.RLock()
+	p := customPorts[port]
+	customPortLock.RUnlock()
+	if p == nil {
+		http.Error(w, user+" does not have a per-user proxy port open.", 500)
 		return
 	}
 

@@ -82,9 +82,7 @@ func (c *config) loadPACTemplate(filename string) error {
 }
 
 type perUserProxy struct {
-	User    string
-	Port    int
-	Handler http.Handler
+	Port int
 
 	expectedDomains  map[string]bool
 	expectedIPBlocks []*net.IPNet
@@ -114,10 +112,8 @@ func (p *perUserProxy) addExpectedNetwork(network string) {
 
 func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUserProxy, error) {
 	p := &perUserProxy{
-		User:            user,
 		Port:            portInfo.Port,
 		ClientPlatform:  portInfo.ClientPlatform,
-		Handler:         proxyHandler{user: user},
 		expectedDomains: map[string]bool{},
 	}
 
@@ -150,10 +146,16 @@ func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUser
 }
 
 func (p *perUserProxy) AllowIP(ip string) {
+	conf := getConfig()
+	user, ok := conf.UserForPort[p.Port]
+	if !ok {
+		return
+	}
+
 	authCacheLock.Lock()
-	authCache[authCacheKey{ip, p.Port}] = p.User
+	authCache[authCacheKey{ip, p.Port}] = user
 	authCacheLock.Unlock()
-	log.Printf("Added IP address %s, authenticated as %s, on port %d", ip, p.User, p.Port)
+	log.Printf("Added IP address %s, authenticated as %s, on port %d", ip, user, p.Port)
 
 	domain := rdnsDomain(ip)
 	if domain != "" {
@@ -233,13 +235,17 @@ func rdnsSOA(ip string) (server string, err error) {
 }
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	conf := getConfig()
+	configuredUser := conf.UserForPort[p.Port]
+	handler := proxyHandler{user: configuredUser}
+
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
 	authCacheLock.RLock()
 	cachedUser := authCache[authCacheKey{host, p.Port}]
 	authCacheLock.RUnlock()
 
-	if cachedUser == p.User {
-		p.Handler.ServeHTTP(w, r)
+	if cachedUser == configuredUser {
+		handler.ServeHTTP(w, r)
 		return
 	}
 
@@ -247,19 +253,18 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// maybe it sent credentials and we can authorize it now.
 	// We accept credentials in either the Proxy-Authorization header or
 	// a URL parameter named "a".
-	conf := getConfig()
 
 	user, pass, ok := ProxyCredentials(r)
 	if ok {
 		switch {
-		case user != p.User:
-			log.Printf("Incorrect username for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, p.User)
+		case user != configuredUser:
+			log.Printf("Incorrect username for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, configuredUser)
 		case !conf.ValidCredentials(user, pass):
 			log.Printf("Incorrect password for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, password=%s)", r.RemoteAddr, p.Port, user, pass)
 		default:
 			log.Printf("Authenticating on custom port based on Proxy-Authorization header (client=%v, port=%d, user=%s)", r.RemoteAddr, p.Port, user)
 			p.AllowIP(host)
-			p.Handler.ServeHTTP(w, r)
+			handler.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -267,14 +272,14 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
 	if ok {
 		switch {
-		case user != p.User:
-			log.Printf("Incorrect username for custom port in URL parameter (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, p.User)
+		case user != configuredUser:
+			log.Printf("Incorrect username for custom port in URL parameter (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, configuredUser)
 		case !conf.ValidCredentials(user, pass):
 			log.Printf("Incorrect password for custom port in URL parameter (client=%v, port=%d, user=%s, password=%s)", r.RemoteAddr, p.Port, user, pass)
 		default:
 			log.Printf("Authenticating on custom port based on URL parameter (client=%v, port=%d, user=%s)", r.RemoteAddr, p.Port, user)
 			p.AllowIP(host)
-			p.Handler.ServeHTTP(w, r)
+			handler.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -301,9 +306,9 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if expectedNetwork {
 		pf := platform(r.Header.Get("User-Agent"))
 		if expectedPlatform != "" && pf == expectedPlatform || darwinPlatforms[expectedPlatform] && pf == "Darwin" {
-			log.Printf("Authenticating %s as %s based on IP address and platform (domain=%s, platform=%s, user-agent=%q, port=%d)", host, p.User, domain, expectedPlatform, r.Header.Get("User-Agent"), p.Port)
+			log.Printf("Authenticating %s as %s based on IP address and platform (domain=%s, platform=%s, user-agent=%q, port=%d)", host, configuredUser, domain, expectedPlatform, r.Header.Get("User-Agent"), p.Port)
 			p.AllowIP(host)
-			p.Handler.ServeHTTP(w, r)
+			handler.ServeHTTP(w, r)
 			return
 		}
 	}
@@ -316,8 +321,8 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqACLs := conf.ACLs.requestACLs(r, "")
 	thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "allow", "require-auth")
 	if thisRule.Action != "require-auth" {
-		log.Printf("Allowing request in spite of missing authentication (url=%v, user=%s, port=%d, client=%s)", r.URL, p.User, p.Port, r.RemoteAddr)
-		p.Handler.ServeHTTP(w, r)
+		log.Printf("Allowing request in spite of missing authentication (url=%v, user=%s, port=%d, client=%s)", r.URL, configuredUser, p.Port, r.RemoteAddr)
+		handler.ServeHTTP(w, r)
 		return
 	}
 
@@ -360,6 +365,7 @@ type portListEntry struct {
 
 func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 	entries := map[string]*portListEntry{}
+	conf := getConfig()
 
 	proxyForUserLock.RLock()
 	for _, p := range proxyForUser {
@@ -374,8 +380,12 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 		clientPlatform := p.ClientPlatform
 		p.expectedNetLock.RUnlock()
 
-		entries[p.User] = &portListEntry{
-			User:             p.User,
+		user, ok := conf.UserForPort[p.Port]
+		if !ok {
+			continue
+		}
+		entries[user] = &portListEntry{
+			User:             user,
 			Port:             p.Port,
 			Platform:         clientPlatform,
 			ExpectedNetworks: networks,

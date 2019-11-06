@@ -44,6 +44,7 @@ func (c *config) readPasswordFile(filename string) error {
 			c.CustomPorts[user] = customPortInfo{
 				Port: port,
 			}
+			c.UserForPort[port] = user
 
 		case 4:
 			user, pass, portStr, clientPlatform := words[0], words[1], words[2], words[3]
@@ -57,6 +58,7 @@ func (c *config) readPasswordFile(filename string) error {
 				Port:           port,
 				ClientPlatform: clientPlatform,
 			}
+			c.UserForPort[port] = user
 
 		case 5:
 			user, pass, portStr, clientPlatform, networks := words[0], words[1], words[2], words[3], words[4]
@@ -71,6 +73,7 @@ func (c *config) readPasswordFile(filename string) error {
 				ClientPlatform:   clientPlatform,
 				ExpectedNetworks: strings.Split(networks, ","),
 			}
+			c.UserForPort[port] = user
 
 		default:
 			log.Println("malformed line in password file:", line)

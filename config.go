@@ -92,6 +92,7 @@ type config struct {
 	PasswordLock   sync.RWMutex
 	AuthRealm      string
 	CustomPorts    map[string]customPortInfo
+	UserForPort    map[int]string
 	PACTemplate    string
 
 	AccessLog     string
@@ -133,6 +134,7 @@ func loadConfiguration() (*config, error) {
 		ContentPhraseList:    newPhraseList(),
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]customPortInfo{},
+		UserForPort:          map[int]string{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")

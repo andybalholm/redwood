@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-ch/ja3"
 	"golang.org/x/net/http2"
 )
 
@@ -120,7 +121,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	// just the address).
 	clientHello, err := readClientHello(conn)
 	if err != nil {
-		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false)
+		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false, "")
 		if _, ok := err.(net.Error); ok {
 			conn.Close()
 			return
@@ -163,6 +164,14 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				serverName = strings.TrimSuffix(names[0], ".")
 			}
 		}
+	}
+
+	var tlsFingerprint string
+	j, err := ja3.ComputeJA3FromSegment(clientHello)
+	if err != nil {
+		log.Printf("Error generating TLS fingerprint: %v", err)
+	} else {
+		tlsFingerprint = j.GetJA3Hash()
 	}
 
 	// Filter a virtual CONNECT request.
@@ -212,7 +221,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			NextProtos:         []string{"h2", "http/1.1"},
 		})
 		if err != nil {
-			logTLS(user, serverAddr, serverName, err, cachedCert)
+			logTLS(user, serverAddr, serverName, err, cachedCert, tlsFingerprint)
 			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
 			return
@@ -226,7 +235,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
 		if err != nil {
 			serverConn.Close()
-			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert)
+			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
 			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
 			return
@@ -283,13 +292,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), cachedCert)
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), cachedCert, tlsFingerprint)
 		conn.Close()
 		return
 	}
 
 	listener := &singleListener{conn: tlsConn}
-	logTLS(user, serverAddr, serverName, nil, cachedCert)
+	logTLS(user, serverAddr, serverName, nil, cachedCert, tlsFingerprint)
 	conf = nil
 	server.Serve(listener)
 }

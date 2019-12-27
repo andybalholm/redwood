@@ -24,16 +24,17 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
-	ConnectPorts map[int][]string
-	ContentTypes map[string][]string
-	Methods      map[string][]string
-	Referers     map[string][]string
-	StatusCodes  map[int][]string
-	URLs         *URLMatcher
-	URLTags      map[string][]string
-	UserIPs      IPMap
-	UserNames    map[string][]string
-	ServerIPs    IPMap
+	ConnectPorts    map[int][]string
+	ContentTypes    map[string][]string
+	Methods         map[string][]string
+	Referers        map[string][]string
+	StatusCodes     map[int][]string
+	URLs            *URLMatcher
+	URLTags         map[string][]string
+	UserIPs         IPMap
+	UserNames       map[string][]string
+	ServerIPs       IPMap
+	JA3Fingerprints map[string][]string
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -80,6 +81,14 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 		}
 		for _, ct := range args {
 			a.ContentTypes[ct] = append(a.ContentTypes[ct], acl)
+		}
+
+	case "ja3":
+		if a.JA3Fingerprints == nil {
+			a.JA3Fingerprints = make(map[string][]string)
+		}
+		for _, ja3 := range args {
+			a.JA3Fingerprints[ja3] = append(a.JA3Fingerprints[ja3], acl)
 		}
 
 	case "method":

@@ -186,6 +186,9 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tally := conf.URLRules.MatchingRules(cr.URL)
 	scores := conf.categoryScores(tally)
 	reqACLs := conf.ACLs.requestACLs(cr, authUser)
+	for _, acl := range conf.ACLs.JA3Fingerprints[tlsFingerprint] {
+		reqACLs[acl] = true
+	}
 	if invalidSSL {
 		reqACLs["invalid-ssl"] = true
 	}

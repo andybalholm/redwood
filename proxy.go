@@ -644,7 +644,7 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 	var err error
 	var serverConn net.Conn
 	if h.TLS {
-		serverConn, err = tls.Dial("tcp", addr, unverifiedClientConfig)
+		serverConn, err = tls.Dial("tcp", addr, nil)
 	} else {
 		serverConn, err = net.Dial("tcp", addr)
 	}

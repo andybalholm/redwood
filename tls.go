@@ -26,12 +26,6 @@ import (
 
 // Intercept TLS (HTTPS) connections.
 
-// unverifiedClientConfig is a TLS configuration that doesn't verify server
-// certificates.
-var unverifiedClientConfig = &tls.Config{
-	InsecureSkipVerify: true,
-}
-
 // loadCertificate loads the TLS certificate specified by certFile and keyFile
 // into tlsCert.
 func (c *config) loadCertificate() {

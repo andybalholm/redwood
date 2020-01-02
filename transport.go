@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -39,7 +40,9 @@ func init() {
 }
 
 var insecureHTTPTransport = &http.Transport{
-	TLSClientConfig:       unverifiedClientConfig,
+	TLSClientConfig: &tls.Config{
+		InsecureSkipVerify: true,
+	},
 	Proxy:                 http.ProxyFromEnvironment,
 	DialContext:           dialer.DialContext,
 	TLSHandshakeTimeout:   10 * time.Second,

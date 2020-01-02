@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -20,7 +19,6 @@ import (
 	"time"
 
 	"github.com/remogatto/ftpget"
-	"golang.org/x/net/http2"
 )
 
 var dialer = &net.Dialer{
@@ -43,22 +41,9 @@ func init() {
 var insecureHTTPTransport = &http.Transport{
 	TLSClientConfig:       unverifiedClientConfig,
 	Proxy:                 http.ProxyFromEnvironment,
-	Dial:                  dialer.Dial,
+	DialContext:           dialer.DialContext,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
-}
-
-var http2Transport = &http2.Transport{
-	DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-		return tls.DialWithDialer(dialer, network, addr, cfg)
-	},
-}
-
-var insecureHTTP2Transport = &http2.Transport{
-	TLSClientConfig: unverifiedClientConfig,
-	DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
-		return tls.DialWithDialer(dialer, network, addr, cfg)
-	},
 }
 
 // A hardValidationTransport wraps another (insecure) RoundTripper and checks

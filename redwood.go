@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"golang.org/x/net/http2"
 	"log"
 	"net"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 func main() {
@@ -83,12 +83,14 @@ func main() {
 		if conf.CloseIdleConnections > 0 {
 			httpTransport.IdleConnTimeout = conf.CloseIdleConnections
 			insecureHTTPTransport.IdleConnTimeout = conf.CloseIdleConnections
-			go func() {
-				for range time.Tick(conf.CloseIdleConnections) {
-					http2Transport.CloseIdleConnections()
-					insecureHTTP2Transport.CloseIdleConnections()
-				}
-			}()
+		}
+		if conf.HTTP2Upstream {
+			if err := http2.ConfigureTransport(httpTransport); err != nil {
+				log.Printf("Error enabling HTTP/2: %v", err)
+			}
+			if err := http2.ConfigureTransport(insecureHTTPTransport); err != nil {
+				log.Printf("Error enabling HTTP/2 (on insecure transport): %v", err)
+			}
 		}
 		if conf.DisableKeepAlivesUpstream {
 			httpTransport.DisableKeepAlives = true

@@ -238,18 +238,10 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		})
 		validWithDefaultRoots := err == nil
 
-		if conf.HTTP2Upstream && state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
-			if validWithDefaultRoots {
-				rt = http2Transport
-			} else {
-				rt = newHardValidationTransport(insecureHTTP2Transport, serverName, state.PeerCertificates)
-			}
+		if validWithDefaultRoots {
+			rt = httpTransport
 		} else {
-			if validWithDefaultRoots {
-				rt = httpTransport
-			} else {
-				rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
-			}
+			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
 		}
 		conf.CertCache.Put(serverName, serverAddr, cert, rt)
 	}

@@ -597,7 +597,11 @@ func copyResponseHeader(w http.ResponseWriter, resp *http.Response) {
 		}
 	}
 
-	w.WriteHeader(resp.StatusCode)
+	statusCode := resp.StatusCode
+	if statusCode < 100 || statusCode >= 600 {
+		statusCode = http.StatusBadGateway
+	}
+	w.WriteHeader(statusCode)
 }
 
 // A hijackedConn is a connection that has been hijacked (to fulfill a CONNECT

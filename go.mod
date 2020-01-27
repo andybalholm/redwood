@@ -11,6 +11,7 @@ require (
 	github.com/klauspost/cpuid v1.2.0 // indirect
 	github.com/kylelemons/go-gypsy v0.0.0-20160905020020-08cad365cd28
 	github.com/miekg/dns v1.1.4
+	github.com/open-ch/ja3 v1.0.0
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67 // indirect
 	golang.org/x/image v0.0.0-20190622003408-7e034cad6442

@@ -97,7 +97,7 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 	return logLine
 }
 
-func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
+func logTLS(user, serverAddr, serverName string, err error, cachedCert bool, tlsFingerprint string) {
 	errStr := ""
 	if err != nil {
 		errStr = err.Error()
@@ -108,7 +108,7 @@ func logTLS(user, serverAddr, serverName string, err error, cachedCert bool) {
 		cached = "cached certificate"
 	}
 
-	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, serverName, serverAddr, errStr, cached))
+	tlsLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, serverName, serverAddr, errStr, cached, tlsFingerprint))
 }
 
 func logContent(u *url.URL, content []byte, scores map[string]int) {

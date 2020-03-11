@@ -359,6 +359,12 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 		}
 	}
 
+	if tlsFingerprint, ok := r.Context().Value(tlsFingerprintKey{}).(string); ok {
+		for _, acl := range a.JA3Fingerprints[tlsFingerprint] {
+			acls[acl] = true
+		}
+	}
+
 	return acls
 }
 

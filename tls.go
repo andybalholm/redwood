@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/tls"
@@ -93,6 +94,8 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) (uploaded
 	return uploaded, downloaded
 }
 
+type tlsFingerprintKey struct{}
+
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to. user is the username to use for logging; authUser is
@@ -160,14 +163,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 
-	var tlsFingerprint string
-	j, err := ja3.ComputeJA3FromSegment(clientHello)
-	if err != nil {
-		log.Printf("Error generating TLS fingerprint: %v", err)
-	} else {
-		tlsFingerprint = j.GetJA3Hash()
-	}
-
 	// Filter a virtual CONNECT request.
 	cr := &http.Request{
 		Method:     "CONNECT",
@@ -177,12 +172,20 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		RemoteAddr: conn.RemoteAddr().String(),
 	}
 
+	var tlsFingerprint string
+	j, err := ja3.ComputeJA3FromSegment(clientHello)
+	if err != nil {
+		log.Printf("Error generating TLS fingerprint: %v", err)
+	} else {
+		tlsFingerprint = j.GetJA3Hash()
+		ctx := cr.Context()
+		ctx = context.WithValue(ctx, tlsFingerprintKey{}, tlsFingerprint)
+		cr = cr.WithContext(ctx)
+	}
+
 	tally := conf.URLRules.MatchingRules(cr.URL)
 	scores := conf.categoryScores(tally)
 	reqACLs := conf.ACLs.requestACLs(cr, authUser)
-	for _, acl := range conf.ACLs.JA3Fingerprints[tlsFingerprint] {
-		reqACLs[acl] = true
-	}
 	if invalidSSL {
 		reqACLs["invalid-ssl"] = true
 	}
@@ -254,10 +257,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	server := http.Server{
 		Handler: proxyHandler{
-			TLS:         true,
-			connectPort: port,
-			user:        authUser,
-			rt:          rt,
+			TLS:            true,
+			tlsFingerprint: tlsFingerprint,
+			connectPort:    port,
+			user:           authUser,
+			rt:             rt,
 		},
 		TLSConfig: &tls.Config{
 			Certificates:             []tls.Certificate{cert, conf.TLSCert},

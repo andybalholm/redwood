@@ -35,6 +35,9 @@ type proxyHandler struct {
 	// TLS is whether this is an HTTPS connection.
 	TLS bool
 
+	// tlsFingerprint is the JA3 TLS fingerprint of the client (if available).
+	tlsFingerprint string
+
 	// connectPort is the server port that was specified in a CONNECT request.
 	connectPort string
 
@@ -186,6 +189,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		server.Serve(&singleListener{conn: conn})
 		return
+	}
+
+	if h.tlsFingerprint != "" {
+		r = r.WithContext(context.WithValue(r.Context(), tlsFingerprintKey{}, h.tlsFingerprint))
 	}
 
 	tally := conf.URLRules.MatchingRules(r.URL)

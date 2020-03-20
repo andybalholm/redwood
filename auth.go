@@ -193,6 +193,7 @@ func (conf *config) addHTTPAuthenticator(endpoint string) error {
 					return conn, nil
 				}
 
+				conn.Close()
 				return nil, err
 			},
 		}

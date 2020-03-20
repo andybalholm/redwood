@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -211,7 +212,26 @@ func (conf *config) addHTTPAuthenticator(endpoint string) error {
 			return false
 		}
 		defer resp.Body.Close()
-		return resp.StatusCode == 200
+
+		if resp.StatusCode != 200 {
+			return false
+		}
+
+		var userInfo struct {
+			DeviceGroups []string `json:"device_groups"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&userInfo); err == nil {
+			conf.ACLs.ExternalDGLock.Lock()
+			if conf.ACLs.ExternalDeviceGroups == nil {
+				conf.ACLs.ExternalDeviceGroups = map[string][]string{}
+			}
+			conf.ACLs.ExternalDeviceGroups[user] = userInfo.DeviceGroups
+			conf.ACLs.ExternalDGLock.Unlock()
+		} else {
+			log.Printf("Error decoding authenticator-api response for %s: %v", user, err)
+		}
+
+		return true
 	})
 
 	return nil

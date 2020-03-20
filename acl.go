@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,11 @@ type ACLDefinitions struct {
 	UserNames       map[string][]string
 	ServerIPs       IPMap
 	JA3Fingerprints map[string][]string
+
+	// ExternalDeviceGroups is a cache of the device groups returned by the
+	// authenticator-api endpoint.
+	ExternalDeviceGroups map[string][]string
+	ExternalDGLock       sync.RWMutex
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -291,6 +297,12 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 
 	if user != "" {
 		for _, a := range a.UserNames[user] {
+			acls[a] = true
+		}
+		a.ExternalDGLock.RLock()
+		groups := a.ExternalDeviceGroups[user]
+		a.ExternalDGLock.RUnlock()
+		for _, a := range groups {
 			acls[a] = true
 		}
 	}

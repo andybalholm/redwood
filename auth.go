@@ -1,10 +1,14 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -147,6 +151,66 @@ func (conf *config) addAuthenticator(path string) error {
 		cmd := exec.Command(path, user, password)
 		err := cmd.Run()
 		return err == nil
+	})
+
+	return nil
+}
+
+func (conf *config) addHTTPAuthenticator(endpoint string) error {
+	var client http.Client
+	if conf.ExtraRootCerts != nil {
+		client.Transport = &http.Transport{
+			DialTLS: func(network, addr string) (net.Conn, error) {
+				// Dial a TLS connection, and make sure it is valid against either the system default
+				// roots or conf.ExtraRootCerts.
+				serverName, _, _ := net.SplitHostPort(addr)
+				conn, err := tls.DialWithDialer(dialer, network, addr, &tls.Config{
+					ServerName:         serverName,
+					InsecureSkipVerify: true,
+				})
+				if err != nil {
+					return nil, err
+				}
+				state := conn.ConnectionState()
+				serverCert := state.PeerCertificates[0]
+
+				chains, err := serverCert.Verify(x509.VerifyOptions{
+					Intermediates: certPoolWith(state.PeerCertificates[1:]),
+					DNSName:       serverName,
+				})
+				if err == nil {
+					state.VerifiedChains = chains
+					return conn, nil
+				}
+
+				chains, err = serverCert.Verify(x509.VerifyOptions{
+					Intermediates: certPoolWith(state.PeerCertificates[1:]),
+					DNSName:       serverName,
+					Roots:         conf.ExtraRootCerts,
+				})
+				if err == nil {
+					state.VerifiedChains = chains
+					return conn, nil
+				}
+
+				return nil, err
+			},
+		}
+	} else {
+		client.Transport = httpTransport
+	}
+
+	conf.Authenticators = append(conf.Authenticators, func(user, password string) bool {
+		formData := make(url.Values)
+		formData.Set("username", user)
+		formData.Set("password", password)
+		resp, err := client.Post(endpoint, "application/x-www-form-urlencoded", strings.NewReader(formData.Encode()))
+		if err != nil {
+			log.Printf("Error communicating with authentication API endpoint %s: %v", endpoint, err)
+			return false
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode == 200
 	})
 
 	return nil

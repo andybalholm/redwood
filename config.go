@@ -275,7 +275,6 @@ func (c *config) readConfigFile(filename string) error {
 			if n != 1 || err != nil {
 				log.Println("Improperly-quoted value in config file:", line)
 			}
-			continue
 		} else {
 			sharp := strings.Index(line, "#")
 			if sharp != -1 {

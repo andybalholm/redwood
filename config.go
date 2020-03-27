@@ -141,6 +141,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.ACLs.load)
 	c.newActiveFlag("api-acls", "", "ACL rule file for API requests", c.APIACLs.load)
 	c.newActiveFlag("authenticator", "", "program to authenticate users", c.addAuthenticator)
+	c.newActiveFlag("authenticator-api", "", "HTTP API endpoint to authenticate users", c.addHTTPAuthenticator)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
 	c.newActiveFlag("blockpage", "", "path to template for block page, or URL of dynamic block page", c.loadBlockPage)

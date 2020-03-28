@@ -334,7 +334,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		conf.showErrorPage(w, r, err)
 		log.Printf("error fetching %s: %s", r.URL, err)
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return

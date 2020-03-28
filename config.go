@@ -42,6 +42,8 @@ func (d dhashWithThreshold) String() string {
 type config struct {
 	BlockTemplate      *template.Template
 	BlockpageURL       string
+	ErrorTemplate      *template.Template
+	ErrorURL           string
 	Categories         map[string]*category
 	ContentPhraseList  phraseList
 	CountOnce          bool
@@ -157,6 +159,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
 	c.flags.BoolVar(&c.DisableKeepAlivesUpstream, "disable-keepalives-upstream", false, "Disable reuse of HTTP connections to upstream servers.")
+	c.newActiveFlag("errorpage", "", "path to template for error page, or URL of dynamic error page", c.loadErrorPage)
 	c.flags.IntVar(&c.GZIPLevel, "gzip-level", 6, "level to use for gzip compression of content")
 	c.flags.BoolVar(&c.HTTP2Downstream, "http2-downstream", true, "Use HTTP/2 for connections to clients.")
 	c.flags.BoolVar(&c.HTTP2Upstream, "http2-upstream", true, "Use HTTP/2 for connections to upstream servers.")

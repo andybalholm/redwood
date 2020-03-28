@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -153,4 +155,82 @@ func showInvisibleBlock(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "image/gif")
 	w.WriteHeader(http.StatusForbidden)
 	fmt.Fprint(w, transparent1x1)
+}
+
+func (c *config) loadErrorPage(path string) error {
+	if strings.HasPrefix(path, "http") {
+		c.ErrorTemplate = nil
+		c.ErrorURL = path
+		return nil
+	}
+
+	bt := template.New("errorpage")
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("error loading error page template: %v", err)
+	}
+	_, err = bt.Parse(string(content))
+	if err != nil {
+		return fmt.Errorf("error parsing error page template: %v", err)
+	}
+
+	c.ErrorTemplate = bt
+	c.ErrorURL = ""
+	return nil
+}
+
+// showErrorPage shows an error page for a request that failed (as we were
+// fetching it from the origin server).
+func (c *config) showErrorPage(w http.ResponseWriter, r *http.Request, pageError error) {
+	d := map[string]interface{}{
+		"url":   r.URL.String(),
+		"error": pageError.Error(),
+	}
+
+	var dnsError *net.DNSError
+	if errors.As(pageError, &dnsError) {
+		d["dns error"] = dnsError
+	}
+
+	switch {
+	case c.ErrorTemplate != nil:
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusBadGateway)
+
+		err := c.ErrorTemplate.Execute(w, d)
+		if err != nil {
+			log.Println("Error filling in error page template:", err)
+		}
+
+	case c.ErrorURL != "":
+		data, err := json.Marshal(d)
+		if err != nil {
+			log.Println("Error generating JSON info for error page:", err)
+			http.Error(w, pageError.Error(), http.StatusBadGateway)
+			return
+		}
+
+		errorResp, err := http.Post(c.ErrorURL, "application/json", bytes.NewReader(data))
+		if err != nil {
+			log.Printf("Error fetching  error page from %s: %v", c.ErrorURL, err)
+			http.Error(w, pageError.Error(), http.StatusBadGateway)
+			return
+		}
+		defer errorResp.Body.Close()
+
+		removeHopByHopHeaders(errorResp.Header)
+		if errorResp.ContentLength > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(errorResp.ContentLength, 10))
+		}
+		errorResp.StatusCode = http.StatusBadGateway
+		copyResponseHeader(w, errorResp)
+		_, err = io.Copy(w, errorResp.Body)
+		if err != nil {
+			log.Printf("Error copying error page: %v", err)
+		}
+
+	default:
+		http.Error(w, pageError.Error(), http.StatusBadGateway)
+		return
+	}
 }

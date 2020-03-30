@@ -105,7 +105,6 @@ type config struct {
 	HTTP2Upstream             bool
 	HTTP2Downstream           bool
 	DisableKeepAlivesUpstream bool
-	MaxConnsPerHost           int
 
 	GZIPLevel   int
 	BrotliLevel int
@@ -163,7 +162,6 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
 	c.flags.BoolVar(&c.LogTitle, "log-title", false, "Include page title in access log.")
 	c.flags.BoolVar(&c.LogUserAgent, "log-user-agent", false, "Include User-Agent header in access log.")
-	c.flags.IntVar(&c.MaxConnsPerHost, "max-conns-per-host", 8, "maximum number of simultaneous connections to an origin server (0 for no limit)")
 	c.flags.IntVar(&c.MaxContentScanSize, "max-content-scan-size", 1e6, "maximum size (in bytes) of page to do content scan on")
 	c.newActiveFlag("pac-template", "", "path to template for PAC file (%s will be replaced by proxy host:port)", c.loadPACTemplate)
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)

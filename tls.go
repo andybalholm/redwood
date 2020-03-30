@@ -212,7 +212,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		return
 	}
 
-	cert, rt := conf.CertCache.Get(serverName, serverAddr)
+	cert, rt, http2Support := conf.CertCache.Get(serverName, serverAddr)
 	cachedCert := rt != nil
 	if !cachedCert {
 		serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, &tls.Config{
@@ -252,7 +252,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		} else {
 			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
 		}
-		conf.CertCache.Put(serverName, serverAddr, cert, rt)
+		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
+		conf.CertCache.Put(serverName, serverAddr, cert, rt, http2Support)
 	}
 
 	server := http.Server{
@@ -274,7 +275,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		IdleTimeout: conf.CloseIdleConnections,
 	}
 
-	if conf.HTTP2Downstream {
+	if conf.HTTP2Downstream && http2Support {
 		server.TLSConfig.NextProtos = []string{"h2", "http/1.1"}
 		err = http2.ConfigureServer(&server, nil)
 		if err != nil {
@@ -659,10 +660,11 @@ type certCacheKey struct {
 type certCacheEntry struct {
 	certificate tls.Certificate
 	transport   http.RoundTripper
+	http2       bool
 	added       time.Time
 }
 
-func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certificate, transport http.RoundTripper) {
+func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certificate, transport http.RoundTripper, http2Support bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -687,11 +689,12 @@ func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certifica
 	}] = certCacheEntry{
 		certificate: cert,
 		transport:   transport,
+		http2:       http2Support,
 		added:       now,
 	}
 }
 
-func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, http.RoundTripper) {
+func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, http.RoundTripper, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -701,8 +704,8 @@ func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, 
 	}]
 
 	if !ok || time.Now().Sub(v.added) > c.TTL {
-		return tls.Certificate{}, nil
+		return tls.Certificate{}, nil, false
 	}
 
-	return v.certificate, v.transport
+	return v.certificate, v.transport, v.http2
 }

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -220,37 +221,40 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"h2", "http/1.1"},
 		})
-		if err != nil {
-			logTLS(user, serverAddr, serverName, err, cachedCert, tlsFingerprint)
-			conf = nil
-			connectDirect(conn, serverAddr, clientHello)
-			return
-		}
-
-		state := serverConn.ConnectionState()
-		serverConn.Close()
-		serverCert := state.PeerCertificates[0]
-
-		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
-		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
-		if err != nil {
+		if err == nil {
+			state := serverConn.ConnectionState()
 			serverConn.Close()
-			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
-			conf = nil
-			connectDirect(conn, serverAddr, clientHello)
-			return
-		}
+			serverCert := state.PeerCertificates[0]
 
-		_, err = serverCert.Verify(x509.VerifyOptions{
-			Intermediates: certPoolWith(state.PeerCertificates[1:]),
-			DNSName:       serverName,
-		})
-		validWithDefaultRoots := err == nil
+			valid := conf.validCert(serverCert, state.PeerCertificates[1:])
+			cert, err = imitateCertificate(serverCert, !valid, conf, sni)
+			if err != nil {
+				serverConn.Close()
+				logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
+				conf = nil
+				connectDirect(conn, serverAddr, clientHello)
+				return
+			}
 
-		if validWithDefaultRoots {
-			rt = httpTransport
+			_, err = serverCert.Verify(x509.VerifyOptions{
+				Intermediates: certPoolWith(state.PeerCertificates[1:]),
+				DNSName:       serverName,
+			})
+			validWithDefaultRoots := err == nil
+
+			if validWithDefaultRoots {
+				rt = httpTransport
+			} else {
+				rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
+			}
 		} else {
-			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
+			cert, err = fakeCertificate(conf, sni)
+			if err != nil {
+				logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
+				conn.Close()
+				return
+			}
+			rt = httpTransport
 		}
 		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
 		conf.CertCache.Put(serverName, serverAddr, cert, rt, http2Support)
@@ -404,6 +408,38 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 	if !selfSigned {
 		newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
 	}
+	return newCert, nil
+}
+
+// fakeCertificate returns a fabricated certificate for the server identified by sni.
+func fakeCertificate(conf *config, sni string) (cert tls.Certificate, err error) {
+	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	y, m, d := time.Now().Date()
+
+	template := &x509.Certificate{
+		SerialNumber:       serial,
+		Subject:            pkix.Name{CommonName: sni},
+		NotBefore:          time.Date(y, m, d, 0, 0, 0, 0, time.Local),
+		NotAfter:           time.Date(y, m+1, d, 0, 0, 0, 0, time.Local),
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		DNSNames:           []string{sni},
+		SignatureAlgorithm: x509.UnknownSignatureAlgorithm,
+	}
+
+	newCertBytes, err := x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, conf.ParsedTLSCert.PublicKey, conf.TLSCert.PrivateKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	newCert := tls.Certificate{
+		Certificate: [][]byte{newCertBytes},
+		PrivateKey:  conf.TLSCert.PrivateKey,
+	}
+
+	newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
 	return newCert, nil
 }
 

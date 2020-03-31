@@ -247,6 +247,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			} else {
 				rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
 			}
+			http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
 		} else {
 			cert, err = fakeCertificate(conf, sni)
 			if err != nil {
@@ -256,7 +257,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 			rt = httpTransport
 		}
-		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
 		conf.CertCache.Put(serverName, serverAddr, cert, rt, http2Support)
 	}
 

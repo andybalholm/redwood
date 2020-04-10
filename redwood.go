@@ -22,6 +22,11 @@ func main() {
 	}
 	configuration = conf
 
+	if conf.TestURL != "" {
+		runURLTest(conf.TestURL)
+		return
+	}
+
 	accessLog.Open(conf.AccessLog)
 	tlsLog.Open(conf.TLSLog)
 	contentLog.Open(filepath.Join(conf.ContentLogDir, "index.csv"))
@@ -37,9 +42,21 @@ func main() {
 		}
 	}
 
-	if conf.TestURL != "" {
-		runURLTest(conf.TestURL)
-		return
+	if conf.CloseIdleConnections > 0 {
+		httpTransport.IdleConnTimeout = conf.CloseIdleConnections
+		insecureHTTPTransport.IdleConnTimeout = conf.CloseIdleConnections
+	}
+	if conf.HTTP2Upstream {
+		if err := http2.ConfigureTransport(httpTransport); err != nil {
+			log.Printf("Error enabling HTTP/2: %v", err)
+		}
+		if err := http2.ConfigureTransport(insecureHTTPTransport); err != nil {
+			log.Printf("Error enabling HTTP/2 (on insecure transport): %v", err)
+		}
+	}
+	if conf.DisableKeepAlivesUpstream {
+		httpTransport.DisableKeepAlives = true
+		insecureHTTPTransport.DisableKeepAlives = true
 	}
 
 	portsListening := 0
@@ -80,23 +97,6 @@ func main() {
 	portsListening += len(conf.CustomPorts)
 
 	if portsListening > 0 {
-		if conf.CloseIdleConnections > 0 {
-			httpTransport.IdleConnTimeout = conf.CloseIdleConnections
-			insecureHTTPTransport.IdleConnTimeout = conf.CloseIdleConnections
-		}
-		if conf.HTTP2Upstream {
-			if err := http2.ConfigureTransport(httpTransport); err != nil {
-				log.Printf("Error enabling HTTP/2: %v", err)
-			}
-			if err := http2.ConfigureTransport(insecureHTTPTransport); err != nil {
-				log.Printf("Error enabling HTTP/2 (on insecure transport): %v", err)
-			}
-		}
-		if conf.DisableKeepAlivesUpstream {
-			httpTransport.DisableKeepAlives = true
-			insecureHTTPTransport.DisableKeepAlives = true
-		}
-
 		// Wait forever (or until somebody calls log.Fatal).
 		select {}
 	}

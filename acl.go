@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dop251/goja"
 )
 
 // Access Control Lists (ACLs)
@@ -41,6 +43,9 @@ type ACLDefinitions struct {
 	// authenticator-api endpoint.
 	ExternalDeviceGroups map[string][]string
 	ExternalDGLock       sync.RWMutex
+
+	RequestScripts  []*goja.Program
+	ResponseScripts []*goja.Program
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -377,6 +382,17 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 		}
 	}
 
+	for _, s := range a.RequestScripts {
+		rt := jsRuntime()
+		rt.Set("request", r)
+		rt.Set("user", user)
+		rt.Set("addACL", func(a string) { acls[a] = true })
+		_, err := rt.RunProgram(s)
+		if err != nil {
+			log.Printf("Error in request ACL script for %v: %v", r.URL, err)
+		}
+	}
+
 	return acls
 }
 
@@ -426,6 +442,16 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 	status = status / 100 * 100
 	for _, acl := range a.StatusCodes[status] {
 		acls[acl] = true
+	}
+
+	for _, s := range a.ResponseScripts {
+		rt := jsRuntime()
+		rt.Set("response", resp)
+		rt.Set("addACL", func(a string) { acls[a] = true })
+		_, err := rt.RunProgram(s)
+		if err != nil {
+			log.Printf("Error in response ACL script for %v: %v", resp.Request.URL, err)
+		}
 	}
 
 	return acls

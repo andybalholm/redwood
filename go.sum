@@ -6,6 +6,14 @@ github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b h1:/qKwj+YX2BKAQ
 github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b/go.mod h1:pEJ3YFav0jhslvUtQoWYFursrHsi1J3WpvMP3Bk7aCU=
 github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a h1:yE4/B7ng2G9tr5DdT/x2bj3u6p3Rze2Ha/61eChret8=
 github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a/go.mod h1:xPmFQkJW5/HS/ZMM6soMdODwdIOO9zs3yAhksnFQJE0=
+github.com/dlclark/regexp2 v1.1.6 h1:CqB4MjHw0MFCDj+PHHjiESmHX+N7t0tJzKvC6M97BRg=
+github.com/dlclark/regexp2 v1.1.6/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
+github.com/dop251/goja v0.0.0-20190301185519-64be363d126e h1:tRjuynZo0xMi0l1ByvFH5/dgikEYA0PT7r8YPVHE9CU=
+github.com/dop251/goja v0.0.0-20190301185519-64be363d126e/go.mod h1:Mw6PkjjMXWbTj+nnj4s3QPXq1jaT0s5pC0iFD4+BOAA=
+github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6 h1:RrkoB0pT3gnjXhL/t10BSP1mcr/0Ldea2uMyuBr2SWk=
+github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6/go.mod h1:hn7BA7c8pLvoGndExHudxTDKZ84Pyvv+90pbBjbTz0Y=
+github.com/go-sourcemap/sourcemap v2.1.2+incompatible h1:0b/xya7BKGhXuqFESKM4oIiRo9WOt2ebz7KxfreD6ug=
+github.com/go-sourcemap/sourcemap v2.1.2+incompatible/go.mod h1:F8jJfvm2KbVjc5NqelyYJmf/v5J0dwNLS2mL4sNA1Jg=
 github.com/golang/gddo v0.0.0-20190312205958-5a2505f3dbf0 h1:CfaPdCDbZu8jSwjq0flJv2u+WreQM0KqytUQahZ6Xf4=
 github.com/golang/gddo v0.0.0-20190312205958-5a2505f3dbf0/go.mod h1:xEhNfoBDX1hzLm2Nf80qUvZ2sVwoMZ8d6IE2SrsQfh4=
 github.com/google/go-cmp v0.2.0 h1:+dTQ8DZQJz0Mb/HjFlkptS1FeQ4cWSnN941F8aEG4SQ=

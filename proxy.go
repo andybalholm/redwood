@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/flate"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"image"
@@ -655,11 +654,12 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 	var err error
 	var serverConn net.Conn
 	if h.TLS {
-		serverConn, err = tls.Dial("tcp", addr, nil)
+		serverConn, err = dialWithExtraRootCerts("tcp", addr)
 	} else {
 		serverConn, err = net.Dial("tcp", addr)
 	}
 	if err != nil {
+		log.Printf("Error making websocket connection to %s: %v", addr, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -676,17 +676,20 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 
 	err = r.Write(serverConn)
 	if err != nil {
+		log.Printf("Error sending websocket request to %s: %v", addr, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
+		log.Printf("Couldn't hijack client connection for websocket to %s", addr)
 		http.Error(w, "Couldn't create a websocket connection", http.StatusInternalServerError)
 		return
 	}
 	conn, bufrw, err := hj.Hijack()
 	if err != nil {
+		log.Printf("Error hijacking client connection for websocket to %s: %v", addr, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

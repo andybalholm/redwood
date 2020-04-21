@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/remogatto/ftpget"
+	ftp "github.com/remogatto/ftpget"
 )
 
 var dialer = &net.Dialer{
@@ -47,6 +47,49 @@ var insecureHTTPTransport = &http.Transport{
 	DialContext:           dialer.DialContext,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
+}
+
+func dialWithExtraRootCerts(network, addr string) (net.Conn, error) {
+	// Dial a TLS connection, and make sure it is valid against either the system default
+	// roots or conf.ExtraRootCerts.
+	serverName, _, _ := net.SplitHostPort(addr)
+	conn, err := tls.DialWithDialer(dialer, network, addr, &tls.Config{
+		ServerName:         serverName,
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	state := conn.ConnectionState()
+	serverCert := state.PeerCertificates[0]
+
+	chains, err := serverCert.Verify(x509.VerifyOptions{
+		Intermediates: certPoolWith(state.PeerCertificates[1:]),
+		DNSName:       serverName,
+	})
+	if err == nil {
+		state.VerifiedChains = chains
+		return conn, nil
+	}
+
+	if conf := getConfig(); conf.ExtraRootCerts != nil {
+		chains, err = serverCert.Verify(x509.VerifyOptions{
+			Intermediates: certPoolWith(state.PeerCertificates[1:]),
+			DNSName:       serverName,
+			Roots:         conf.ExtraRootCerts,
+		})
+		if err == nil {
+			state.VerifiedChains = chains
+			return conn, nil
+		}
+	}
+
+	conn.Close()
+	return nil, err
+}
+
+var transportWithExtraRootCerts = &http.Transport{
+	DialTLS: dialWithExtraRootCerts,
 }
 
 // A hardValidationTransport wraps another (insecure) RoundTripper and checks

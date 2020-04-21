@@ -1,13 +1,10 @@
 package main
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -159,48 +156,7 @@ func (conf *config) addAuthenticator(path string) error {
 
 func (conf *config) addHTTPAuthenticator(endpoint string) error {
 	var client http.Client
-	if conf.ExtraRootCerts != nil {
-		client.Transport = &http.Transport{
-			DialTLS: func(network, addr string) (net.Conn, error) {
-				// Dial a TLS connection, and make sure it is valid against either the system default
-				// roots or conf.ExtraRootCerts.
-				serverName, _, _ := net.SplitHostPort(addr)
-				conn, err := tls.DialWithDialer(dialer, network, addr, &tls.Config{
-					ServerName:         serverName,
-					InsecureSkipVerify: true,
-				})
-				if err != nil {
-					return nil, err
-				}
-				state := conn.ConnectionState()
-				serverCert := state.PeerCertificates[0]
-
-				chains, err := serverCert.Verify(x509.VerifyOptions{
-					Intermediates: certPoolWith(state.PeerCertificates[1:]),
-					DNSName:       serverName,
-				})
-				if err == nil {
-					state.VerifiedChains = chains
-					return conn, nil
-				}
-
-				chains, err = serverCert.Verify(x509.VerifyOptions{
-					Intermediates: certPoolWith(state.PeerCertificates[1:]),
-					DNSName:       serverName,
-					Roots:         conf.ExtraRootCerts,
-				})
-				if err == nil {
-					state.VerifiedChains = chains
-					return conn, nil
-				}
-
-				conn.Close()
-				return nil, err
-			},
-		}
-	} else {
-		client.Transport = httpTransport
-	}
+	client.Transport = transportWithExtraRootCerts
 
 	conf.Authenticators = append(conf.Authenticators, func(user, password string) bool {
 		formData := make(url.Values)

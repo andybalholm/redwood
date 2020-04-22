@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -44,6 +46,7 @@ func (c *config) readPasswordFile(filename string) error {
 			c.CustomPorts[user] = customPortInfo{
 				Port: port,
 			}
+			c.UserForPort[port] = user
 
 		case 4:
 			user, pass, portStr, clientPlatform := words[0], words[1], words[2], words[3]
@@ -57,6 +60,7 @@ func (c *config) readPasswordFile(filename string) error {
 				Port:           port,
 				ClientPlatform: clientPlatform,
 			}
+			c.UserForPort[port] = user
 
 		case 5:
 			user, pass, portStr, clientPlatform, networks := words[0], words[1], words[2], words[3], words[4]
@@ -71,6 +75,7 @@ func (c *config) readPasswordFile(filename string) error {
 				ClientPlatform:   clientPlatform,
 				ExpectedNetworks: strings.Split(networks, ","),
 			}
+			c.UserForPort[port] = user
 
 		default:
 			log.Println("malformed line in password file:", line)
@@ -144,6 +149,45 @@ func (conf *config) addAuthenticator(path string) error {
 		cmd := exec.Command(path, user, password)
 		err := cmd.Run()
 		return err == nil
+	})
+
+	return nil
+}
+
+func (conf *config) addHTTPAuthenticator(endpoint string) error {
+	var client http.Client
+	client.Transport = transportWithExtraRootCerts
+
+	conf.Authenticators = append(conf.Authenticators, func(user, password string) bool {
+		formData := make(url.Values)
+		formData.Set("username", user)
+		formData.Set("password", password)
+		resp, err := client.Post(endpoint, "application/x-www-form-urlencoded", strings.NewReader(formData.Encode()))
+		if err != nil {
+			log.Printf("Error communicating with authentication API endpoint %s: %v", endpoint, err)
+			return false
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			return false
+		}
+
+		var userInfo struct {
+			DeviceGroups []string `json:"device_groups"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&userInfo); err == nil {
+			conf.ACLs.ExternalDGLock.Lock()
+			if conf.ACLs.ExternalDeviceGroups == nil {
+				conf.ACLs.ExternalDeviceGroups = map[string][]string{}
+			}
+			conf.ACLs.ExternalDeviceGroups[user] = userInfo.DeviceGroups
+			conf.ACLs.ExternalDGLock.Unlock()
+		} else {
+			log.Printf("Error decoding authenticator-api response for %s: %v", user, err)
+		}
+
+		return true
 	})
 
 	return nil

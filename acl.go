@@ -16,7 +16,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/dop251/goja"
 )
 
 // Access Control Lists (ACLs)
@@ -24,16 +27,25 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
-	ConnectPorts map[int][]string
-	ContentTypes map[string][]string
-	Methods      map[string][]string
-	Referers     map[string][]string
-	StatusCodes  map[int][]string
-	URLs         *URLMatcher
-	URLTags      map[string][]string
-	UserIPs      IPMap
-	UserNames    map[string][]string
-	ServerIPs    IPMap
+	ConnectPorts    map[int][]string
+	ContentTypes    map[string][]string
+	Methods         map[string][]string
+	Referers        map[string][]string
+	StatusCodes     map[int][]string
+	URLs            *URLMatcher
+	URLTags         map[string][]string
+	UserIPs         IPMap
+	UserNames       map[string][]string
+	ServerIPs       IPMap
+	JA3Fingerprints map[string][]string
+
+	// ExternalDeviceGroups is a cache of the device groups returned by the
+	// authenticator-api endpoint.
+	ExternalDeviceGroups map[string][]string
+	ExternalDGLock       sync.RWMutex
+
+	RequestScripts  []*goja.Program
+	ResponseScripts []*goja.Program
 
 	Times []struct {
 		schedule WeeklySchedule
@@ -80,6 +92,14 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 		}
 		for _, ct := range args {
 			a.ContentTypes[ct] = append(a.ContentTypes[ct], acl)
+		}
+
+	case "ja3":
+		if a.JA3Fingerprints == nil {
+			a.JA3Fingerprints = make(map[string][]string)
+		}
+		for _, ja3 := range args {
+			a.JA3Fingerprints[ja3] = append(a.JA3Fingerprints[ja3], acl)
 		}
 
 	case "method":
@@ -255,6 +275,7 @@ func (a *ACLDefinitions) load(filename string) error {
 					break argLoop
 				default:
 					r.Needed = append(r.Needed, a)
+					r.Bloom.Add(a)
 				}
 			}
 			a.Actions = append(a.Actions, r)
@@ -283,6 +304,12 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 		for _, a := range a.UserNames[user] {
 			acls[a] = true
 		}
+		a.ExternalDGLock.RLock()
+		groups := a.ExternalDeviceGroups[user]
+		a.ExternalDGLock.RUnlock()
+		for _, a := range groups {
+			acls[a] = true
+		}
 	}
 
 	for _, a := range a.Methods[r.Method] {
@@ -304,8 +331,10 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 	}
 
 	now := time.Now()
+	day := now.Weekday()
+	h, m, _ := now.Clock()
 	for _, t := range a.Times {
-		if t.schedule.Contains(now) {
+		if t.schedule.Contains(day, h, m) {
 			acls[t.acl] = true
 		}
 	}
@@ -344,6 +373,23 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 			if u.regexp.MatchString(userAgent) {
 				acls[u.acl] = true
 			}
+		}
+	}
+
+	if tlsFingerprint, ok := r.Context().Value(tlsFingerprintKey{}).(string); ok {
+		for _, acl := range a.JA3Fingerprints[tlsFingerprint] {
+			acls[acl] = true
+		}
+	}
+
+	for _, s := range a.RequestScripts {
+		rt := jsRuntime()
+		rt.Set("request", r)
+		rt.Set("user", user)
+		rt.Set("addACL", func(a string) { acls[a] = true })
+		_, err := rt.RunProgram(s)
+		if err != nil {
+			log.Printf("Error in request ACL script for %v: %v", r.URL, err)
 		}
 	}
 
@@ -398,6 +444,16 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 		acls[acl] = true
 	}
 
+	for _, s := range a.ResponseScripts {
+		rt := jsRuntime()
+		rt.Set("response", resp)
+		rt.Set("addACL", func(a string) { acls[a] = true })
+		_, err := rt.RunProgram(s)
+		if err != nil {
+			log.Printf("Error in response ACL script for %v: %v", resp.Request.URL, err)
+		}
+	}
+
 	return acls
 }
 
@@ -416,6 +472,9 @@ type ACLActionRule struct {
 	// Description is an explanation of why the action was chosen, suitable for
 	// display to end users.
 	Description string
+
+	// Bloom is a bloomFilter containing the Needed ACLs.
+	Bloom bloomFilter `json:"-"`
 }
 
 // Conditions returns a string summarizing r's conditions.
@@ -439,8 +498,17 @@ func (a *ACLDefinitions) ChooseACLAction(acls map[string]bool, actions ...string
 		choices[a] = true
 	}
 
+	var bloom bloomFilter
+	for a := range acls {
+		bloom.Add(a)
+	}
+
 ruleLoop:
 	for _, r := range a.Actions {
+		if !bloom.Superset(&r.Bloom) {
+			continue ruleLoop
+		}
+
 		if !choices[r.Action] {
 			continue ruleLoop
 		}
@@ -513,25 +581,44 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 	}
 	categories := sortedKeys(significantScores)
 
+	var masterBloom bloomFilter
+	for a := range acls {
+		masterBloom.Add(a)
+	}
+
 	for _, cat := range categories {
+		bloom := masterBloom
+		categoryAndParents := make(map[string]bool)
+		bloom.Add(cat)
+		categoryAndParents[cat] = true
+		parent := cat
+		for strings.Contains(parent, "/") {
+			parent = parent[:strings.LastIndex(parent, "/")]
+			bloom.Add(parent)
+			categoryAndParents[parent] = true
+		}
 		var r ACLActionRule
 		found := false
 
 	ruleLoop:
 		for _, r = range c.ACLs.Actions {
+			if !bloom.Superset(&r.Bloom) {
+				continue ruleLoop
+			}
+
 			okToIgnore := false
 			for _, a := range r.Needed {
-				if !acls[a] && a != cat {
+				if !acls[a] && !categoryAndParents[a] {
 					continue ruleLoop
 				}
-				if a == cat {
+				if categoryAndParents[a] {
 					// We should honor an ignore-category rule only if the category to be ignored
 					// is one of the conditions for the rule.
 					okToIgnore = true
 				}
 			}
 			for _, a := range r.Disallowed {
-				if acls[a] || a == cat {
+				if acls[a] || categoryAndParents[a] {
 					continue ruleLoop
 				}
 			}

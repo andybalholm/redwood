@@ -41,10 +41,12 @@ func (d dhashWithThreshold) String() string {
 // A config object holds a complete set of Redwood's configuration settings.
 type config struct {
 	BlockTemplate      *template.Template
+	BlockpageURL       string
+	ErrorTemplate      *template.Template
+	ErrorURL           string
 	Categories         map[string]*category
 	ContentPhraseList  phraseList
 	CountOnce          bool
-	DisableGZIP        bool
 	Threshold          int
 	URLRules           *URLMatcher
 	MaxContentScanSize int
@@ -92,6 +94,7 @@ type config struct {
 	PasswordLock   sync.RWMutex
 	AuthRealm      string
 	CustomPorts    map[string]customPortInfo
+	UserForPort    map[int]string
 	PACTemplate    string
 
 	AccessLog     string
@@ -106,6 +109,9 @@ type config struct {
 	DisableKeepAlivesUpstream bool
 
 	ExternalClassifiers []string
+
+	GZIPLevel   int
+	BrotliLevel int
 
 	flags *flag.FlagSet
 }
@@ -131,17 +137,20 @@ func loadConfiguration() (*config, error) {
 		ContentPhraseList:    newPhraseList(),
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]customPortInfo{},
+		UserForPort:          map[int]string{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
 	c.newActiveFlag("acls", "", "access-control-list (ACL) rule file", c.ACLs.load)
 	c.newActiveFlag("api-acls", "", "ACL rule file for API requests", c.APIACLs.load)
 	c.newActiveFlag("authenticator", "", "program to authenticate users", c.addAuthenticator)
+	c.newActiveFlag("authenticator-api", "", "HTTP API endpoint to authenticate users", c.addHTTPAuthenticator)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
-	c.newActiveFlag("blockpage", "", "path to template for block page", c.loadBlockPage)
+	c.newActiveFlag("blockpage", "", "path to template for block page, or URL of dynamic block page", c.loadBlockPage)
+	c.flags.IntVar(&c.BrotliLevel, "brotli-level", 5, "level to use for brotli compression of content")
 	c.newActiveFlag("c", "/etc/redwood/redwood.conf", "configuration file path", c.readConfigFile)
-	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.loadCategories)
+	c.newActiveFlag("categories", "/etc/redwood/categories", "path to configuration files for categories", c.LoadCategories)
 	c.newActiveFlag("censored-words", "", "file of words to remove from pages", c.readCensoredWordsFile)
 	c.flags.DurationVar(&c.CertCache.TTL, "cert-cache-ttl", time.Hour, "how long to cache generated TLS certificates")
 	c.flags.StringVar(&c.CGIBin, "cgi-bin", "", "path to CGI files for built-in web server")
@@ -150,8 +159,9 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
-	c.flags.BoolVar(&c.DisableGZIP, "disable-gzip", false, "Don't compress HTTP responses with gzip.")
 	c.flags.BoolVar(&c.DisableKeepAlivesUpstream, "disable-keepalives-upstream", false, "Disable reuse of HTTP connections to upstream servers.")
+	c.newActiveFlag("errorpage", "", "path to template for error page, or URL of dynamic error page", c.loadErrorPage)
+	c.flags.IntVar(&c.GZIPLevel, "gzip-level", 6, "level to use for gzip compression of content")
 	c.flags.BoolVar(&c.HTTP2Downstream, "http2-downstream", true, "Use HTTP/2 for connections to clients.")
 	c.flags.BoolVar(&c.HTTP2Upstream, "http2-upstream", true, "Use HTTP/2 for connections to upstream servers.")
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
@@ -162,6 +172,8 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)
+	c.newActiveFlag("request-acl-script", "", "script to assign ACLs to requests", c.loadRequestACLScript)
+	c.newActiveFlag("response-acl-script", "", "script to assign ACLs to response", c.loadResponseACLScript)
 	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")
 	c.flags.StringVar(&c.TestURL, "test", "", "URL to test instead of running proxy server")
 	c.flags.IntVar(&c.Threshold, "threshold", 0, "minimum score for a blocked category to block a page")
@@ -207,7 +219,7 @@ func loadConfiguration() (*config, error) {
 	}
 
 	if c.Categories == nil {
-		err := c.loadCategories("/etc/redwood/categories")
+		err := c.LoadCategories("/etc/redwood/categories")
 		if err != nil {
 			log.Println(err)
 		}
@@ -270,7 +282,6 @@ func (c *config) readConfigFile(filename string) error {
 			if n != 1 || err != nil {
 				log.Println("Improperly-quoted value in config file:", line)
 			}
-			continue
 		} else {
 			sharp := strings.Index(line, "#")
 			if sharp != -1 {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/tls"
@@ -22,16 +23,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/open-ch/ja3"
 	"golang.org/x/net/http2"
 )
 
 // Intercept TLS (HTTPS) connections.
-
-// unverifiedClientConfig is a TLS configuration that doesn't verify server
-// certificates.
-var unverifiedClientConfig = &tls.Config{
-	InsecureSkipVerify: true,
-}
 
 // loadCertificate loads the TLS certificate specified by certFile and keyFile
 // into tlsCert.
@@ -99,6 +95,8 @@ func connectDirect(conn net.Conn, serverAddr string, extraData []byte) (uploaded
 	return uploaded, downloaded
 }
 
+type tlsFingerprintKey struct{}
+
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
 // trying to connect to. user is the username to use for logging; authUser is
@@ -121,7 +119,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	// just the address).
 	clientHello, err := readClientHello(conn)
 	if err != nil {
-		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false)
+		logTLS(user, serverAddr, "", fmt.Errorf("error reading client hello: %v", err), false, "")
 		if _, ok := err.(net.Error); ok {
 			conn.Close()
 			return
@@ -139,60 +137,20 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 
-	serverName := ""
-	if !obsoleteVersion && !invalidSSL {
-		if sn, ok := clientHelloServerName(clientHello); ok {
-			serverName = sn
-			if serverAddr == "" {
-				serverAddr = net.JoinHostPort(sn, "443")
-			}
-		}
-	}
-	sni := serverName
-
-	if serverAddr == localServer+":443" {
-		// The internal server gets special treatment, since there is no remote
-		// server to connect to.
-		cert, err := imitateCertificate(&x509.Certificate{
-			Subject:     pkix.Name{CommonName: localServer},
-			NotBefore:   conf.ParsedTLSCert.NotBefore,
-			NotAfter:    conf.ParsedTLSCert.NotAfter,
-			KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		}, false, conf, "")
-		if err != nil {
-			log.Printf("Error generating HTTPS certificate for local server (%s): %v", serverAddr, err)
-			conn.Close()
-			return
-		}
-
-		config := &tls.Config{
-			NextProtos:   []string{"http/1.1"},
-			Certificates: []tls.Certificate{cert, conf.TLSCert},
-		}
-		tlsConn := tls.Server(conn, config)
-		err = tlsConn.Handshake()
-		if err != nil {
-			logTLS(user, serverAddr, localServer, fmt.Errorf("error in handshake with client: %v", err), false)
-			conn.Close()
-			return
-		}
-		listener := &singleListener{conn: tlsConn}
-		server := http.Server{
-			Handler:     conf.ServeMux,
-			IdleTimeout: conf.CloseIdleConnections,
-		}
-		conf = nil
-		logTLS(user, serverAddr, localServer, nil, false)
-		server.Serve(listener)
-		return
-	}
-
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
 		host = serverAddr
 		port = "443"
 	}
+
+	serverName := ""
+	if !obsoleteVersion && !invalidSSL {
+		if sn, ok := clientHelloServerName(clientHello); ok && sn != "" {
+			serverName = sn
+			serverAddr = net.JoinHostPort(sn, port)
+		}
+	}
+	sni := serverName
 
 	if serverName == "" {
 		serverName = host
@@ -213,6 +171,17 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		Host:       net.JoinHostPort(serverName, port),
 		URL:        &url.URL{Host: serverName},
 		RemoteAddr: conn.RemoteAddr().String(),
+	}
+
+	var tlsFingerprint string
+	j, err := ja3.ComputeJA3FromSegment(clientHello)
+	if err != nil {
+		log.Printf("Error generating TLS fingerprint: %v", err)
+	} else {
+		tlsFingerprint = j.GetJA3Hash()
+		ctx := cr.Context()
+		ctx = context.WithValue(ctx, tlsFingerprintKey{}, tlsFingerprint)
+		cr = cr.WithContext(ctx)
 	}
 
 	tally := conf.URLRules.MatchingRules(cr.URL)
@@ -244,7 +213,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		return
 	}
 
-	cert, rt := conf.CertCache.Get(serverName, serverAddr)
+	cert, rt, http2Support := conf.CertCache.Get(serverName, serverAddr)
 	cachedCert := rt != nil
 	if !cachedCert {
 		serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, &tls.Config{
@@ -252,55 +221,52 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"h2", "http/1.1"},
 		})
-		if err != nil {
-			logTLS(user, serverAddr, serverName, err, cachedCert)
-			conf = nil
-			connectDirect(conn, serverAddr, clientHello)
-			return
-		}
-
-		state := serverConn.ConnectionState()
-		serverConn.Close()
-		serverCert := state.PeerCertificates[0]
-
-		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
-		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
-		if err != nil {
+		if err == nil {
+			state := serverConn.ConnectionState()
 			serverConn.Close()
-			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert)
-			conf = nil
-			connectDirect(conn, serverAddr, clientHello)
-			return
-		}
+			serverCert := state.PeerCertificates[0]
 
-		_, err = serverCert.Verify(x509.VerifyOptions{
-			Intermediates: certPoolWith(state.PeerCertificates[1:]),
-			DNSName:       serverName,
-		})
-		validWithDefaultRoots := err == nil
-
-		if conf.HTTP2Upstream && state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
-			if validWithDefaultRoots {
-				rt = http2Transport
-			} else {
-				rt = newHardValidationTransport(insecureHTTP2Transport, serverName, state.PeerCertificates)
+			valid := conf.validCert(serverCert, state.PeerCertificates[1:])
+			cert, err = imitateCertificate(serverCert, !valid, conf, sni)
+			if err != nil {
+				serverConn.Close()
+				logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
+				conf = nil
+				connectDirect(conn, serverAddr, clientHello)
+				return
 			}
-		} else {
+
+			_, err = serverCert.Verify(x509.VerifyOptions{
+				Intermediates: certPoolWith(state.PeerCertificates[1:]),
+				DNSName:       serverName,
+			})
+			validWithDefaultRoots := err == nil
+
 			if validWithDefaultRoots {
 				rt = httpTransport
 			} else {
 				rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
 			}
+			http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
+		} else {
+			cert, err = fakeCertificate(conf, sni)
+			if err != nil {
+				logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
+				conn.Close()
+				return
+			}
+			rt = httpTransport
 		}
-		conf.CertCache.Put(serverName, serverAddr, cert, rt)
+		conf.CertCache.Put(serverName, serverAddr, cert, rt, http2Support)
 	}
 
 	server := http.Server{
 		Handler: proxyHandler{
-			TLS:         true,
-			connectPort: port,
-			user:        authUser,
-			rt:          rt,
+			TLS:            true,
+			tlsFingerprint: tlsFingerprint,
+			connectPort:    port,
+			user:           authUser,
+			rt:             rt,
 		},
 		TLSConfig: &tls.Config{
 			Certificates:             []tls.Certificate{cert, conf.TLSCert},
@@ -313,7 +279,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		IdleTimeout: conf.CloseIdleConnections,
 	}
 
-	if conf.HTTP2Downstream {
+	if conf.HTTP2Downstream && http2Support {
 		server.TLSConfig.NextProtos = []string{"h2", "http/1.1"}
 		err = http2.ConfigureServer(&server, nil)
 		if err != nil {
@@ -324,13 +290,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), cachedCert)
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), cachedCert, tlsFingerprint)
 		conn.Close()
 		return
 	}
 
 	listener := &singleListener{conn: tlsConn}
-	logTLS(user, serverAddr, serverName, nil, cachedCert)
+	logTLS(user, serverAddr, serverName, nil, cachedCert, tlsFingerprint)
 	conf = nil
 	server.Serve(listener)
 }
@@ -442,6 +408,38 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 	if !selfSigned {
 		newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
 	}
+	return newCert, nil
+}
+
+// fakeCertificate returns a fabricated certificate for the server identified by sni.
+func fakeCertificate(conf *config, sni string) (cert tls.Certificate, err error) {
+	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	y, m, d := time.Now().Date()
+
+	template := &x509.Certificate{
+		SerialNumber:       serial,
+		Subject:            pkix.Name{CommonName: sni},
+		NotBefore:          time.Date(y, m, d, 0, 0, 0, 0, time.Local),
+		NotAfter:           time.Date(y, m+1, d, 0, 0, 0, 0, time.Local),
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		DNSNames:           []string{sni},
+		SignatureAlgorithm: x509.UnknownSignatureAlgorithm,
+	}
+
+	newCertBytes, err := x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, conf.ParsedTLSCert.PublicKey, conf.TLSCert.PrivateKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	newCert := tls.Certificate{
+		Certificate: [][]byte{newCertBytes},
+		PrivateKey:  conf.TLSCert.PrivateKey,
+	}
+
+	newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
 	return newCert, nil
 }
 
@@ -698,10 +696,11 @@ type certCacheKey struct {
 type certCacheEntry struct {
 	certificate tls.Certificate
 	transport   http.RoundTripper
+	http2       bool
 	added       time.Time
 }
 
-func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certificate, transport http.RoundTripper) {
+func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certificate, transport http.RoundTripper, http2Support bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -726,11 +725,12 @@ func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certifica
 	}] = certCacheEntry{
 		certificate: cert,
 		transport:   transport,
+		http2:       http2Support,
 		added:       now,
 	}
 }
 
-func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, http.RoundTripper) {
+func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, http.RoundTripper, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -740,8 +740,8 @@ func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, 
 	}]
 
 	if !ok || time.Now().Sub(v.added) > c.TTL {
-		return tls.Certificate{}, nil
+		return tls.Certificate{}, nil, false
 	}
 
-	return v.certificate, v.transport
+	return v.certificate, v.transport, v.http2
 }

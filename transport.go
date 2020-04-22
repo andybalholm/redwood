@@ -89,7 +89,13 @@ func dialWithExtraRootCerts(network, addr string) (net.Conn, error) {
 }
 
 var transportWithExtraRootCerts = &http.Transport{
-	DialTLS: dialWithExtraRootCerts,
+	DialTLS:               dialWithExtraRootCerts,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ExpectContinueTimeout: 1 * time.Second,
+}
+
+var clientWithExtraRootCerts = &http.Client{
+	Transport: transportWithExtraRootCerts,
 }
 
 // A hardValidationTransport wraps another (insecure) RoundTripper and checks

@@ -200,14 +200,16 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	scores := conf.categoryScores(tally)
 
 	for _, classifier := range conf.ExternalClassifiers {
-		cu := classifier + "?url=" + url.QueryEscape(r.URL.String())
-		cr, err := http.Get(cu)
+		v := make(url.Values)
+		v.Set("url", r.URL.String())
+		v.Set("method", r.Method)
+		cr, err := clientWithExtraRootCerts.PostForm(classifier, v)
 		if err != nil {
-			log.Printf("Error checking external-classifier (%s): %v", cu, err)
+			log.Printf("Error checking external-classifier (%s): %v", classifier, err)
 			continue
 		}
 		if cr.StatusCode != 200 {
-			log.Printf("Bad HTTP status checking external-classifier (%s): %s", cu, cr.Status)
+			log.Printf("Bad HTTP status checking external-classifier (%s): %s", classifier, cr.Status)
 			continue
 		}
 		jd := json.NewDecoder(cr.Body)
@@ -215,7 +217,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = jd.Decode(&externalScores)
 		cr.Body.Close()
 		if err != nil {
-			log.Printf("Error decoding response from external-classifier (%s): %v", cu, err)
+			log.Printf("Error decoding response from external-classifier (%s): %v", classifier, err)
 			continue
 		}
 		if scores == nil {

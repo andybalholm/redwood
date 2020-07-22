@@ -136,6 +136,9 @@ func (c *config) loadPruningConfig(filename string) error {
 		}
 	}
 
+	c.PruneMatcher.finalize()
+	c.FilteredPruneMatcher.finalize()
+
 	return nil
 }
 

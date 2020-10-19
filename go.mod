@@ -1,7 +1,7 @@
 module github.com/andybalholm/redwood
 
 require (
-	github.com/andybalholm/brotli v0.0.0-20190329221744-1b2ddcf9b79a
+	github.com/andybalholm/brotli v1.0.1
 	github.com/andybalholm/cascadia v1.0.0
 	github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b
 	github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a // indirect

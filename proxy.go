@@ -554,7 +554,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			var compressor io.WriteCloser
 			switch encoding {
 			case "br":
-				compressor = brotli.NewWriter(buf, brotli.WriterOptions{Quality: conf.BrotliLevel})
+				compressor = brotli.NewWriterOptions(buf, brotli.WriterOptions{Quality: conf.BrotliLevel})
 			case "gzip":
 				compressor, err = gzip.NewWriterLevel(buf, conf.GZIPLevel)
 				if err != nil {

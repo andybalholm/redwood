@@ -1,5 +1,7 @@
 github.com/andybalholm/brotli v0.0.0-20190329221744-1b2ddcf9b79a h1:BkHnN+2M0U+MrswXT9mK3DpK7g34PpDvPQNVZlmrrjA=
 github.com/andybalholm/brotli v0.0.0-20190329221744-1b2ddcf9b79a/go.mod h1:/M9bY11bdGUFkhg0Lf4OIyXcViLNSjkpPamjp6l0yck=
+github.com/andybalholm/brotli v1.0.1 h1:KqhlKozYbRtJvsPrrEeXcO+N2l6NYT5A2QAFmSULpEc=
+github.com/andybalholm/brotli v1.0.1/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
 github.com/andybalholm/cascadia v1.0.0 h1:hOCXnnZ5A+3eVDX8pvgl4kofXv2ELss0bKcqRySc45o=
 github.com/andybalholm/cascadia v1.0.0/go.mod h1:GsXiBklL0woXo1j/WYWtSYYC4ouU9PqHO0sqidkEA4Y=
 github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b h1:/qKwj+YX2BKAQWpGjF46ltVEBeAqOA3TpkYwiYJNYC4=

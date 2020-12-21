@@ -213,51 +213,50 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		return
 	}
 
-	cert, rt, http2Support := conf.CertCache.Get(serverName, serverAddr)
-	cachedCert := rt != nil
-	if !cachedCert {
-		serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, &tls.Config{
-			ServerName:         serverName,
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"h2", "http/1.1"},
-		})
-		if err == nil {
-			state := serverConn.ConnectionState()
+	var cert tls.Certificate
+	var rt http.RoundTripper
+	var http2Support bool
+
+	serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, &tls.Config{
+		ServerName:         serverName,
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"h2", "http/1.1"},
+	})
+	if err == nil {
+		state := serverConn.ConnectionState()
+		serverConn.Close()
+		serverCert := state.PeerCertificates[0]
+
+		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
+		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
+		if err != nil {
 			serverConn.Close()
-			serverCert := state.PeerCertificates[0]
-
-			valid := conf.validCert(serverCert, state.PeerCertificates[1:])
-			cert, err = imitateCertificate(serverCert, !valid, conf, sni)
-			if err != nil {
-				serverConn.Close()
-				logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
-				conf = nil
-				connectDirect(conn, serverAddr, clientHello)
-				return
-			}
-
-			_, err = serverCert.Verify(x509.VerifyOptions{
-				Intermediates: certPoolWith(state.PeerCertificates[1:]),
-				DNSName:       serverName,
-			})
-			validWithDefaultRoots := err == nil
-
-			if validWithDefaultRoots {
-				rt = httpTransport
-			} else {
-				rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
-			}
-			http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
-		} else {
-			cert, err = fakeCertificate(conf, sni)
-			if err != nil {
-				logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), cachedCert, tlsFingerprint)
-				conn.Close()
-				return
-			}
-			rt = httpTransport
+			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
+			conf = nil
+			connectDirect(conn, serverAddr, clientHello)
+			return
 		}
-		conf.CertCache.Put(serverName, serverAddr, cert, rt, http2Support)
+
+		_, err = serverCert.Verify(x509.VerifyOptions{
+			Intermediates: certPoolWith(state.PeerCertificates[1:]),
+			DNSName:       serverName,
+		})
+		validWithDefaultRoots := err == nil
+
+		if validWithDefaultRoots {
+			rt = httpTransport
+		} else {
+			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
+		}
+		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
+	} else {
+		cert, err = fakeCertificate(conf, sni)
+		if err != nil {
+			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
+			conn.Close()
+			return
+		}
+		rt = httpTransport
 	}
 
 	server := http.Server{
@@ -290,13 +289,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), cachedCert, tlsFingerprint)
+		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, tlsFingerprint)
 		conn.Close()
 		return
 	}
 
 	listener := &singleListener{conn: tlsConn}
-	logTLS(user, serverAddr, serverName, nil, cachedCert, tlsFingerprint)
+	logTLS(user, serverAddr, serverName, nil, false, tlsFingerprint)
 	conf = nil
 	server.Serve(listener)
 }
@@ -680,68 +679,4 @@ func (c *config) addTrustedRoots(certPath string) error {
 		return fmt.Errorf("no certificates found in %s", certPath)
 	}
 	return nil
-}
-
-type CertificateCache struct {
-	lock        sync.RWMutex
-	cache       map[certCacheKey]certCacheEntry
-	TTL         time.Duration
-	lastCleaned time.Time
-}
-
-type certCacheKey struct {
-	name, addr string
-}
-
-type certCacheEntry struct {
-	certificate tls.Certificate
-	transport   http.RoundTripper
-	http2       bool
-	added       time.Time
-}
-
-func (c *CertificateCache) Put(serverName, serverAddr string, cert tls.Certificate, transport http.RoundTripper, http2Support bool) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	now := time.Now()
-	if c.cache == nil {
-		c.cache = make(map[certCacheKey]certCacheEntry)
-		c.lastCleaned = now
-	}
-
-	if now.Sub(c.lastCleaned) > c.TTL {
-		// Remove expired entries.
-		for k, v := range c.cache {
-			if now.Sub(v.added) > c.TTL {
-				delete(c.cache, k)
-			}
-		}
-	}
-
-	c.cache[certCacheKey{
-		name: serverName,
-		addr: serverAddr,
-	}] = certCacheEntry{
-		certificate: cert,
-		transport:   transport,
-		http2:       http2Support,
-		added:       now,
-	}
-}
-
-func (c *CertificateCache) Get(serverName, serverAddr string) (tls.Certificate, http.RoundTripper, bool) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	v, ok := c.cache[certCacheKey{
-		name: serverName,
-		addr: serverAddr,
-	}]
-
-	if !ok || time.Now().Sub(v.added) > c.TTL {
-		return tls.Certificate{}, nil, false
-	}
-
-	return v.certificate, v.transport, v.http2
 }

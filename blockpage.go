@@ -141,7 +141,7 @@ func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *htt
 		copyResponseHeader(w, blockResp)
 		_, err = io.Copy(w, blockResp.Body)
 		if err != nil {
-			log.Printf("Error copying blockpage: %v", err)
+			panic(http.ErrAbortHandler)
 		}
 
 	default:

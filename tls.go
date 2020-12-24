@@ -259,34 +259,30 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		rt = httpTransport
 	}
 
-	server := http.Server{
-		Handler: proxyHandler{
-			TLS:            true,
-			tlsFingerprint: tlsFingerprint,
-			connectPort:    port,
-			user:           authUser,
-			rt:             rt,
-		},
-		TLSConfig: &tls.Config{
-			Certificates:             []tls.Certificate{cert, conf.TLSCert},
-			PreferServerCipherSuites: true,
-			CurvePreferences: []tls.CurveID{
-				tls.CurveP256,
-				tls.X25519, // Go 1.8 only
-			},
-		},
-		IdleTimeout: conf.CloseIdleConnections,
+	handler := &proxyHandler{
+		TLS:            true,
+		tlsFingerprint: tlsFingerprint,
+		connectPort:    port,
+		user:           authUser,
+		rt:             rt,
 	}
+	tlsConfig := &tls.Config{
+		Certificates:             []tls.Certificate{cert, conf.TLSCert},
+		PreferServerCipherSuites: true,
+		CurvePreferences: []tls.CurveID{
+			tls.CurveP256,
+			tls.X25519, // Go 1.8 only
+		},
+	}
+	idleTimeout := conf.CloseIdleConnections
 
 	if conf.HTTP2Downstream && http2Support {
-		server.TLSConfig.NextProtos = []string{"h2", "http/1.1"}
-		err = http2.ConfigureServer(&server, nil)
-		if err != nil {
-			log.Println("Error configuring HTTP/2 server:", err)
-		}
+		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 
-	tlsConn := tls.Server(&insertingConn{conn, clientHello}, server.TLSConfig)
+	conf = nil
+
+	tlsConn := tls.Server(&insertingConn{conn, clientHello}, tlsConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
 		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, tlsFingerprint)
@@ -294,10 +290,24 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		return
 	}
 
-	listener := &singleListener{conn: tlsConn}
 	logTLS(user, serverAddr, serverName, nil, false, tlsFingerprint)
-	conf = nil
-	server.Serve(listener)
+
+	if state := tlsConn.ConnectionState(); state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
+		server := &http2.Server{
+			IdleTimeout: idleTimeout,
+		}
+		opts := &http2.ServeConnOpts{
+			Handler: handler,
+		}
+		server.ServeConn(tlsConn, opts)
+	} else {
+		server := &http.Server{
+			IdleTimeout: idleTimeout,
+			Handler:     handler,
+		}
+		listener := &singleListener{conn: tlsConn}
+		server.Serve(listener)
+	}
 }
 
 func certPoolWith(certs []*x509.Certificate) *x509.CertPool {

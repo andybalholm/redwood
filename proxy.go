@@ -172,7 +172,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
-			return
+			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 
@@ -236,7 +236,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
-			return
+			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
@@ -254,7 +254,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
-			return
+			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
@@ -270,6 +270,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(r.Header["X-Forwarded-For"]) >= 10 {
+		w.Header().Set("Connection", "close")
 		http.Error(w, "Proxy forwarding loop", http.StatusBadRequest)
 		log.Printf("Proxy forwarding loop from %s to %v", r.Header.Get("X-Forwarded-For"), r.URL)
 		return
@@ -332,6 +333,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp, err = simpleTransport{}.RoundTrip(r)
 	}
 
+	if err == context.Canceled {
+		return
+	}
 	if err != nil {
 		conf.showErrorPage(w, r, err)
 		log.Printf("error fetching %s: %s", r.URL, err)
@@ -383,10 +387,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
+		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
+			panic(http.ErrAbortHandler)
 		}
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "block":
 		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
@@ -403,8 +408,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		N: int64(conf.MaxContentScanSize),
 	}
 	content, err := ioutil.ReadAll(lr)
+	if err == context.Canceled {
+		return
+	}
 	if err != nil {
 		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
+		conf.showErrorPage(w, r, err)
+		return
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)
@@ -414,10 +424,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		copyResponseHeader(w, resp)
 		w.Write(content)
 		n, err := io.Copy(w, resp.Body)
+		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
+			panic(http.ErrAbortHandler)
 		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored)
 		return
 	}
 
@@ -425,7 +436,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pageTitle := ""
 
 	var compressedContent []byte
-	if ce := resp.Header.Get("Content-Encoding"); ce != "" {
+	if ce := resp.Header.Get("Content-Encoding"); ce != "" && len(content) > 0 {
 		compressedContent = content
 		br := bytes.NewReader(compressedContent)
 		var decompressor io.Reader
@@ -438,15 +449,16 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			decompressor, err = gzip.NewReader(br)
 			if err != nil {
 				log.Printf("Error creating gzip.Reader for %v: %v", r.URL, err)
-				decompressor = br
 			}
 		default:
 			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, r.URL)
-			decompressor = br
 		}
-		content, err = ioutil.ReadAll(decompressor)
-		if err != nil {
-			log.Printf("Error decompressing response body from %v: %v", r.URL, err)
+		if decompressor != nil {
+			content, err = ioutil.ReadAll(decompressor)
+			if err != nil {
+				log.Printf("Error decompressing response body from %v: %v", r.URL, err)
+				content = compressedContent
+			}
 		}
 	}
 
@@ -601,6 +613,10 @@ func copyResponseHeader(w http.ResponseWriter, resp *http.Response) {
 		for _, v := range values {
 			newHeader.Add(key, v)
 		}
+	}
+
+	if resp.Close {
+		newHeader.Add("Connection", "close")
 	}
 
 	statusCode := resp.StatusCode

@@ -192,6 +192,8 @@ func (c *config) showErrorPage(w http.ResponseWriter, r *http.Request, pageError
 		d["dns error"] = dnsError
 	}
 
+	w.Header().Set("Connection", "close")
+
 	switch {
 	case c.ErrorTemplate != nil:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -200,6 +202,7 @@ func (c *config) showErrorPage(w http.ResponseWriter, r *http.Request, pageError
 		err := c.ErrorTemplate.Execute(w, d)
 		if err != nil {
 			log.Println("Error filling in error page template:", err)
+			panic(http.ErrAbortHandler)
 		}
 
 	case c.ErrorURL != "":
@@ -226,7 +229,7 @@ func (c *config) showErrorPage(w http.ResponseWriter, r *http.Request, pageError
 		copyResponseHeader(w, errorResp)
 		_, err = io.Copy(w, errorResp.Body)
 		if err != nil {
-			log.Printf("Error copying error page: %v", err)
+			panic(http.ErrAbortHandler)
 		}
 
 	default:

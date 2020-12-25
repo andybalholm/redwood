@@ -223,32 +223,31 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		NextProtos:         []string{"h2", "http/1.1"},
 	})
 	if err == nil {
+		defer serverConn.Close()
 		state := serverConn.ConnectionState()
-		serverConn.Close()
 		serverCert := state.PeerCertificates[0]
 
 		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
 		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
 		if err != nil {
-			serverConn.Close()
 			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
 			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
 			return
 		}
 
-		_, err = serverCert.Verify(x509.VerifyOptions{
-			Intermediates: certPoolWith(state.PeerCertificates[1:]),
-			DNSName:       serverName,
-		})
-		validWithDefaultRoots := err == nil
-
-		if validWithDefaultRoots {
-			rt = httpTransport
-		} else {
-			rt = newHardValidationTransport(insecureHTTPTransport, serverName, state.PeerCertificates)
-		}
 		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
+
+		if http2Support {
+			cc, err := http2Transport.NewClientConn(serverConn)
+			if err == nil {
+				rt = cc
+			}
+		} else {
+			rt = &connTransport{
+				Conn: serverConn,
+			}
+		}
 	} else {
 		cert, err = fakeCertificate(conf, sni)
 		if err != nil {
@@ -301,12 +300,22 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 		server.ServeConn(tlsConn, opts)
 	} else {
+		closeChan := make(chan struct{})
 		server := &http.Server{
 			IdleTimeout: idleTimeout,
 			Handler:     handler,
+			ConnState: func(conn net.Conn, state http.ConnState) {
+				switch state {
+				case http.StateClosed, http.StateHijacked:
+					close(closeChan)
+				}
+			},
 		}
 		listener := &singleListener{conn: tlsConn}
 		server.Serve(listener)
+
+		// Wait for the connection to finish.
+		<-closeChan
 	}
 }
 

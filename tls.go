@@ -311,6 +311,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				}
 			},
 		}
+		if rt, ok := rt.(*connTransport); ok {
+			rt.Done = func(error) {
+				go server.Shutdown(context.Background())
+			}
+		}
 		listener := &singleListener{conn: tlsConn}
 		server.Serve(listener)
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -189,13 +190,28 @@ type connTransport struct {
 }
 
 func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	ctx := req.Context()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue.
+	}
+
 	ct.once.Do(ct.initialize)
 
 	if err := req.Write(ct.Conn); err != nil {
 		return nil, err
 	}
 
-	return http.ReadResponse(ct.br, req)
+	resp, err = http.ReadResponse(ct.br, req)
+	if err == nil {
+		resp.Body = &bodyWithContext{
+			ReadCloser: resp.Body,
+			Ctx:        ctx,
+		}
+	}
+	return resp, err
 }
 
 func (ct *connTransport) initialize() {
@@ -214,6 +230,22 @@ func (ct *connTransport) initialize() {
 		}
 		pw.CloseWithError(err)
 	}()
+}
+
+// A bodyWithContext wraps a response body, and makes Read return an error if
+// the associated context is canceled.
+type bodyWithContext struct {
+	io.ReadCloser
+	Ctx context.Context
+}
+
+func (b *bodyWithContext) Read(p []byte) (n int, err error) {
+	select {
+	case <-b.Ctx.Done():
+		return 0, b.Ctx.Err()
+	default:
+		return b.ReadCloser.Read(p)
+	}
 }
 
 // An FTPTransport fetches files via FTP.

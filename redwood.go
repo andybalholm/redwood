@@ -44,9 +44,6 @@ func main() {
 	if conf.CloseIdleConnections > 0 {
 		httpTransport.IdleConnTimeout = conf.CloseIdleConnections
 	}
-	if conf.DisableKeepAlivesUpstream {
-		httpTransport.DisableKeepAlives = true
-	}
 
 	portsListening := 0
 

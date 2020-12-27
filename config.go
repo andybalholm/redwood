@@ -102,10 +102,9 @@ type config struct {
 	TLSLog        string
 	ContentLogDir string
 
-	CloseIdleConnections      time.Duration
-	HTTP2Upstream             bool
-	HTTP2Downstream           bool
-	DisableKeepAlivesUpstream bool
+	CloseIdleConnections time.Duration
+	HTTP2Upstream        bool
+	HTTP2Downstream      bool
 
 	GZIPLevel   int
 	BrotliLevel int
@@ -155,7 +154,6 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("content-pruning", "", "path to config file for content pruning", c.loadPruningConfig)
 	c.flags.BoolVar(&c.CountOnce, "count-once", false, "count each phrase only once per page")
 	c.flags.IntVar(&c.DhashThreshold, "dhash-threshold", 0, "how many bits can be different in an image's hash to match")
-	c.flags.BoolVar(&c.DisableKeepAlivesUpstream, "disable-keepalives-upstream", false, "Disable reuse of HTTP connections to upstream servers.")
 	c.newActiveFlag("errorpage", "", "path to template for error page, or URL of dynamic error page", c.loadErrorPage)
 	c.flags.IntVar(&c.GZIPLevel, "gzip-level", 6, "level to use for gzip compression of content")
 	c.flags.BoolVar(&c.HTTP2Downstream, "http2-downstream", true, "Use HTTP/2 for connections to clients.")

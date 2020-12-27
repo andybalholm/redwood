@@ -217,11 +217,15 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	var rt http.RoundTripper
 	var http2Support bool
 
-	serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, &tls.Config{
+	serverConnConfig := &tls.Config{
 		ServerName:         serverName,
 		InsecureSkipVerify: true,
-		NextProtos:         []string{"h2", "http/1.1"},
-	})
+	}
+	if conf.HTTP2Upstream {
+		serverConnConfig.NextProtos = []string{"h2", "http/1.1"}
+	}
+
+	serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, serverConnConfig)
 	if err == nil {
 		defer serverConn.Close()
 		state := serverConn.ConnectionState()

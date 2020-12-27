@@ -327,12 +327,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	removeHopByHopHeaders(r.Header)
 	resp, err := rt.RoundTrip(r)
 
-	if err != nil && strings.Contains(err.Error(), "trailer header without chunked transfer encoding") && r.Method == "GET" && r.URL.Scheme == "http" {
-		// Use a simpler transport that will ignore the error.
-		log.Printf("Using simpleTransport for %v", r.URL)
-		resp, err = simpleTransport{}.RoundTrip(r)
-	}
-
 	if err == context.Canceled {
 		return
 	}

@@ -85,13 +85,7 @@ var transportWithExtraRootCerts = &http.Transport{
 type connTransport struct {
 	Conn net.Conn
 
-	// Done specifies an optional callback function that is called when the
-	// connection is no longer readable. If the read fails with an error other
-	// than io.EOF, the error is passed to Done.
-	Done func(error)
-
-	once sync.Once
-	br   *bufio.Reader
+	br *bufio.Reader
 }
 
 func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
@@ -103,10 +97,12 @@ func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 		// Continue.
 	}
 
-	ct.once.Do(ct.initialize)
-
 	if err := req.Write(ct.Conn); err != nil {
 		return nil, err
+	}
+
+	if ct.br == nil {
+		ct.br = bufio.NewReader(ct.Conn)
 	}
 
 	resp, err = http.ReadResponse(ct.br, req)
@@ -119,19 +115,38 @@ func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 	return resp, err
 }
 
-func (ct *connTransport) initialize() {
+// A notifyingConn is a net.Conn that detects when the connection is no longer
+// readable, and calls a calback function.
+type notifyingConn struct {
+	net.Conn
+
+	// Done specifies an optional callback function that is called when the
+	// connection is no longer readable. If the read fails with an error other
+	// than io.EOF, the error is passed to Done.
+	Done func(error)
+
+	once sync.Once
+	pr   *io.PipeReader
+}
+
+func (n *notifyingConn) Read(p []byte) (int, error) {
+	n.once.Do(n.initialize)
+	return n.pr.Read(p)
+}
+
+func (n *notifyingConn) initialize() {
 	// Set up the reader goroutine.
 	//
 	// In order to detact as soon as possible if Conn is closed or otherwise
 	// unusable, we constantly read from it in a goroutine, and pass the data
-	// through a pipe to the actual reader used in ReadResponse.
+	// through a pipe to the actual reader.
 	pr, pw := io.Pipe()
-	ct.br = bufio.NewReader(pr)
+	n.pr = pr
 
 	go func() {
-		_, err := io.Copy(pw, ct.Conn)
-		if ct.Done != nil {
-			ct.Done(err)
+		_, err := io.Copy(pw, n.Conn)
+		if n.Done != nil {
+			n.Done(err)
 		}
 		pw.CloseWithError(err)
 	}()

@@ -217,6 +217,19 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	var rt http.RoundTripper
 	var http2Support bool
 
+	// Set up the server here, so that we can call the Shutdown method from our
+	// notifyingConn.
+	closeChan := make(chan struct{})
+	server := &http.Server{
+		IdleTimeout: conf.CloseIdleConnections,
+		ConnState: func(conn net.Conn, state http.ConnState) {
+			switch state {
+			case http.StateClosed, http.StateHijacked:
+				close(closeChan)
+			}
+		},
+	}
+
 	serverConnConfig := &tls.Config{
 		ServerName:         serverName,
 		InsecureSkipVerify: true,
@@ -241,15 +254,21 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 
 		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
+		nc := &notifyingConn{
+			Conn: serverConn,
+			Done: func(error) {
+				go server.Shutdown(context.Background())
+			},
+		}
 
 		if http2Support {
-			cc, err := http2Transport.NewClientConn(serverConn)
+			cc, err := http2Transport.NewClientConn(nc)
 			if err == nil {
 				rt = cc
 			}
 		} else {
 			rt = &connTransport{
-				Conn: serverConn,
+				Conn: nc,
 			}
 		}
 	} else {
@@ -262,7 +281,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		rt = httpTransport
 	}
 
-	handler := &proxyHandler{
+	server.Handler = &proxyHandler{
 		TLS:            true,
 		tlsFingerprint: tlsFingerprint,
 		connectPort:    port,
@@ -277,9 +296,9 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			tls.X25519, // Go 1.8 only
 		},
 	}
-	idleTimeout := conf.CloseIdleConnections
 
-	if conf.HTTP2Downstream && http2Support {
+	http2Downstream := conf.HTTP2Downstream && http2Support
+	if http2Downstream {
 		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 
@@ -295,37 +314,14 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	logTLS(user, serverAddr, serverName, nil, false, tlsFingerprint)
 
-	if state := tlsConn.ConnectionState(); state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual {
-		server := &http2.Server{
-			IdleTimeout: idleTimeout,
-		}
-		opts := &http2.ServeConnOpts{
-			Handler: handler,
-		}
-		server.ServeConn(tlsConn, opts)
-	} else {
-		closeChan := make(chan struct{})
-		server := &http.Server{
-			IdleTimeout: idleTimeout,
-			Handler:     handler,
-			ConnState: func(conn net.Conn, state http.ConnState) {
-				switch state {
-				case http.StateClosed, http.StateHijacked:
-					close(closeChan)
-				}
-			},
-		}
-		if rt, ok := rt.(*connTransport); ok {
-			rt.Done = func(error) {
-				go server.Shutdown(context.Background())
-			}
-		}
-		listener := &singleListener{conn: tlsConn}
-		server.Serve(listener)
-
-		// Wait for the connection to finish.
-		<-closeChan
+	if http2Downstream {
+		http2.ConfigureServer(server, nil)
 	}
+	listener := &singleListener{conn: tlsConn}
+	server.Serve(listener)
+
+	// Wait for the connection to finish.
+	<-closeChan
 }
 
 func certPoolWith(certs []*x509.Certificate) *x509.CertPool {

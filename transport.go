@@ -174,7 +174,6 @@ func (b *bodyWithContext) Read(p []byte) (n int, err error) {
 type plainHTTPTransport struct{}
 
 func (plainHTTPTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	log.Println("plainHTTPTransport.RoundTrip", req.URL)
 	ctx := req.Context()
 	select {
 	case <-ctx.Done():

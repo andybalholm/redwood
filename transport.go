@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -166,6 +167,56 @@ func (b *bodyWithContext) Read(p []byte) (n int, err error) {
 	default:
 		return b.ReadCloser.Read(p)
 	}
+}
+
+// A plainHTTPTransport is a RoundTripper for plain HTTP requests (no HTTPS).
+// It does not support HTTP Keep-Alives.
+type plainHTTPTransport struct{}
+
+func (plainHTTPTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	log.Println("plainHTTPTransport.RoundTrip", req.URL)
+	ctx := req.Context()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		// Continue.
+	}
+
+	host := req.Host
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		host = net.JoinHostPort(host, "80")
+	}
+
+	conn, err := dialer.Dial("tcp", host)
+	if err != nil {
+		return nil, fmt.Errorf("error connecting to %s: %v", host, err)
+	}
+	if err = req.Write(conn); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("error sending request for %v: %v", req.URL, err)
+	}
+
+	br := bufio.NewReader(conn)
+	resp, err = http.ReadResponse(br, req)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	resp.Body = &bodyWithContext{
+		ReadCloser: &readCloser{
+			Reader: resp.Body,
+			Closer: conn,
+		},
+		Ctx: ctx,
+	}
+	return resp, nil
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // An FTPTransport fetches files via FTP.

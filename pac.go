@@ -238,7 +238,10 @@ func rdnsSOA(ip string) (server string, err error) {
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conf := getConfig()
 	configuredUser := conf.UserForPort[p.Port]
-	handler := proxyHandler{user: configuredUser}
+	handler := proxyHandler{
+		user: configuredUser,
+		rt:   plainHTTPTransport{},
+	}
 
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
 	authCacheLock.RLock()

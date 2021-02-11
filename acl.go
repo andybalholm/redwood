@@ -571,7 +571,7 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 	acls = copyACLSet(acls)
 	significantScores := make(map[string]int)
 	for k, v := range scores {
-		if v > 0 && c.Categories[k].action == ACL {
+		if v > 0 && c.Categories[k] != nil && c.Categories[k].action == ACL {
 			acls[k] = true
 			continue
 		}
@@ -640,18 +640,20 @@ func (c *config) ChooseACLCategoryAction(acls map[string]bool, scores map[string
 			r = ACLActionRule{
 				Needed: []string{cat},
 			}
-			switch cg.action {
-			case BLOCK:
-				if cg.invisible && choices["block-invisible"] {
-					r.Action = "block-invisible"
-				} else if choices["block"] {
-					r.Action = "block"
-				}
-			case IGNORE:
-				r.Action = "ignore-category"
-			case ALLOW:
-				if choices["allow"] {
-					r.Action = "allow"
+			if cg != nil {
+				switch cg.action {
+				case BLOCK:
+					if cg.invisible && choices["block-invisible"] {
+						r.Action = "block-invisible"
+					} else if choices["block"] {
+						r.Action = "block"
+					}
+				case IGNORE:
+					r.Action = "ignore-category"
+				case ALLOW:
+					if choices["allow"] {
+						r.Action = "allow"
+					}
 				}
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -15,6 +16,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -196,6 +198,36 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tally := conf.URLRules.MatchingRules(r.URL)
 	scores := conf.categoryScores(tally)
+
+	for _, classifier := range conf.ExternalClassifiers {
+		v := make(url.Values)
+		v.Set("url", r.URL.String())
+		v.Set("method", r.Method)
+		cr, err := clientWithExtraRootCerts.PostForm(classifier, v)
+		if err != nil {
+			log.Printf("Error checking external-classifier (%s): %v", classifier, err)
+			continue
+		}
+		if cr.StatusCode != 200 {
+			log.Printf("Bad HTTP status checking external-classifier (%s): %s", classifier, cr.Status)
+			continue
+		}
+		jd := json.NewDecoder(cr.Body)
+		externalScores := make(map[string]int)
+		err = jd.Decode(&externalScores)
+		cr.Body.Close()
+		if err != nil {
+			log.Printf("Error decoding response from external-classifier (%s): %v", classifier, err)
+			continue
+		}
+		if scores == nil {
+			scores = make(map[string]int)
+		}
+		for k, v := range externalScores {
+			scores[k] += v
+		}
+	}
+
 	reqScores := scores
 
 	reqACLs := conf.ACLs.requestACLs(r, authUser)

@@ -164,6 +164,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 
+	if serverName == "" {
+		logTLS(user, "", "", errors.New("no SNI available"), false, "")
+		conn.Close()
+		return
+	}
+
 	// Filter a virtual CONNECT request.
 	cr := &http.Request{
 		Method:     "CONNECT",

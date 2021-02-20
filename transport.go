@@ -29,6 +29,7 @@ var httpTransport = &http.Transport{
 	DialContext:           dialer.DialContext,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
+	DisableKeepAlives:     true,
 }
 
 var http2Transport = &http2.Transport{}

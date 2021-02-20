@@ -14,7 +14,14 @@ import (
 	"strings"
 )
 
+// Version is the current version number (to be filled in by -ldflags -X).
+var Version string
+
 func main() {
+	if Version != "" {
+		log.Println("Redwood", Version)
+	}
+
 	conf, err := loadConfiguration()
 	if err != nil {
 		log.Fatal(err)

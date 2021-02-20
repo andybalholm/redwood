@@ -57,9 +57,7 @@ func main() {
 			proxyListener.Close()
 		}()
 		server := http.Server{
-			Handler: proxyHandler{
-				rt: plainHTTPTransport{},
-			},
+			Handler:     proxyHandler{},
 			IdleTimeout: conf.CloseIdleConnections,
 		}
 		go func() {

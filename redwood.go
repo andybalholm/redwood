@@ -14,7 +14,9 @@ import (
 	"strings"
 )
 
-// Version is the current version number (to be filled in by -ldflags -X).
+// Version is the current version number. Fill it in by building with
+//
+// go build -ldflags="-X 'main.Version=$(git describe --tags)'"
 var Version string
 
 func main() {

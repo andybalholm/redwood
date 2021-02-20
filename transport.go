@@ -31,10 +31,6 @@ var httpTransport = &http.Transport{
 	ExpectContinueTimeout: 1 * time.Second,
 }
 
-func init() {
-	httpTransport.RegisterProtocol("ftp", FTPTransport{})
-}
-
 var http2Transport = &http2.Transport{}
 
 func dialWithExtraRootCerts(network, addr string) (net.Conn, error) {

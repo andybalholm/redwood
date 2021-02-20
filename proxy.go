@@ -343,10 +343,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conf.changeQuery(r.URL)
 
 	var rt http.RoundTripper
-	if h.rt == nil {
-		rt = httpTransport
-	} else {
+	switch {
+	case r.URL.Scheme == "ftp":
+		rt = FTPTransport{}
+	case h.rt != nil:
 		rt = h.rt
+	default:
+		rt = httpTransport
 	}
 
 	// Some HTTP/2 servers don't like having a body on a GET request, even if

@@ -438,9 +438,10 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Added authenticated IP via API (ip=%s, user=%s)", ip, user)
+	details := fmt.Sprintf("(ip=%s, user=%s, port=%d)", ip, user, port)
+	log.Printf("Added authenticated IP address via API: %s", details)
 	p.AllowIP(ip)
-	fmt.Fprintf(w, "Added %s as an authenticated IP address for %s.", ip, user)
+	fmt.Fprintf(w, "Added authenticated IP address: %s", details)
 }
 
 type authCacheKey struct {

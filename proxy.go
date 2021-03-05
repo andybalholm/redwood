@@ -442,8 +442,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
-		conf.showErrorPage(w, r, err)
-		return
+		// Servers that use broken chunked Transfer-Encoding can give us unexpected EOFs,
+		// even if we got all the content.
+		if err != io.ErrUnexpectedEOF {
+			conf.showErrorPage(w, r, err)
+			return
+		}
 	}
 	if lr.N == 0 {
 		log.Println("response body too long to filter:", r.URL)

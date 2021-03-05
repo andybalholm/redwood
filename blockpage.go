@@ -213,7 +213,7 @@ func (c *config) showErrorPage(w http.ResponseWriter, r *http.Request, pageError
 			return
 		}
 
-		errorResp, err := http.Post(c.ErrorURL, "application/json", bytes.NewReader(data))
+		errorResp, err := clientWithExtraRootCerts.Post(c.ErrorURL, "application/json", bytes.NewReader(data))
 		if err != nil {
 			log.Printf("Error fetching  error page from %s: %v", c.ErrorURL, err)
 			http.Error(w, pageError.Error(), http.StatusBadGateway)

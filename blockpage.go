@@ -82,7 +82,8 @@ func (c *config) aclDescriptions(rule ACLActionRule) []string {
 }
 
 // showBlockPage shows a block page for a page that was blocked by an ACL.
-func (c *config) showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+	c := getConfig()
 	switch {
 	case c.BlockTemplate != nil:
 		data := blockData{
@@ -181,7 +182,8 @@ func (c *config) loadErrorPage(path string) error {
 
 // showErrorPage shows an error page for a request that failed (as we were
 // fetching it from the origin server).
-func (c *config) showErrorPage(w http.ResponseWriter, r *http.Request, pageError error) {
+func showErrorPage(w http.ResponseWriter, r *http.Request, pageError error) {
+	c := getConfig()
 	d := map[string]interface{}{
 		"url":   r.URL.String(),
 		"error": pageError.Error(),

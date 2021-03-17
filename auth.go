@@ -85,7 +85,8 @@ func (c *config) readPasswordFile(filename string) error {
 	return nil
 }
 
-func (c *config) send407(w http.ResponseWriter) {
+func send407(w http.ResponseWriter) {
+	c := getConfig()
 	w.Header().Set("Proxy-Authenticate", "Basic realm="+c.AuthRealm)
 	http.Error(w, "Proxy authentication required", http.StatusProxyAuthRequired)
 }

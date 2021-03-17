@@ -93,8 +93,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conf := getConfig()
-
 	if len(r.URL.String()) > 10000 {
 		http.Error(w, "URL too long", http.StatusRequestURITooLong)
 		return
@@ -115,7 +113,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Header.Get("Proxy-Authorization") != "":
 		user, pass, ok := ProxyCredentials(r)
 		if ok {
-			if conf.ValidCredentials(user, pass) {
+			if getConfig().ValidCredentials(user, pass) {
 				authUser = user
 			} else {
 				log.Printf("Incorrect username or password from %v: %s:%s", r.RemoteAddr, user, pass)
@@ -145,7 +143,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if realHost, ok := conf.VirtualHosts[r.Host]; ok {
+	if realHost, ok := getConfig().VirtualHosts[r.Host]; ok {
 		r.Host = realHost
 		r.URL.Host = realHost
 	}
@@ -185,9 +183,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				user:        authUser,
 				rt:          h.rt,
 			},
-			IdleTimeout: conf.CloseIdleConnections,
+			IdleTimeout: getConfig().CloseIdleConnections,
 		}
-		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		server.Serve(&singleListener{conn: conn})
 		return
 	}
@@ -196,10 +193,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(context.WithValue(r.Context(), tlsFingerprintKey{}, h.tlsFingerprint))
 	}
 
-	tally := conf.URLRules.MatchingRules(r.URL)
-	scores := conf.categoryScores(tally)
+	tally := getConfig().URLRules.MatchingRules(r.URL)
+	scores := getConfig().categoryScores(tally)
 
-	for _, classifier := range conf.ExternalClassifiers {
+	for _, classifier := range getConfig().ExternalClassifiers {
 		v := make(url.Values)
 		v.Set("url", r.URL.String())
 		v.Set("method", r.Method)
@@ -230,34 +227,40 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	reqScores := scores
 
-	reqACLs := conf.ACLs.requestACLs(r, authUser)
+	var thisRule ACLActionRule
+	var ignored []string
+	var reqACLs map[string]bool
+	{
+		conf := getConfig()
+		reqACLs = conf.ACLs.requestACLs(r, authUser)
 
-	possibleActions := []string{
-		"allow",
-		"block",
-		"block-invisible",
-	}
-	if authUser == "" && !h.TLS {
-		possibleActions = append(possibleActions, "require-auth")
-	}
-	if r.Method == "CONNECT" && conf.TLSReady {
-		possibleActions = append(possibleActions, "ssl-bump")
-	}
+		possibleActions := []string{
+			"allow",
+			"block",
+			"block-invisible",
+		}
+		if authUser == "" && !h.TLS {
+			possibleActions = append(possibleActions, "require-auth")
+		}
+		if r.Method == "CONNECT" && conf.TLSReady {
+			possibleActions = append(possibleActions, "ssl-bump")
+		}
 
-	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-	if r.Method == "CONNECT" && conf.TLSReady && thisRule.Action == "" {
-		// If the result is unclear, go ahead and start to bump the connection.
-		// The ACLs will be checked one more time anyway.
-		thisRule.Action = "ssl-bump"
+		thisRule, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
+		if r.Method == "CONNECT" && conf.TLSReady && thisRule.Action == "" {
+			// If the result is unclear, go ahead and start to bump the connection.
+			// The ACLs will be checked one more time anyway.
+			thisRule.Action = "ssl-bump"
+		}
 	}
 
 	switch thisRule.Action {
 	case "require-auth":
-		conf.send407(w)
+		send407(w)
 		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
 		return
 	case "block":
-		conf.showBlockPage(w, r, nil, user, tally, scores, thisRule)
+		showBlockPage(w, r, nil, user, tally, scores, thisRule)
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "block-invisible":
@@ -271,14 +274,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		SSLBump(conn, r.URL.Host, user, authUser, r)
 		return
 	}
 
 	if r.Host == localServer {
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
-		conf.ServeMux.ServeHTTP(w, r)
+		getConfig().ServeMux.ServeHTTP(w, r)
 		return
 	}
 
@@ -290,7 +292,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
-		conf = nil // Allow it to be garbage-collected, since we won't use it any more.
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
@@ -308,12 +309,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	headerRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "disable-proxy-headers")
-	if headerRule.Action != "disable-proxy-headers" {
-		viaHosts := r.Header["Via"]
-		viaHosts = append(viaHosts, strings.TrimPrefix(r.Proto, "HTTP/")+" Redwood")
-		r.Header.Set("Via", strings.Join(viaHosts, ", "))
-		r.Header.Add("X-Forwarded-For", client)
+	{
+		conf := getConfig()
+		headerRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "disable-proxy-headers")
+		if headerRule.Action != "disable-proxy-headers" {
+			viaHosts := r.Header["Via"]
+			viaHosts = append(viaHosts, strings.TrimPrefix(r.Proto, "HTTP/")+" Redwood")
+			r.Header.Set("Via", strings.Join(viaHosts, ", "))
+			r.Header.Add("X-Forwarded-For", client)
+		}
 	}
 
 	// Limit Accept-Encoding header to encodings we can handle.
@@ -340,7 +344,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Accept-Encoding", strings.Join(specs, ", "))
 	}
 
-	conf.changeQuery(r.URL)
+	getConfig().changeQuery(r.URL)
 
 	var rt http.RoundTripper
 	switch {
@@ -366,7 +370,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		conf.showErrorPage(w, r, err)
+		showErrorPage(w, r, err)
 		log.Printf("error fetching %s: %s", r.URL, err)
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
@@ -390,23 +394,27 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respACLs := conf.ACLs.responseACLs(resp)
-	acls := unionACLSets(reqACLs, respACLs)
+	var acls map[string]bool
+	{
+		conf := getConfig()
+		respACLs := conf.ACLs.responseACLs(resp)
+		acls = unionACLSets(reqACLs, respACLs)
 
-	headerRule, _ = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "disable-proxy-headers")
-	if headerRule.Action != "disable-proxy-headers" {
-		viaHosts := resp.Header["Via"]
-		viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
-		resp.Header.Set("Via", strings.Join(viaHosts, ", "))
-	}
+		headerRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "disable-proxy-headers")
+		if headerRule.Action != "disable-proxy-headers" {
+			viaHosts := resp.Header["Via"]
+			viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
+			resp.Header.Set("Via", strings.Join(viaHosts, ", "))
+		}
 
-	if r.Method == "HEAD" {
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
-	} else {
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
-	}
-	if thisRule.Action == "" {
-		thisRule.Action = "allow"
+		if r.Method == "HEAD" {
+			thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
+		} else {
+			thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+		}
+		if thisRule.Action == "" {
+			thisRule.Action = "allow"
+		}
 	}
 
 	switch thisRule.Action {
@@ -423,7 +431,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	case "block":
-		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
+		showBlockPage(w, r, resp, user, tally, scores, thisRule)
 		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
 		return
 	case "block-invisible":
@@ -434,7 +442,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	lr := &io.LimitedReader{
 		R: resp.Body,
-		N: int64(conf.MaxContentScanSize),
+		N: int64(getConfig().MaxContentScanSize),
 	}
 	content, err := ioutil.ReadAll(lr)
 	if err == context.Canceled {
@@ -445,7 +453,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Servers that use broken chunked Transfer-Encoding can give us unexpected EOFs,
 		// even if we got all the content.
 		if err != io.ErrUnexpectedEOF {
-			conf.showErrorPage(w, r, err)
+			showErrorPage(w, r, err)
 			return
 		}
 	}
@@ -497,6 +505,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch thisRule.Action {
 	case "phrase-scan":
+		conf := getConfig()
 		contentType := resp.Header.Get("Content-Type")
 		_, cs, _ := charset.DetermineEncoding(content, contentType)
 		var doc *html.Node
@@ -587,6 +596,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "hash-image":
+		conf := getConfig()
 		img, _, err := image.Decode(bytes.NewReader(content))
 		if err != nil {
 			log.Printf("Error decoding image from %v: %v", r.URL, err)
@@ -602,21 +612,24 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	scores = conf.categoryScores(tally)
+	{
+		conf := getConfig()
+		scores = conf.categoryScores(tally)
 
-	contentRule, _ := conf.ChooseACLCategoryAction(acls, scores, 1, "log-content")
-	if contentRule.Action == "log-content" {
-		logContent(r.URL, content, scores)
-	}
+		contentRule, _ := conf.ChooseACLCategoryAction(acls, scores, 1, "log-content")
+		if contentRule.Action == "log-content" {
+			logContent(r.URL, content, scores)
+		}
 
-	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
-	if thisRule.Action == "" {
-		thisRule.Action = "allow"
+		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
+		if thisRule.Action == "" {
+			thisRule.Action = "allow"
+		}
 	}
 
 	switch thisRule.Action {
 	case "block":
-		conf.showBlockPage(w, r, resp, user, tally, scores, thisRule)
+		showBlockPage(w, r, resp, user, tally, scores, thisRule)
 		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
 		return
 	case "block-invisible":

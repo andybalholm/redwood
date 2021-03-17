@@ -328,7 +328,7 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Missing required proxy authentication from %v to %v (User-Agent=%q, domain=%s, port=%d)", r.RemoteAddr, r.URL, r.Header.Get("User-Agent"), domain, p.Port)
-	conf.send407(w)
+	send407(w)
 }
 
 var customPorts = make(map[int]*perUserProxy)

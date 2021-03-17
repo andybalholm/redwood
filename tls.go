@@ -111,8 +111,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}()
 
-	conf := getConfig()
-
 	obsoleteVersion := false
 	invalidSSL := false
 	// Read the client hello so that we can find out the name of the server (not
@@ -125,7 +123,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		} else if err == ErrObsoleteSSLVersion {
 			obsoleteVersion = true
-			if conf.BlockObsoleteSSL {
+			if getConfig().BlockObsoleteSSL {
 				conn.Close()
 				return
 			}
@@ -190,29 +188,35 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		cr = cr.WithContext(ctx)
 	}
 
-	tally := conf.URLRules.MatchingRules(cr.URL)
-	scores := conf.categoryScores(tally)
-	reqACLs := conf.ACLs.requestACLs(cr, authUser)
-	if invalidSSL {
-		reqACLs["invalid-ssl"] = true
+	var ar ACLActionRule
+	var ignored []string
+	var tally map[rule]int
+	var scores map[string]int
+	{
+		conf := getConfig()
+		tally = conf.URLRules.MatchingRules(cr.URL)
+		scores = conf.categoryScores(tally)
+		reqACLs := conf.ACLs.requestACLs(cr, authUser)
+		if invalidSSL {
+			reqACLs["invalid-ssl"] = true
+		}
+
+		possibleActions := []string{
+			"allow",
+			"block",
+		}
+		if conf.TLSReady && !obsoleteVersion && !invalidSSL {
+			possibleActions = append(possibleActions, "ssl-bump")
+		}
+
+		ar, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
+		logAccess(cr, nil, 0, false, user, tally, scores, ar, "", ignored)
 	}
 
-	possibleActions := []string{
-		"allow",
-		"block",
-	}
-	if conf.TLSReady && !obsoleteVersion && !invalidSSL {
-		possibleActions = append(possibleActions, "ssl-bump")
-	}
-
-	rule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-	logAccess(cr, nil, 0, false, user, tally, scores, rule, "", ignored)
-
-	switch rule.Action {
+	switch ar.Action {
 	case "allow", "":
-		conf = nil
 		upload, download := connectDirect(conn, serverAddr, clientHello)
-		logAccess(cr, nil, int(upload+download), false, user, tally, scores, rule, "", ignored)
+		logAccess(cr, nil, int(upload+download), false, user, tally, scores, ar, "", ignored)
 		return
 	case "block":
 		conn.Close()
@@ -227,7 +231,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	// notifyingConn.
 	closeChan := make(chan struct{})
 	server := &http.Server{
-		IdleTimeout: conf.CloseIdleConnections,
+		IdleTimeout: getConfig().CloseIdleConnections,
 		ConnState: func(conn net.Conn, state http.ConnState) {
 			switch state {
 			case http.StateClosed, http.StateHijacked:
@@ -240,7 +244,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		ServerName:         serverName,
 		InsecureSkipVerify: true,
 	}
-	if conf.HTTP2Upstream {
+	if getConfig().HTTP2Upstream {
 		serverConnConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 
@@ -250,11 +254,10 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		state := serverConn.ConnectionState()
 		serverCert := state.PeerCertificates[0]
 
-		valid := conf.validCert(serverCert, state.PeerCertificates[1:])
-		cert, err = imitateCertificate(serverCert, !valid, conf, sni)
+		valid := validCert(serverCert, state.PeerCertificates[1:])
+		cert, err = imitateCertificate(serverCert, !valid, sni)
 		if err != nil {
 			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
-			conf = nil
 			connectDirect(conn, serverAddr, clientHello)
 			return
 		}
@@ -278,7 +281,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 		}
 	} else {
-		cert, err = fakeCertificate(conf, sni)
+		cert, err = fakeCertificate(sni)
 		if err != nil {
 			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
 			conn.Close()
@@ -295,7 +298,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		rt:             rt,
 	}
 	tlsConfig := &tls.Config{
-		Certificates:             []tls.Certificate{cert, conf.TLSCert},
+		Certificates:             []tls.Certificate{cert, getConfig().TLSCert},
 		PreferServerCipherSuites: true,
 		CurvePreferences: []tls.CurveID{
 			tls.CurveP256,
@@ -303,12 +306,10 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		},
 	}
 
-	http2Downstream := conf.HTTP2Downstream && http2Support
+	http2Downstream := getConfig().HTTP2Downstream && http2Support
 	if http2Downstream {
 		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
-
-	conf = nil
 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, tlsConfig)
 	err = tlsConn.Handshake()
@@ -387,7 +388,8 @@ func (s *singleListener) Addr() net.Addr {
 // imitateCertificate returns a new TLS certificate that has most of the same
 // data as serverCert but is signed by Redwood's root certificate, or
 // self-signed.
-func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *config, sni string) (cert tls.Certificate, err error) {
+func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, sni string) (cert tls.Certificate, err error) {
+	conf := getConfig()
 	// Use a hash of the real certificate as the serial number.
 	h := md5.New()
 	h.Write(serverCert.Raw)
@@ -441,7 +443,8 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, conf *con
 }
 
 // fakeCertificate returns a fabricated certificate for the server identified by sni.
-func fakeCertificate(conf *config, sni string) (cert tls.Certificate, err error) {
+func fakeCertificate(sni string) (cert tls.Certificate, err error) {
+	conf := getConfig()
 	serial, err := rand.Int(rand.Reader, big.NewInt(1<<62))
 	if err != nil {
 		return tls.Certificate{}, err
@@ -472,7 +475,8 @@ func fakeCertificate(conf *config, sni string) (cert tls.Certificate, err error)
 	return newCert, nil
 }
 
-func (conf *config) validCert(cert *x509.Certificate, intermediates []*x509.Certificate) bool {
+func validCert(cert *x509.Certificate, intermediates []*x509.Certificate) bool {
+	conf := getConfig()
 	pool := certPoolWith(intermediates)
 	_, err := cert.Verify(x509.VerifyOptions{Intermediates: pool})
 	if err == nil {

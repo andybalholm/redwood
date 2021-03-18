@@ -5,6 +5,7 @@ require (
 	github.com/andybalholm/cascadia v1.0.0
 	github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b
 	github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a // indirect
+	github.com/baruwa-enterprise/clamd v1.0.1 // indirect
 	github.com/dlclark/regexp2 v1.1.6 // indirect
 	github.com/dop251/goja v0.0.0-20190301185519-64be363d126e
 	github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6

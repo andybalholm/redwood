@@ -407,11 +407,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			resp.Header.Set("Via", strings.Join(viaHosts, ", "))
 		}
 
-		if r.Method == "HEAD" {
-			thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
-		} else {
-			thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+		possibleActions := []string{"allow", "block", "block-invisible"}
+		if r.Method != "HEAD" {
+			possibleActions = append(possibleActions, "hash-image", "phrase-scan")
+			if conf.ClamAV != nil {
+				possibleActions = append(possibleActions, "virus-scan")
+			}
 		}
+
+		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, possibleActions...)
 		if thisRule.Action == "" {
 			thisRule.Action = "allow"
 		}
@@ -608,6 +612,25 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			distance := dhash.Distance(hash, h.Hash)
 			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
 				tally[rule{imageHash, h.String()}]++
+			}
+		}
+
+	case "virus-scan":
+		clam := getConfig().ClamAV
+		clamResponses, err := clam.ScanReader(r.Context(), bytes.NewReader(content))
+		if err != nil {
+			log.Printf("Error doing virus scan on %v: %v", r.URL, err)
+		}
+		for _, res := range clamResponses {
+			if res.Status == "FOUND" {
+				log.Printf("Detected virus in %v: %s", r.URL, res.Signature)
+				virusRule := ACLActionRule{
+					Action: "block",
+					Needed: []string{"virus", res.Signature},
+				}
+				showBlockPage(w, r, resp, user, tally, scores, virusRule)
+				logAccess(r, resp, len(content), false, user, tally, scores, virusRule, "", nil)
+				return
 			}
 		}
 	}

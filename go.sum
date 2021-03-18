@@ -8,6 +8,8 @@ github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b h1:/qKwj+YX2BKAQ
 github.com/andybalholm/dhash v0.0.0-20150501221755-25fc23433e5b/go.mod h1:pEJ3YFav0jhslvUtQoWYFursrHsi1J3WpvMP3Bk7aCU=
 github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a h1:yE4/B7ng2G9tr5DdT/x2bj3u6p3Rze2Ha/61eChret8=
 github.com/andybalholm/go-bit v0.0.0-20150501193155-34813fe0e46a/go.mod h1:xPmFQkJW5/HS/ZMM6soMdODwdIOO9zs3yAhksnFQJE0=
+github.com/baruwa-enterprise/clamd v1.0.1 h1:/Urmb7+snmNSTpklsXNh7sbMWAmJjp97g6B6zX9QU8c=
+github.com/baruwa-enterprise/clamd v1.0.1/go.mod h1:2fjN7vyA+9voVOtNf5dNGr8wsio6ezvuCPX8udrsDGA=
 github.com/dlclark/regexp2 v1.1.6 h1:CqB4MjHw0MFCDj+PHHjiESmHX+N7t0tJzKvC6M97BRg=
 github.com/dlclark/regexp2 v1.1.6/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
 github.com/dop251/goja v0.0.0-20190301185519-64be363d126e h1:tRjuynZo0xMi0l1ByvFH5/dgikEYA0PT7r8YPVHE9CU=
@@ -32,6 +34,7 @@ github.com/open-ch/ja3 v1.0.0 h1:7zHn2XQJ8XCADmyfGS101tOqPFhnHKWTb/6YXcg7l3o=
 github.com/open-ch/ja3 v1.0.0/go.mod h1:lTWgltvZDGQjIa/TjWTzfpCVa/eGP+szng2DWz9mAvk=
 github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0 h1:YKiss7ke35v5E9UlPd3ngR7hkc9iZA69cJom/hGjSiY=
 github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0/go.mod h1:KJG9tnsboL10GXkSb32JuAtzv6VdTHbtXn/sQYKmAC8=
+github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67 h1:ng3VDlRp5/DHpSWl02R4rM9I+8M2rhmsuLwAMmkLQWE=
 golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67/go.mod h1:6SG95UA2DQfeDnfUPMdvaQW0Q7yPrPDi9nlGo2tz2b4=
 golang.org/x/image v0.0.0-20190622003408-7e034cad6442 h1:KHkZ9SH+rcDwdj29lcYkks2agONXqNa8YkEGwGhY6Sg=

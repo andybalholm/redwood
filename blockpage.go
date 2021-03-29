@@ -157,6 +157,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 // showInvisibleBlock blocks the request with an invisible image.
 func showInvisibleBlock(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "image/gif")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusForbidden)
 	fmt.Fprint(w, transparent1x1)
 }
@@ -186,6 +187,7 @@ func (c *config) loadErrorPage(path string) error {
 // showErrorPage shows an error page for a request that failed (as we were
 // fetching it from the origin server).
 func showErrorPage(w http.ResponseWriter, r *http.Request, pageError error) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c := getConfig()
 	d := map[string]interface{}{
 		"url":   r.URL.String(),

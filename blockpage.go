@@ -83,6 +83,9 @@ func (c *config) aclDescriptions(rule ACLActionRule) []string {
 
 // showBlockPage shows a block page for a page that was blocked by an ACL.
 func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Redwood-Block-Page", "403 Access Denied")
+
 	c := getConfig()
 	switch {
 	case c.BlockTemplate != nil:

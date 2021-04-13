@@ -91,10 +91,25 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 		userAgent = req.Header.Get("User-Agent")
 	}
 
-	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")))
+	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp))
 
 	accessLog.Log(logLine)
 	return logLine
+}
+
+func downloadedFilename(resp *http.Response) string {
+	if resp == nil {
+		return ""
+	}
+	disposition := resp.Header.Get("Content-Disposition")
+	if disposition == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(disposition)
+	if err != nil {
+		return ""
+	}
+	return params["filename"]
 }
 
 func logTLS(user, serverAddr, serverName string, err error, cachedCert bool, tlsFingerprint string) {

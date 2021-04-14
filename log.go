@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/baruwa-enterprise/clamd"
 )
 
 // recording pages filtered to access log
@@ -61,7 +63,7 @@ func (l *CSVLog) Log(data []string) {
 	l.csv.Flush()
 }
 
-func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string) []string {
+func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string, clamdResponse []*clamd.Response) []string {
 	conf := getConfig()
 
 	modified := ""
@@ -91,7 +93,17 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned
 		userAgent = req.Header.Get("User-Agent")
 	}
 
-	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp))
+	var clamdStatus string
+	if len(clamdResponse) > 0 {
+		r := clamdResponse[0]
+		if r.Signature != "" {
+			clamdStatus = r.Status + " " + r.Signature
+		} else {
+			clamdStatus = r.Status
+		}
+	}
+
+	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp), clamdStatus)
 
 	accessLog.Log(logLine)
 	return logLine

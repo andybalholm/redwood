@@ -24,6 +24,7 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
+	"github.com/baruwa-enterprise/clamd"
 	"github.com/golang/gddo/httputil"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
@@ -261,11 +262,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "block":
 		showBlockPage(w, r, nil, user, tally, scores, thisRule)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		return
 	case "ssl-bump":
 		conn, err := newHijackedConn(w)
@@ -279,7 +280,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Host == localServer {
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		getConfig().ServeMux.ServeHTTP(w, r)
 		return
 	}
@@ -291,13 +292,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		connectDirect(conn, r.URL.Host, nil)
 		return
 	}
 
 	if r.Header.Get("Upgrade") == "websocket" {
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		h.makeWebsocketConnection(w, r)
 		return
 	}
@@ -372,7 +373,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		showErrorPage(w, r, err)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		return
 	}
 	defer resp.Body.Close()
@@ -428,7 +429,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored, nil)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
@@ -436,11 +437,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case "block":
 		showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored)
+		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		return
 	}
 
@@ -467,9 +468,30 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)
-		w.Write(content)
-		n, err := io.Copy(w, resp.Body)
-		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored)
+		virusChan := make(chan []*clamd.Response, 1)
+		var dest io.Writer = w
+		var destCloser io.Closer
+		if thisRule.Action == "virus-scan" {
+			// Although the response is too long for synchronous virus scanning, scan it anyway,
+			// so that we can log the result.
+			clam := getConfig().ClamAV
+			pr, pw := io.Pipe()
+			go func() {
+				clamResponses, err := clam.ScanReader(r.Context(), pr)
+				pr.CloseWithError(err)
+				virusChan <- clamResponses
+			}()
+			dest = io.MultiWriter(w, &swallowErrorsWriter{w: pw})
+			destCloser = pw
+		} else {
+			virusChan <- nil
+		}
+		dest.Write(content)
+		n, err := io.Copy(dest, resp.Body)
+		if destCloser != nil {
+			destCloser.Close()
+		}
+		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored, <-virusChan)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
@@ -507,6 +529,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var clamResponses []*clamd.Response
 	switch thisRule.Action {
 	case "phrase-scan":
 		conf := getConfig()
@@ -617,7 +640,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	case "virus-scan":
 		clam := getConfig().ClamAV
-		clamResponses, err := clam.ScanReader(r.Context(), bytes.NewReader(content))
+		clamResponses, err = clam.ScanReader(r.Context(), bytes.NewReader(content))
 		if err != nil {
 			log.Printf("Error doing virus scan on %v: %v", r.URL, err)
 		}
@@ -629,7 +652,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Needed: []string{"virus", res.Signature},
 				}
 				showBlockPage(w, r, resp, user, tally, scores, virusRule)
-				logAccess(r, resp, len(content), false, user, tally, scores, virusRule, "", nil)
+				logAccess(r, resp, len(content), false, user, tally, scores, virusRule, "", nil, clamResponses)
 				return
 			}
 		}
@@ -653,11 +676,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch thisRule.Action {
 	case "block":
 		showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
 		return
 	}
 
@@ -669,7 +692,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	copyResponseHeader(w, resp)
 	w.Write(content)
 
-	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored)
+	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
 }
 
 // copyResponseHeader writes resp's header and status code to w.
@@ -830,4 +853,20 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
+}
+
+// A swallowErrorsWriter wraps an io.Writer so that writes always "succeed".
+type swallowErrorsWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (s *swallowErrorsWriter) Write(p []byte) (n int, err error) {
+	if s.err == nil {
+		n, err = s.w.Write(p)
+		if err != nil {
+			s.err = err
+		}
+	}
+	return len(p), nil
 }

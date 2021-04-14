@@ -563,7 +563,8 @@ the User-Agent header (if `log-user-agent` is enabled),
 the HTTP version,
 the Referer header,
 the client platform (such as Windows or iPad, found in the User-Agent header),
-and the filename from the Content-Disposition header (for downloaded files).
+the filename from the Content-Disposition header (for downloaded files),
+and the virus-scan result.
 The content length is meaningful only if a phrase scan was performed.
 The page title is available only if a phrase scan was performed and
 `log-title` was enabled in the configuration (logging the page title

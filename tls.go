@@ -210,13 +210,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 
 		ar, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-		logAccess(cr, nil, 0, false, user, tally, scores, ar, "", ignored)
+		logAccess(cr, nil, 0, false, user, tally, scores, ar, "", ignored, nil)
 	}
 
 	switch ar.Action {
 	case "allow", "":
 		upload, download := connectDirect(conn, serverAddr, clientHello)
-		logAccess(cr, nil, int(upload+download), false, user, tally, scores, ar, "", ignored)
+		logAccess(cr, nil, int(upload+download), false, user, tally, scores, ar, "", ignored, nil)
 		return
 	case "block":
 		conn.Close()

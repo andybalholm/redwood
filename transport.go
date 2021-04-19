@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io"
 	"log"
 	"mime"
@@ -86,12 +87,43 @@ var clientWithExtraRootCerts = &http.Client{
 // A connTransport is an http.RoundTripper that uses a single network
 // connection.
 type connTransport struct {
-	Conn net.Conn
+	Conn *tls.Conn
 
 	br *bufio.Reader
 }
 
 func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	resp, err = ct.roundTrip(req)
+
+	if (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) && requestIsReplayable(req) {
+		// Retry with a new network connection.
+		if redialErr := ct.redial(req.Context()); redialErr == nil {
+			resp, err = ct.roundTrip(req)
+		}
+	}
+
+	return
+}
+
+// This is copied from http.Request.isReplayable, with a few changes to
+// eliminate unexported functions.
+func requestIsReplayable(r *http.Request) bool {
+	if r.Body == nil || r.Body == http.NoBody || r.GetBody != nil {
+		switch r.Method {
+		case "GET", "HEAD", "OPTIONS", "TRACE":
+			return true
+		}
+		// The Idempotency-Key, while non-standard, is widely used to
+		// mean a POST or other request is idempotent. See
+		// https://golang.org/issue/19943#issuecomment-421092421
+		if r.Header.Get("Idempotency-Key") != "" || r.Header.Get("X-Idempotency-Key") != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (ct *connTransport) roundTrip(req *http.Request) (resp *http.Response, err error) {
 	ctx := req.Context()
 	select {
 	case <-ctx.Done():
@@ -116,6 +148,26 @@ func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 		}
 	}
 	return resp, err
+}
+
+func (ct *connTransport) redial(ctx context.Context) error {
+	cs := ct.Conn.ConnectionState()
+	log.Printf("Redialing connection to %s (%s)", cs.ServerName, ct.Conn.RemoteAddr())
+	d := &tls.Dialer{
+		NetDialer: dialer,
+		Config: &tls.Config{
+			ServerName: cs.ServerName,
+			RootCAs:    certPoolWith(cs.PeerCertificates),
+		},
+	}
+	newConn, err := d.DialContext(ctx, "tcp", ct.Conn.RemoteAddr().String())
+	if err != nil {
+		return err
+	}
+	ct.Conn.Close()
+	ct.Conn = newConn.(*tls.Conn)
+	ct.br = bufio.NewReader(ct.Conn)
+	return nil
 }
 
 // A notifyingConn is a net.Conn that detects when the connection is no longer

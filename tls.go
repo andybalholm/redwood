@@ -277,7 +277,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 		} else {
 			rt = &connTransport{
-				Conn: nc,
+				Conn: serverConn,
 			}
 		}
 	} else {

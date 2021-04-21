@@ -87,18 +87,31 @@ var clientWithExtraRootCerts = &http.Client{
 // A connTransport is an http.RoundTripper that uses a single network
 // connection.
 type connTransport struct {
-	Conn *tls.Conn
+	Conn   net.Conn
+	Redial func(context.Context) (net.Conn, error)
 
-	br *bufio.Reader
+	br   *bufio.Reader
+	used bool
 }
 
 func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	if ct.used && !requestIsReplayable(req) {
+		// If the request is not replayable, make sure we have a new connection,
+		// not a reused one.
+		if redialErr := ct.redial(req.Context()); err != nil {
+			log.Printf("Error redialing connection to %s: %v", req.Host, redialErr)
+		}
+	}
+	ct.used = true
+
 	resp, err = ct.roundTrip(req)
 
 	if (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) && requestIsReplayable(req) {
 		// Retry with a new network connection.
 		if redialErr := ct.redial(req.Context()); redialErr == nil {
 			resp, err = ct.roundTrip(req)
+		} else {
+			log.Printf("Error redialing connection to %s: %v", req.Host, redialErr)
 		}
 	}
 
@@ -151,21 +164,15 @@ func (ct *connTransport) roundTrip(req *http.Request) (resp *http.Response, err 
 }
 
 func (ct *connTransport) redial(ctx context.Context) error {
-	cs := ct.Conn.ConnectionState()
-	log.Printf("Redialing connection to %s (%s)", cs.ServerName, ct.Conn.RemoteAddr())
-	d := &tls.Dialer{
-		NetDialer: dialer,
-		Config: &tls.Config{
-			ServerName: cs.ServerName,
-			RootCAs:    certPoolWith(cs.PeerCertificates),
-		},
+	if ct.Redial == nil {
+		return errors.New("no redial function provided")
 	}
-	newConn, err := d.DialContext(ctx, "tcp", ct.Conn.RemoteAddr().String())
+	newConn, err := ct.Redial(ctx)
 	if err != nil {
 		return err
 	}
 	ct.Conn.Close()
-	ct.Conn = newConn.(*tls.Conn)
+	ct.Conn = newConn
 	ct.br = bufio.NewReader(ct.Conn)
 	return nil
 }

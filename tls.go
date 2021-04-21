@@ -276,8 +276,20 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				rt = cc
 			}
 		} else {
+			d := &tls.Dialer{
+				NetDialer: dialer,
+				Config: &tls.Config{
+					ServerName: sni,
+					RootCAs:    certPoolWith(serverConn.ConnectionState().PeerCertificates),
+				},
+			}
+			addr := serverConn.RemoteAddr().String()
 			rt = &connTransport{
 				Conn: serverConn,
+				Redial: func(ctx context.Context) (net.Conn, error) {
+					log.Printf("Redialing connection to %s (%s)", sni, addr)
+					return d.DialContext(ctx, "tcp", addr)
+				},
 			}
 		}
 	} else {

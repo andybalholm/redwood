@@ -287,7 +287,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			rt = &connTransport{
 				Conn: serverConn,
 				Redial: func(ctx context.Context) (net.Conn, error) {
-					log.Printf("Redialing connection to %s (%s)", sni, addr)
+					logVerbose("redial", "Redialing connection to %s (%s)", sni, addr)
 					return d.DialContext(ctx, "tcp", addr)
 				},
 			}

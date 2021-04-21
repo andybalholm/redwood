@@ -102,6 +102,7 @@ type config struct {
 	LogUserAgent  bool
 	TLSLog        string
 	ContentLogDir string
+	Verbose       map[string]bool
 
 	CloseIdleConnections time.Duration
 	HTTP2Upstream        bool
@@ -140,6 +141,7 @@ func loadConfiguration() (*config, error) {
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]customPortInfo{},
 		UserForPort:          map[int]string{},
+		Verbose:              map[string]bool{},
 	}
 
 	c.flags.StringVar(&c.AccessLog, "access-log", "", "path to access-log file")
@@ -182,6 +184,10 @@ func loadConfiguration() (*config, error) {
 	c.flags.StringVar(&c.KeyFile, "tls-key", "", "path to TLS certificate key")
 	c.flags.StringVar(&c.TLSLog, "tls-log", "", "path to tls log file")
 	c.newActiveFlag("trusted-root", "", "path to file of additional trusted root certificates (in PEM format)", c.addTrustedRoots)
+	c.newActiveFlag("verbose", "", "category of extra log messages to print", func(s string) error {
+		c.Verbose[s] = true
+		return nil
+	})
 
 	c.stringListFlag("http-proxy", "address (host:port) to listen for proxy connections on", &c.ProxyAddresses)
 	c.stringListFlag("transparent-https", "address to listen for intercepted HTTPS connections on", &c.TransparentAddresses)

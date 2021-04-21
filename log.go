@@ -194,3 +194,11 @@ func listTally(tally map[string]int) string {
 	}
 	return b.String()
 }
+
+// logVerbose logs a message with log.Printf, but only if the --verbose flag
+// is turned on for the category.
+func logVerbose(messageCategory string, format string, v ...interface{}) {
+	if getConfig().Verbose[messageCategory] {
+		log.Printf(format, v...)
+	}
+}

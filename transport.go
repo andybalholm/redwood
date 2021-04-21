@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path"
 	"sync"
+	"syscall"
 	"time"
 
 	ftp "github.com/remogatto/ftpget"
@@ -99,19 +100,19 @@ func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 		// If the request is not replayable, make sure we have a new connection,
 		// not a reused one.
 		if redialErr := ct.redial(req.Context()); err != nil {
-			log.Printf("Error redialing connection to %s: %v", req.Host, redialErr)
+			logVerbose("redial", "Error redialing connection to %s: %v", req.Host, redialErr)
 		}
 	}
 	ct.used = true
 
 	resp, err = ct.roundTrip(req)
 
-	if (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) && requestIsReplayable(req) {
+	if (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.EPIPE)) && requestIsReplayable(req) {
 		// Retry with a new network connection.
 		if redialErr := ct.redial(req.Context()); redialErr == nil {
 			resp, err = ct.roundTrip(req)
 		} else {
-			log.Printf("Error redialing connection to %s: %v", req.Host, redialErr)
+			logVerbose("redial", "Error redialing connection to %s: %v", req.Host, redialErr)
 		}
 	}
 

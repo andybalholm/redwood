@@ -154,7 +154,7 @@ func (ct *connTransport) roundTrip(req *http.Request) (resp *http.Response, err 
 		ct.br = bufio.NewReader(ct.Conn)
 	}
 
-	resp, err = http.ReadResponse(ct.br, req)
+	resp, err = ReadResponse(ct.br, req)
 	if err == nil {
 		resp.Body = &bodyWithContext{
 			ReadCloser: resp.Body,

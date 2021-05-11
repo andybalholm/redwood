@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -107,7 +108,7 @@ func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 
 	resp, err = ct.roundTrip(req)
 
-	if (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.EPIPE)) && requestIsReplayable(req) {
+	if err != nil && shouldRedialForError(err) && requestIsReplayable(req) {
 		// Retry with a new network connection.
 		if redialErr := ct.redial(req.Context()); redialErr == nil {
 			resp, err = ct.roundTrip(req)
@@ -117,6 +118,21 @@ func (ct *connTransport) RoundTrip(req *http.Request) (resp *http.Response, err 
 	}
 
 	return
+}
+
+func shouldRedialForError(err error) bool {
+	switch {
+	case errors.Is(err, io.EOF):
+		return true
+	case errors.Is(err, io.ErrUnexpectedEOF):
+		return true
+	case errors.Is(err, syscall.EPIPE):
+		return true
+	case strings.Contains(err.Error(), "no renegotiation"):
+		return true
+	default:
+		return false
+	}
 }
 
 // This is copied from http.Request.isReplayable, with a few changes to

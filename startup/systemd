@@ -1,0 +1,14 @@
+[Unit]
+Description=Redwood Content Filter
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=redwood -pidfile /run/redwood.pid 2>>/var/log/redwood/errors.log
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-abort
+StandardOutput=null
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

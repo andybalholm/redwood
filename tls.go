@@ -283,6 +283,21 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 					RootCAs:    certPoolWith(serverConn.ConnectionState().PeerCertificates),
 				},
 			}
+			if !valid {
+				d.Config.InsecureSkipVerify = true
+				originalCert := serverConn.ConnectionState().PeerCertificates[0]
+				d.Config.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+					cert, err := x509.ParseCertificate(rawCerts[0])
+					if err != nil {
+						return err
+					}
+					if cert.Equal(originalCert) {
+						return nil
+					}
+					return errCertMismatch
+				}
+			}
+
 			addr := serverConn.RemoteAddr().String()
 			rt = &connTransport{
 				Conn: serverConn,
@@ -342,6 +357,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	// Wait for the connection to finish.
 	<-closeChan
 }
+
+var errCertMismatch = errors.New("server certificate changed between original connection and redial")
 
 func certPoolWith(certs []*x509.Certificate) *x509.CertPool {
 	pool := x509.NewCertPool()

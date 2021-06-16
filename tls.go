@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/open-ch/ja3"
+	"go.starlark.net/starlark"
 	"golang.org/x/net/http2"
 )
 
@@ -57,11 +58,11 @@ func (c *config) loadCertificate() {
 
 // connectDirect connects to serverAddr and copies data between it and conn.
 // extraData is sent to the server first.
-func connectDirect(conn net.Conn, serverAddr string, extraData []byte) (uploaded, downloaded int64) {
+func connectDirect(conn net.Conn, serverAddr string, extraData []byte, dialer *net.Dialer) (uploaded, downloaded int64) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
-	serverConn, err := net.Dial("tcp", serverAddr)
+	serverConn, err := dialer.Dial("tcp", serverAddr)
 	if err != nil {
 		log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
 		conn.Close()
@@ -111,6 +112,18 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}()
 
+	session := &TLSSession{
+		ServerAddr: serverAddr,
+		User:       authUser,
+	}
+
+	client := conn.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(client); err == nil {
+		session.ClientIP = host
+	} else {
+		session.ClientIP = client
+	}
+
 	obsoleteVersion := false
 	invalidSSL := false
 	// Read the client hello so that we can find out the name of the server (not
@@ -145,10 +158,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	if !obsoleteVersion && !invalidSSL {
 		if sn, ok := clientHelloServerName(clientHello); ok && sn != "" {
 			serverName = sn
-			serverAddr = net.JoinHostPort(sn, port)
 		}
 	}
-	sni := serverName
+	session.SNI = serverName
+	if session.ServerAddr == "" {
+		session.ServerAddr = net.JoinHostPort(serverName, "443")
+	}
 
 	if serverName == "" {
 		serverName = host
@@ -188,19 +203,43 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		cr = cr.WithContext(ctx)
 	}
 
-	var ar ACLActionRule
-	var ignored []string
 	var tally map[rule]int
 	var scores map[string]int
+	var reqACLs map[string]bool
 	{
 		conf := getConfig()
 		tally = conf.URLRules.MatchingRules(cr.URL)
 		scores = conf.categoryScores(tally)
-		reqACLs := conf.ACLs.requestACLs(cr, authUser)
+		reqACLs = conf.ACLs.requestACLs(cr, authUser)
 		if invalidSSL {
 			reqACLs["invalid-ssl"] = true
 		}
+	}
+	session.ACLs.data = reqACLs
+	session.Scores.data = scores
 
+	if f, ok := getConfig().StarlarkFunctions["ssl_bump"]; ok {
+		_, err := f(session)
+		if err != nil {
+			log.Printf("Error from Starlark ssl_bump function for connection to %s:\n%v", serverName, formatStarlarkError(err))
+		}
+	}
+
+	var ignored []string
+
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		DualStack: true,
+	}
+	if session.SourceIP != nil {
+		dialer.LocalAddr = &net.TCPAddr{
+			IP: session.SourceIP,
+		}
+	}
+
+	if session.Action.Action == "" {
+		conf := getConfig()
 		possibleActions := []string{
 			"allow",
 			"block",
@@ -209,14 +248,14 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			possibleActions = append(possibleActions, "ssl-bump")
 		}
 
-		ar, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-		logAccess(cr, nil, 0, false, user, tally, scores, ar, "", ignored, nil)
+		session.Action, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
 	}
+	logAccess(cr, nil, 0, false, user, tally, scores, session.Action, "", ignored, nil)
 
-	switch ar.Action {
+	switch session.Action.Action {
 	case "allow", "":
-		upload, download := connectDirect(conn, serverAddr, clientHello)
-		logAccess(cr, nil, int(upload+download), false, user, tally, scores, ar, "", ignored, nil)
+		upload, download := connectDirect(conn, session.ServerAddr, clientHello, dialer)
+		logAccess(cr, nil, int(upload+download), false, user, tally, scores, session.Action, "", ignored, nil)
 		return
 	case "block":
 		conn.Close()
@@ -241,24 +280,24 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	}
 
 	serverConnConfig := &tls.Config{
-		ServerName:         serverName,
+		ServerName:         session.SNI,
 		InsecureSkipVerify: true,
 	}
 	if getConfig().HTTP2Upstream {
 		serverConnConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 
-	serverConn, err := tls.DialWithDialer(dialer, "tcp", serverAddr, serverConnConfig)
+	serverConn, err := tls.DialWithDialer(dialer, "tcp", session.ServerAddr, serverConnConfig)
 	if err == nil {
 		defer serverConn.Close()
 		state := serverConn.ConnectionState()
 		serverCert := state.PeerCertificates[0]
 
 		valid := validCert(serverCert, state.PeerCertificates[1:])
-		cert, err = imitateCertificate(serverCert, !valid, sni)
+		cert, err = imitateCertificate(serverCert, !valid, session.SNI)
 		if err != nil {
-			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
-			connectDirect(conn, serverAddr, clientHello)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
+			connectDirect(conn, session.ServerAddr, clientHello, dialer)
 			return
 		}
 
@@ -279,7 +318,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			d := &tls.Dialer{
 				NetDialer: dialer,
 				Config: &tls.Config{
-					ServerName: sni,
+					ServerName: session.SNI,
 					RootCAs:    certPoolWith(serverConn.ConnectionState().PeerCertificates),
 				},
 			}
@@ -298,19 +337,18 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				}
 			}
 
-			addr := serverConn.RemoteAddr().String()
 			rt = &connTransport{
 				Conn: serverConn,
 				Redial: func(ctx context.Context) (net.Conn, error) {
-					logVerbose("redial", "Redialing connection to %s (%s)", sni, addr)
-					return d.DialContext(ctx, "tcp", addr)
+					logVerbose("redial", "Redialing connection to %s (%s)", session.SNI, session.ServerAddr)
+					return d.DialContext(ctx, "tcp", session.ServerAddr)
 				},
 			}
 		}
 	} else {
-		cert, err = fakeCertificate(sni)
+		cert, err = fakeCertificate(session.SNI)
 		if err != nil {
-			logTLS(user, serverAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
 			conn.Close()
 			return
 		}
@@ -341,12 +379,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, tlsConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, serverAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, tlsFingerprint)
+		logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, tlsFingerprint)
 		conn.Close()
 		return
 	}
 
-	logTLS(user, serverAddr, serverName, nil, false, tlsFingerprint)
+	logTLS(user, session.ServerAddr, serverName, nil, false, tlsFingerprint)
 
 	if http2Downstream {
 		http2.ConfigureServer(server, nil)
@@ -356,6 +394,134 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	// Wait for the connection to finish.
 	<-closeChan
+}
+
+// with the Starlark ssl_bump function.
+type TLSSession struct {
+	SNI        string
+	ServerAddr string
+	User       string
+	ClientIP   string
+
+	// SourceIP is the IP address of the network interface to be used fo dial
+	// the upstream connection.
+	SourceIP net.IP
+
+	ACLs   StringSet
+	Scores StringIntDict
+
+	Action ACLActionRule
+
+	frozen bool
+}
+
+func (s *TLSSession) String() string {
+	return fmt.Sprintf("TLSSession(%q, %q)", s.SNI, s.ServerAddr)
+}
+
+func (s *TLSSession) Type() string {
+	return "TLSSession"
+}
+
+func (s *TLSSession) Freeze() {
+	if !s.frozen {
+		s.frozen = true
+		s.ACLs.Freeze()
+		s.Scores.Freeze()
+	}
+}
+
+func (s *TLSSession) Truth() starlark.Bool {
+	return starlark.True
+}
+
+func (s *TLSSession) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: TLSSession")
+}
+
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "intercept", "bypass", "block", "acls", "scores", "source_ip"}
+
+func (s *TLSSession) AttrNames() []string {
+	return tlsSessionAttrNames
+}
+
+func (s *TLSSession) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "sni":
+		return starlark.String(s.SNI), nil
+	case "server_addr":
+		return starlark.String(s.ServerAddr), nil
+	case "user":
+		return starlark.String(s.User), nil
+	case "client_ip":
+		return starlark.String(s.ClientIP), nil
+	case "source_ip":
+		return starlark.String(s.SourceIP.String()), nil
+	case "acls":
+		return &s.ACLs, nil
+	case "scores":
+		return &s.Scores, nil
+
+	case "intercept", "bypass", "block":
+		return starlark.NewBuiltin(name, tlsSessionSetAction).BindReceiver(s), nil
+	default:
+		return nil, nil
+	}
+}
+
+func (s *TLSSession) SetField(name string, val starlark.Value) error {
+	if s.frozen {
+		return errors.New("can't set a field of a frozen object")
+	}
+
+	switch name {
+	case "sni":
+		return assignStarlarkString(&s.SNI, val)
+	case "server_addr":
+		return assignStarlarkString(&s.ServerAddr, val)
+	case "source_ip":
+		var ip string
+		if err := assignStarlarkString(&ip, val); err != nil {
+			return err
+		}
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
+			return fmt.Errorf("%q is not a valid IP address", ip)
+		}
+		s.SourceIP = parsed
+		return nil
+	default:
+		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of TLSSession", name))
+	}
+}
+
+func tlsSessionSetAction(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	s := fn.Receiver().(*TLSSession)
+	if s.frozen {
+		return nil, errors.New("can't set the action for a frozen TLSSession")
+	}
+
+	var reason string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 0, &reason); err != nil {
+		return nil, err
+	}
+
+	switch fn.Name() {
+	case "intercept":
+		s.Action.Action = "ssl-bump"
+	case "bypass":
+		s.Action.Action = "allow"
+	case "block":
+		s.Action.Action = "block"
+	}
+
+	if reason == "" {
+		s.Action.Needed = nil
+	} else {
+		s.Action.Needed = []string{reason}
+	}
+
+	return starlark.None, nil
 }
 
 var errCertMismatch = errors.New("server certificate changed between original connection and redial")

@@ -723,6 +723,11 @@ authenticated as that user.
 Scripting
 =========
 
+To further customize its behavior,
+Redwood lets you define scripts that are run at various points as it processes a request.
+The original JavaScript scripting is described below.
+The newer Starlark scripting is described in the file starlark.md.
+
 For more specialized rules than the ones that are supported by normal ACLs,
 you can write scripts (in JavaScript) that assign ACLs to requests.
 For example, suppose you want to block the sites that OpenDNS classifies

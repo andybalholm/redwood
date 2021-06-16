@@ -228,6 +228,19 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	reqScores := scores
 
+	if r.Method == "CONNECT" && getConfig().TLSReady {
+		// Go ahead and start the SSLBump process without checking the ACLs.
+		// They will be checked in sslBump anyway.
+		conn, err := newHijackedConn(w)
+		if err != nil {
+			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
+			panic(http.ErrAbortHandler)
+		}
+		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		SSLBump(conn, r.URL.Host, user, authUser, r)
+		return
+	}
+
 	var thisRule ACLActionRule
 	var ignored []string
 	var reqACLs map[string]bool
@@ -243,16 +256,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if authUser == "" && !h.TLS {
 			possibleActions = append(possibleActions, "require-auth")
 		}
-		if r.Method == "CONNECT" && conf.TLSReady {
-			possibleActions = append(possibleActions, "ssl-bump")
-		}
 
 		thisRule, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-		if r.Method == "CONNECT" && conf.TLSReady && thisRule.Action == "" {
-			// If the result is unclear, go ahead and start to bump the connection.
-			// The ACLs will be checked one more time anyway.
-			thisRule.Action = "ssl-bump"
-		}
 	}
 
 	switch thisRule.Action {
@@ -268,15 +273,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		showInvisibleBlock(w)
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
 		return
-	case "ssl-bump":
-		conn, err := newHijackedConn(w)
-		if err != nil {
-			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
-			panic(http.ErrAbortHandler)
-		}
-		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		SSLBump(conn, r.URL.Host, user, authUser, r)
-		return
 	}
 
 	if r.Host == localServer {
@@ -286,6 +282,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "CONNECT" {
+		// …and not TLSReady
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
@@ -293,7 +290,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
-		connectDirect(conn, r.URL.Host, nil)
+		connectDirect(conn, r.URL.Host, nil, dialer)
 		return
 	}
 

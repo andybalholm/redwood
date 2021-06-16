@@ -116,6 +116,9 @@ type config struct {
 	ClamdSocket string
 	ClamAV      *clamd.Client
 
+	StarlarkScripts   []string
+	StarlarkFunctions map[string]starlarkFunction
+
 	flags *flag.FlagSet
 }
 
@@ -196,6 +199,8 @@ func loadConfiguration() (*config, error) {
 	c.stringListFlag("public-suffix", "domain to treat as a public suffix", &c.PublicSuffixes)
 	c.stringListFlag("external-classifier", "HTTP API endpoint to check URLs against", &c.ExternalClassifiers)
 
+	c.stringListFlag("starlark-script", "Starlark script to load", &c.StarlarkScripts)
+
 	c.newActiveFlag("virtual-host", "", "a hostname substitution to apply to HTTP requests (e.g. -virtual-host me.local localhost)", func(val string) error {
 		f := strings.Fields(val)
 		if len(f) != 2 {
@@ -250,6 +255,8 @@ func loadConfiguration() (*config, error) {
 			log.Printf("Error connecting to clamd: %v", err)
 		}
 	}
+
+	c.loadStarlarkScripts()
 
 	return c, nil
 }

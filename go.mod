@@ -20,9 +20,9 @@ require (
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	go.starlark.net v0.0.0-20210416142453-1607a96e3d72
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
-	golang.org/x/image v0.0.0-20190622003408-7e034cad6442
+	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
-	golang.org/x/text v0.3.4
+	golang.org/x/text v0.3.6
 )
 
 go 1.15

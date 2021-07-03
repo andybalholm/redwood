@@ -25,6 +25,7 @@ import (
 
 	"github.com/open-ch/ja3"
 	"go.starlark.net/starlark"
+	"golang.org/x/crypto/cryptobyte"
 	"golang.org/x/net/http2"
 )
 
@@ -147,6 +148,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		}
 	}
+	clientHelloInfo, err := parseClientHello(clientHello)
 
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
@@ -156,8 +158,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	serverName := ""
 	if !obsoleteVersion && !invalidSSL {
-		if sn, ok := clientHelloServerName(clientHello); ok && sn != "" {
-			serverName = sn
+		if clientHelloInfo != nil && clientHelloInfo.ServerName != "" {
+			serverName = clientHelloInfo.ServerName
 		}
 	}
 	session.SNI = serverName
@@ -273,7 +275,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		IdleTimeout: getConfig().CloseIdleConnections,
 		ConnState: func(conn net.Conn, state http.ConnState) {
 			switch state {
-			case http.StateClosed, http.StateHijacked:
+			case http.StateClosed:
 				close(closeChan)
 			}
 		},
@@ -283,7 +285,15 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		ServerName:         session.SNI,
 		InsecureSkipVerify: true,
 	}
-	if getConfig().HTTP2Upstream {
+	clientSupportsHTTP2 := false
+	if clientHelloInfo != nil {
+		for _, p := range clientHelloInfo.SupportedProtos {
+			if p == "h2" {
+				clientSupportsHTTP2 = true
+			}
+		}
+	}
+	if clientSupportsHTTP2 && getConfig().HTTP2Upstream {
 		serverConnConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 
@@ -810,88 +820,99 @@ func readClientHello(conn net.Conn) (hello []byte, err error) {
 	return hello, nil
 }
 
-func clientHelloServerName(data []byte) (name string, ok bool) {
-	if len(data) < 5 {
-		return "", false
-	}
-	// Strip off the record header.
-	data = data[5:]
+// parseClientHello parses some useful information out of a ClientHello message.
+// It returns a ClientHelloInfo with only the following fields filled in:
+// ServerName and SupportedProtocols.
+func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
+	// The implementation of this function is based on crypto/tls.clientHelloMsg.unmarshal
+	var info tls.ClientHelloInfo
+	s := cryptobyte.String(data)
 
-	if len(data) < 42 {
-		return "", false
-	}
-
-	sessionIdLen := int(data[38])
-	if sessionIdLen > 32 || len(data) < 39+sessionIdLen {
-		return "", false
-	}
-	data = data[39+sessionIdLen:]
-	if len(data) < 2 {
-		return "", false
+	// Skip message type, length, version, and random.
+	if !s.Skip(43) {
+		return nil, errors.New("too short")
 	}
 
-	cipherSuiteLen := int(data[0])<<8 | int(data[1])
-	if cipherSuiteLen%2 == 1 || len(data) < 2+cipherSuiteLen {
-		return "", false
-	}
-	data = data[2+cipherSuiteLen:]
-	if len(data) < 1 {
-		return "", false
+	var sessionID cryptobyte.String
+	if !s.ReadUint8LengthPrefixed(&sessionID) {
+		return nil, errors.New("bad session ID")
 	}
 
-	compressionMethodsLen := int(data[0])
-	if len(data) < 1+compressionMethodsLen {
-		return "", false
-	}
-	data = data[1+compressionMethodsLen:]
-	if len(data) < 2 {
-		return "", false
+	var cipherSuites cryptobyte.String
+	if !s.ReadUint16LengthPrefixed(&cipherSuites) {
+		return nil, errors.New("bad cipher suites")
 	}
 
-	extensionsLength := int(data[0])<<8 | int(data[1])
-	data = data[2:]
-	if extensionsLength != len(data) {
-		return "", false
+	var compressionMethods cryptobyte.String
+	if !s.ReadUint8LengthPrefixed(&compressionMethods) {
+		return nil, errors.New("bad compression methods")
 	}
 
-	for len(data) != 0 {
-		if len(data) < 4 {
-			return "", false
-		}
-		extension := uint16(data[0])<<8 | uint16(data[1])
-		length := int(data[2])<<8 | int(data[3])
-		data = data[4:]
-		if len(data) < length {
-			return "", false
+	if s.Empty() {
+		// no extensions
+		return &info, nil
+	}
+
+	var extensions cryptobyte.String
+	if !s.ReadUint16LengthPrefixed(&extensions) || !s.Empty() {
+		return nil, errors.New("bad extensions")
+	}
+
+	for !extensions.Empty() {
+		var extension uint16
+		var extData cryptobyte.String
+		if !extensions.ReadUint16(&extension) || !extensions.ReadUint16LengthPrefixed(&extData) {
+			return nil, errors.New("bad extension")
 		}
 
-		if extension == 0 /* server name */ {
-			if length < 2 {
-				return "", false
+		switch extension {
+		case 0: // server name
+			var nameList cryptobyte.String
+			if !extData.ReadUint16LengthPrefixed(&nameList) || nameList.Empty() {
+				return nil, errors.New("bad name list")
 			}
-			numNames := int(data[0])<<8 | int(data[1])
-			d := data[2:]
-			for i := 0; i < numNames; i++ {
-				if len(d) < 3 {
-					return "", false
+			for !nameList.Empty() {
+				var nameType uint8
+				var serverName cryptobyte.String
+				if !nameList.ReadUint8(&nameType) || !nameList.ReadUint16LengthPrefixed(&serverName) || serverName.Empty() {
+					return nil, errors.New("bad entry in name list")
 				}
-				nameType := d[0]
-				nameLen := int(d[1])<<8 | int(d[2])
-				d = d[3:]
-				if len(d) < nameLen {
-					return "", false
+				if nameType != 0 {
+					continue
 				}
-				if nameType == 0 {
-					return string(d[:nameLen]), true
+				if info.ServerName != "" {
+					return nil, errors.New("multiple server names")
 				}
-				d = d[nameLen:]
+				info.ServerName = string(serverName)
+				if strings.HasSuffix(info.ServerName, ".") {
+					return nil, errors.New("server name ends with dot")
+				}
 			}
+
+		case 16: // ALPN
+			var protoList cryptobyte.String
+			if !extData.ReadUint16LengthPrefixed(&protoList) || protoList.Empty() {
+				return nil, errors.New("bad ALPN protocol list")
+			}
+			for !protoList.Empty() {
+				var proto cryptobyte.String
+				if !protoList.ReadUint8LengthPrefixed(&proto) || proto.Empty() {
+					return nil, errors.New("bad ALPN protocol list entry")
+				}
+				info.SupportedProtos = append(info.SupportedProtos, string(proto))
+			}
+
+		default:
+			// ignore
+			continue
 		}
 
-		data = data[length:]
+		if !extData.Empty() {
+			return nil, errors.New("extra data at end of extension")
+		}
 	}
 
-	return "", true
+	return &info, nil
 }
 
 func (c *config) addTrustedRoots(certPath string) error {

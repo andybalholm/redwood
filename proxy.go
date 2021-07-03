@@ -756,9 +756,12 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 		}
 		addr = net.JoinHostPort(addr, port)
 	}
-	var err error
+
+	var err error = nil
 	var serverConn net.Conn
-	if h.TLS {
+	if ct, ok := h.rt.(*connTransport); ok {
+		serverConn = ct.Conn
+	} else if h.TLS {
 		serverConn, err = dialWithExtraRootCerts("tcp", addr)
 	} else {
 		serverConn, err = net.Dial("tcp", addr)

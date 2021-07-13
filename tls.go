@@ -268,8 +268,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	var rt http.RoundTripper
 	var http2Support bool
 
-	// Set up the server here, so that we can call the Shutdown method from our
-	// notifyingConn.
 	closeChan := make(chan struct{})
 	server := &http.Server{
 		IdleTimeout: getConfig().CloseIdleConnections,
@@ -312,41 +310,49 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 
 		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
-		nc := &notifyingConn{
-			Conn: serverConn,
-			Done: func(error) {
-				go server.Shutdown(context.Background())
+
+		d := &tls.Dialer{
+			NetDialer: dialer,
+			Config: &tls.Config{
+				ServerName: session.SNI,
+				RootCAs:    certPoolWith(serverConn.ConnectionState().PeerCertificates),
 			},
+		}
+		if !valid {
+			d.Config.InsecureSkipVerify = true
+			originalCert := serverConn.ConnectionState().PeerCertificates[0]
+			d.Config.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				cert, err := x509.ParseCertificate(rawCerts[0])
+				if err != nil {
+					return err
+				}
+				if cert.Equal(originalCert) {
+					return nil
+				}
+				return errCertMismatch
+			}
 		}
 
 		if http2Support {
-			cc, err := http2Transport.NewClientConn(nc)
-			if err == nil {
-				rt = cc
+			d.Config.NextProtos = []string{"h2"}
+
+			var once sync.Once
+			rt = &http2.Transport{
+				DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+					var c net.Conn
+					once.Do(func() {
+						c = serverConn
+					})
+					if c != nil {
+						return c, nil
+					}
+					logVerbose("redial", "Redialing HTTP/2 connection to %s (%s)", session.SNI, session.ServerAddr)
+					return d.Dial("tcp", session.ServerAddr)
+				},
+				TLSClientConfig:            d.Config,
+				StrictMaxConcurrentStreams: true,
 			}
 		} else {
-			d := &tls.Dialer{
-				NetDialer: dialer,
-				Config: &tls.Config{
-					ServerName: session.SNI,
-					RootCAs:    certPoolWith(serverConn.ConnectionState().PeerCertificates),
-				},
-			}
-			if !valid {
-				d.Config.InsecureSkipVerify = true
-				originalCert := serverConn.ConnectionState().PeerCertificates[0]
-				d.Config.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-					cert, err := x509.ParseCertificate(rawCerts[0])
-					if err != nil {
-						return err
-					}
-					if cert.Equal(originalCert) {
-						return nil
-					}
-					return errCertMismatch
-				}
-			}
-
 			rt = &connTransport{
 				Conn: serverConn,
 				Redial: func(ctx context.Context) (net.Conn, error) {

@@ -9,7 +9,7 @@ import (
 
 // wordRune maps c into a reduced set of "word" characters.
 // If c is a letter, it returns it in lowercase.
-// It it it is a digit, it returns it unchanged.
+// If it is a digit, it returns it unchanged.
 // Otherwise it returns a space.
 func wordRune(c rune) rune {
 	switch {

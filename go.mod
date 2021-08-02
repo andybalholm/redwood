@@ -14,14 +14,15 @@ require (
 	github.com/klauspost/compress v1.4.1
 	github.com/klauspost/cpuid v1.2.0 // indirect
 	github.com/kylelemons/go-gypsy v0.0.0-20160905020020-08cad365cd28
-	github.com/miekg/dns v1.1.4
+	github.com/miekg/dns v1.1.43
 	github.com/open-ch/ja3 v1.0.0
 	github.com/qri-io/starlib v0.4.2
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	go.starlark.net v0.0.0-20210416142453-1607a96e3d72
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e
 	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
-	golang.org/x/net v0.0.0-20210614182718-04defd469f4e
+	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	golang.org/x/text v0.3.6
 )
 

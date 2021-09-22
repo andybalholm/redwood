@@ -50,6 +50,7 @@ type blockData struct {
 	Tally           string
 	Scores          string
 	RuleDescription string
+	Referer         string
 	Request         *http.Request
 	Response        *http.Response
 }
@@ -97,6 +98,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 			Scores:          listTally(scores),
 			Categories:      strings.Join(c.aclDescriptions(rule), ", "),
 			RuleDescription: rule.Description,
+			Referer:         r.Referer(),
 			Request:         r,
 			Response:        resp,
 		}
@@ -117,6 +119,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 			"scores":         scores,
 			"categories":     c.aclDescriptions(rule),
 			"method":         r.Method,
+			"referer":        r.Referer(),
 			"request-header": r.Header,
 		}
 		if resp != nil {

@@ -101,8 +101,9 @@ There are methods to get and set the URL’s query parameters:
 
 - `param("q")` returns the value of the `q` query parameter.
 
-- `set_param("q", "redwood")` sets the `q` parameter to "redwood",
+- `set_param(q="redwood")` sets the `q` parameter to "redwood",
   either adding it, or replacing an existing parameter.
+  Multiple parameters may be set at once: `set_param(q="redwood", safe="vss")`.
 
 - `delete_param("q")` removes the `q` query parameter. 
   Multiple parameters may be deleted at once: `delete_param("utm_content", "utm_medium")`.

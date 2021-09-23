@@ -1013,13 +1013,20 @@ func requestSetParam(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		return nil, errors.New("can't set query parameters for a frozen Request")
 	}
 
-	var name, value string
-	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 2, &name, &value); err != nil {
-		return nil, err
+	if len(kwargs) == 0 || len(args) > 0 {
+		return nil, errors.New(`set_param should be called with keyword arguments`)
 	}
 
 	q := r.Request.URL.Query()
-	q.Set(name, value)
+	for _, pair := range kwargs {
+		name := string(pair[0].(starlark.String))
+		switch val := pair[1].(type) {
+		case starlark.String:
+			q.Set(name, string(val))
+		default:
+			return nil, fmt.Errorf("parameters to set_param must be String, not %s", val.Type())
+		}
+	}
 	r.Request.URL.RawQuery = q.Encode()
 	return starlark.None, nil
 }

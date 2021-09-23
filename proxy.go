@@ -1030,13 +1030,15 @@ func requestDeleteParam(thread *starlark.Thread, fn *starlark.Builtin, args star
 		return nil, errors.New("can't delete query parameters for a frozen Request")
 	}
 
-	var name string
-	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &name); err != nil {
-		return nil, err
-	}
-
 	q := r.Request.URL.Query()
-	q.Del(name)
+	for _, name := range args {
+		switch name := name.(type) {
+		case starlark.String:
+			q.Del(string(name))
+		default:
+			return nil, fmt.Errorf("parameters to delete_param must be String, not %s", name.Type())
+		}
+	}
 	r.Request.URL.RawQuery = q.Encode()
 	return starlark.None, nil
 }

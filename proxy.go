@@ -929,7 +929,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "client_ip", "acls", "scores", "allow", "block", "block_invisible"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "client_ip", "acls", "scores", "allow", "block", "block_invisible"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -958,6 +958,8 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin("param", requestGetParam).BindReceiver(r), nil
 	case "set_param":
 		return starlark.NewBuiltin("set_param", requestSetParam).BindReceiver(r), nil
+	case "delete_param":
+		return starlark.NewBuiltin("delete_param", requestDeleteParam).BindReceiver(r), nil
 	case "allow", "block", "block_invisible":
 		return starlark.NewBuiltin(name, requestSetAction).BindReceiver(r), nil
 
@@ -998,7 +1000,11 @@ func requestGetParam(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 		return nil, err
 	}
 
-	return starlark.String(r.Request.URL.Query().Get(name)), nil
+	q := r.Request.URL.Query()
+	if !q.Has(name) {
+		return starlark.None, nil
+	}
+	return starlark.String(q.Get(name)), nil
 }
 
 func requestSetParam(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -1014,6 +1020,23 @@ func requestSetParam(thread *starlark.Thread, fn *starlark.Builtin, args starlar
 
 	q := r.Request.URL.Query()
 	q.Set(name, value)
+	r.Request.URL.RawQuery = q.Encode()
+	return starlark.None, nil
+}
+
+func requestDeleteParam(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Request)
+	if r.frozen {
+		return nil, errors.New("can't delete query parameters for a frozen Request")
+	}
+
+	var name string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &name); err != nil {
+		return nil, err
+	}
+
+	q := r.Request.URL.Query()
+	q.Del(name)
 	r.Request.URL.RawQuery = q.Encode()
 	return starlark.None, nil
 }

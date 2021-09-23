@@ -104,6 +104,8 @@ There are methods to get and set the URL’s query parameters:
 - `set_param("q", "redwood")` sets the `q` parameter to "redwood",
   either adding it, or replacing an existing parameter.
 
+- `delete_param("q")` removes the `q` query parameter
+
 `Request` also has methods to directly set what action Redwood will take for the request:
 
 - `allow`: don’t block the request (though it could still be blocked at the response stage).

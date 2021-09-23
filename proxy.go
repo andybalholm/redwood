@@ -28,6 +28,7 @@ import (
 	"github.com/golang/gddo/httputil"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
+	"go.starlark.net/starlark"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -99,6 +100,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	request := &Request{
+		Request: r,
+	}
+
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {
@@ -153,6 +158,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if authUser != "" {
 		user = authUser
 	}
+	request.User = authUser
+	request.ClientIP = client
 
 	// Handle IPv6 hostname without brackets in CONNECT request.
 	if r.Method == "CONNECT" {
@@ -192,6 +199,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.tlsFingerprint != "" {
 		r = r.WithContext(context.WithValue(r.Context(), tlsFingerprintKey{}, h.tlsFingerprint))
+		request.Request = r
 	}
 
 	tally := getConfig().URLRules.MatchingRules(r.URL)
@@ -227,6 +235,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reqScores := scores
+	request.Scores.data = scores
 
 	if r.Method == "CONNECT" && getConfig().TLSReady {
 		// Go ahead and start the SSLBump process without checking the ACLs.
@@ -247,17 +256,28 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	{
 		conf := getConfig()
 		reqACLs = conf.ACLs.requestACLs(r, authUser)
+		request.ACLs.data = reqACLs
 
-		possibleActions := []string{
-			"allow",
-			"block",
-			"block-invisible",
+		if f, ok := conf.StarlarkFunctions["filter_request"]; ok {
+			_, err := f(request)
+			if err != nil {
+				log.Printf("Error from Starlark filter_request function for %v:\n%v", r.URL, formatStarlarkError(err))
+			}
 		}
-		if authUser == "" && !h.TLS {
-			possibleActions = append(possibleActions, "require-auth")
-		}
+		thisRule = request.Action
 
-		thisRule, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
+		if thisRule.Action == "" {
+			possibleActions := []string{
+				"allow",
+				"block",
+				"block-invisible",
+			}
+			if authUser == "" && !h.TLS {
+				possibleActions = append(possibleActions, "require-auth")
+			}
+
+			thisRule, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
+		}
 	}
 
 	switch thisRule.Action {
@@ -869,4 +889,160 @@ func (s *swallowErrorsWriter) Write(p []byte) (n int, err error) {
 		}
 	}
 	return len(p), nil
+}
+
+// A Request is the parameter for the Starlark filter_request function.
+type Request struct {
+	Request  *http.Request
+	User     string
+	ClientIP string
+
+	ACLs   StringSet
+	Scores StringIntDict
+
+	Action ACLActionRule
+
+	frozen bool
+}
+
+func (r *Request) String() string {
+	return fmt.Sprintf("Request(%q)", r.Request.URL.String())
+}
+
+func (r *Request) Type() string {
+	return "Request"
+}
+
+func (r *Request) Freeze() {
+	if !r.frozen {
+		r.frozen = true
+		r.ACLs.Freeze()
+		r.Scores.Freeze()
+	}
+}
+
+func (r *Request) Truth() starlark.Bool {
+	return starlark.True
+}
+
+func (r *Request) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: Request")
+}
+
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "client_ip", "acls", "scores", "allow", "block", "block_invisible"}
+
+func (r *Request) AttrNames() []string {
+	return requestAttrNames
+}
+
+func (r *Request) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "url":
+		return starlark.String(r.Request.URL.String()), nil
+	case "method":
+		return starlark.String(r.Request.Method), nil
+	case "host":
+		return starlark.String(r.Request.Host), nil
+	case "path":
+		return starlark.String(r.Request.URL.Path), nil
+	case "user":
+		return starlark.String(r.User), nil
+	case "client_ip":
+		return starlark.String(r.ClientIP), nil
+	case "acls":
+		return &r.ACLs, nil
+	case "scores":
+		return &r.Scores, nil
+
+	case "param":
+		return starlark.NewBuiltin("param", requestGetParam).BindReceiver(r), nil
+	case "set_param":
+		return starlark.NewBuiltin("set_param", requestSetParam).BindReceiver(r), nil
+	case "allow", "block", "block_invisible":
+		return starlark.NewBuiltin(name, requestSetAction).BindReceiver(r), nil
+
+	default:
+		return nil, nil
+	}
+}
+
+func (r *Request) SetField(name string, val starlark.Value) error {
+	if r.frozen {
+		return errors.New("can't set a field of a frozen object")
+	}
+
+	switch name {
+	case "url":
+		var u string
+		if err := assignStarlarkString(&u, val); err != nil {
+			return err
+		}
+		parsed, err := url.Parse(u)
+		if err != nil {
+			return err
+		}
+		r.Request.URL = parsed
+		return nil
+	case "path":
+		return assignStarlarkString(&r.Request.URL.Path, val)
+	default:
+		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Request", name))
+	}
+}
+
+func requestGetParam(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Request)
+
+	var name string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &name); err != nil {
+		return nil, err
+	}
+
+	return starlark.String(r.Request.URL.Query().Get(name)), nil
+}
+
+func requestSetParam(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Request)
+	if r.frozen {
+		return nil, errors.New("can't set query parameters for a frozen Request")
+	}
+
+	var name, value string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 2, &name, &value); err != nil {
+		return nil, err
+	}
+
+	q := r.Request.URL.Query()
+	q.Set(name, value)
+	r.Request.URL.RawQuery = q.Encode()
+	return starlark.None, nil
+}
+
+func requestSetAction(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	s := fn.Receiver().(*Request)
+	if s.frozen {
+		return nil, errors.New("can't set the action for a frozen Request")
+	}
+
+	var reason string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 0, &reason); err != nil {
+		return nil, err
+	}
+
+	switch fn.Name() {
+	case "allow":
+		s.Action.Action = "allow"
+	case "block":
+		s.Action.Action = "block"
+	case "block_invisible":
+		s.Action.Action = "block-invisible"
+	}
+
+	if reason == "" {
+		s.Action.Needed = nil
+	} else {
+		s.Action.Needed = []string{reason}
+	}
+
+	return starlark.None, nil
 }

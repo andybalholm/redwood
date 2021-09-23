@@ -7,8 +7,6 @@ It loads Starlark script files specified with `starlark-script` in the configura
 collects the functions defined there, 
 and calls the functions with certain names as it processes a request.
 
-(At this point the only function that is supported is `ssl_bump`.)
-
 ## An Example
 
 If you want to use a Starlark script to turn on Google safe search,
@@ -60,7 +58,7 @@ The `TLSSession` object has the following attributes:
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
 
-TLSSession also has methods to directly set what action Redwood will take for the request:
+`TLSSession` also has methods to directly set what action Redwood will take for the request:
 
 - `intercept`: intercept the TLS session as a man-in-the-middle,
   to filter the HTTPS requests inside. (This is equivalent to the `ssl-bump` ACL action.)
@@ -68,6 +66,52 @@ TLSSession also has methods to directly set what action Redwood will take for th
 - `bypass`: don't intercept the TLS session; just connect directly to the origin server.
 
 - `block`: close the connection immediately.
+
+### `filter_request`
+
+For each HTTP request that Redwood receives, it calls the `filter_request` function.
+The function’s parameter isa `Request` object,
+which gives information about the request and lets you customize how Redwood handles it.
+
+The `Request` object has the following attributes:
+
+- `client_ip`: the client computer's IP address.
+
+- `user`: the username that the client has authenticated with.
+
+- `method`: the HTTP method (`GET`, `POST`, etc.) of the request.
+
+- `url`: the URL being fetched by the request.
+  It can be changed to fetch a different URL.
+  (But with HTTPS requests, you can't change what server it comes from;
+  that would need to be done at the `ssl_bump` stage.)
+
+- `host`: the server name from the URL or from the `Host` header.
+
+- `path`: the request’s URL path. It can be changed to fetch a different URL.
+
+- `acls`: a set containing the ACL tags that have been assigned to the request. 
+  If you modify the set, it can affect the action that Redwood takes.
+
+- `scores`: a dictionary containing the category scores that have been assigned to the request.
+  (The keys are strings, and the values are integers.)
+  If you modify the dictionary, it can affect the action that Redwood takes.
+
+There are methods to get and set the URL’s query parameters:
+
+- `param("q")` returns the value of the `q` query parameter.
+
+- `set_param("q", "redwood")` sets the `q` parameter to "redwood",
+  either adding it, or replacing an existing parameter.
+
+`Request` also has methods to directly set what action Redwood will take for the request:
+
+- `allow`: don’t block the request (though it could still be blocked at the response stage).
+
+- `block`: block the request and show a block page.
+
+- `block_invisible`: block the request and send a small transparent image instead of a block page.
+
 
 ## Language and Library Notes
 

@@ -412,7 +412,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	<-closeChan
 }
 
-// with the Starlark ssl_bump function.
+// A TLSSession is the parameter for the Starlark ssl_bump function.
 type TLSSession struct {
 	SNI        string
 	ServerAddr string

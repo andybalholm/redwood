@@ -108,6 +108,18 @@ There are methods to get and set the URL’s query parameters:
 - `delete_param("q")` removes the `q` query parameter. 
   Multiple parameters may be deleted at once: `delete_param("utm_content", "utm_medium")`.
 
+There are methods to get and set the request’s HTTP headers:
+
+- `header("User-Agent")` returns the value of the User-Agent header.
+
+- `set_header(user_agent="Mozilla")` sets the User-Agent header to "Mozilla".
+  Note that underscores are used instead of hyphens in the header name, 
+  to make the syntax work for keyword parameters.
+  Multiple headers may be set at once.
+
+- `delete_header("User-Agent")` removes the User-Agent header.
+  Multiple headers may be deleted at once.
+
 `Request` also has methods to directly set what action Redwood will take for the request:
 
 - `allow`: don’t block the request (though it could still be blocked at the response stage).

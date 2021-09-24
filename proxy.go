@@ -929,7 +929,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "client_ip", "acls", "scores", "allow", "block", "block_invisible"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "header", "set_header", "delete_header", "client_ip", "acls", "scores", "allow", "block", "block_invisible"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -960,6 +960,14 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin("set_param", requestSetParam).BindReceiver(r), nil
 	case "delete_param":
 		return starlark.NewBuiltin("delete_param", requestDeleteParam).BindReceiver(r), nil
+
+	case "header":
+		return starlark.NewBuiltin("header", requestGetHeader).BindReceiver(r), nil
+	case "set_header":
+		return starlark.NewBuiltin("set_header", requestSetHeader).BindReceiver(r), nil
+	case "delete_header":
+		return starlark.NewBuiltin("delete_header", requestDeleteHeader).BindReceiver(r), nil
+
 	case "allow", "block", "block_invisible":
 		return starlark.NewBuiltin(name, requestSetAction).BindReceiver(r), nil
 
@@ -1047,6 +1055,63 @@ func requestDeleteParam(thread *starlark.Thread, fn *starlark.Builtin, args star
 		}
 	}
 	r.Request.URL.RawQuery = q.Encode()
+	return starlark.None, nil
+}
+
+func requestGetHeader(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Request)
+
+	var name string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &name); err != nil {
+		return nil, err
+	}
+
+	values := r.Request.Header.Values(name)
+	if len(values) == 0 {
+		return starlark.None, nil
+	}
+	return starlark.String(values[0]), nil
+}
+
+func requestSetHeader(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Request)
+	if r.frozen {
+		return nil, errors.New("can't set headers for a frozen Request")
+	}
+
+	if len(kwargs) == 0 || len(args) > 0 {
+		return nil, errors.New(`set_header should be called with keyword arguments`)
+	}
+
+	h := r.Request.Header
+	for _, pair := range kwargs {
+		name := string(pair[0].(starlark.String))
+		name = strings.Replace(name, "_", "-", -1)
+		switch val := pair[1].(type) {
+		case starlark.String:
+			h.Set(name, string(val))
+		default:
+			return nil, fmt.Errorf("parameters to set_header must be String, not %s", val.Type())
+		}
+	}
+	return starlark.None, nil
+}
+
+func requestDeleteHeader(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Request)
+	if r.frozen {
+		return nil, errors.New("can't delete headers for a frozen Request")
+	}
+
+	h := r.Request.Header
+	for _, name := range args {
+		switch name := name.(type) {
+		case starlark.String:
+			h.Del(string(name))
+		default:
+			return nil, fmt.Errorf("headereters to delete_header must be String, not %s", name.Type())
+		}
+	}
 	return starlark.None, nil
 }
 

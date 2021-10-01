@@ -22,9 +22,10 @@ import (
 // recording pages filtered to access log
 
 var (
-	accessLog  CSVLog
-	tlsLog     CSVLog
-	contentLog CSVLog
+	accessLog   CSVLog
+	tlsLog      CSVLog
+	contentLog  CSVLog
+	starlarkLog CSVLog
 )
 
 type CSVLog struct {

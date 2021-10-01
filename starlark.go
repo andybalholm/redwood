@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"time"
 
 	"github.com/qri-io/starlib/bsoup"
 	"github.com/qri-io/starlib/encoding/base64"
@@ -17,7 +18,7 @@ import (
 	"github.com/qri-io/starlib/re"
 	"go.starlark.net/lib/json"
 	"go.starlark.net/lib/math"
-	"go.starlark.net/lib/time"
+	starlark_time "go.starlark.net/lib/time"
 	"go.starlark.net/repl"
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
@@ -32,7 +33,7 @@ func init() {
 	resolve.AllowGlobalReassign = true
 
 	starlark.Universe["json"] = json.Module
-	starlark.Universe["time"] = time.Module
+	starlark.Universe["time"] = starlark_time.Module
 	starlark.Universe["math"] = math.Module
 
 	for name, loader := range starlib {
@@ -66,7 +67,7 @@ type starlarkFunction func(...starlark.Value) (starlark.Value, error)
 func newStarlarkThread() *starlark.Thread {
 	return &starlark.Thread{
 		Print: func(t *starlark.Thread, msg string) {
-			log.Println(msg)
+			starlarkLog.Log([]string{time.Now().Format("2006-01-02 15:04:05.000000"), "print", msg})
 		},
 	}
 }
@@ -107,6 +108,10 @@ func formatStarlarkError(err error) string {
 	default:
 		return err.Error()
 	}
+}
+
+func logStarlarkError(err error) {
+	starlarkLog.Log([]string{time.Now().Format("2006-01-02 15:04:05.000000"), "error", formatStarlarkError(err)})
 }
 
 func assignStarlarkString(dest *string, val starlark.Value) error {

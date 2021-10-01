@@ -223,7 +223,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	if f, ok := getConfig().StarlarkFunctions["ssl_bump"]; ok {
 		_, err := f(session)
 		if err != nil {
-			log.Printf("Error from Starlark ssl_bump function for connection to %s:\n%v", serverName, formatStarlarkError(err))
+			logStarlarkError(err)
 		}
 	}
 

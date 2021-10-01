@@ -261,7 +261,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if f, ok := conf.StarlarkFunctions["filter_request"]; ok {
 			_, err := f(request)
 			if err != nil {
-				log.Printf("Error from Starlark filter_request function for %v:\n%v", r.URL, formatStarlarkError(err))
+				logStarlarkError(err)
 			}
 		}
 		thisRule = request.Action

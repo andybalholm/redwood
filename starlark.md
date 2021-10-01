@@ -137,6 +137,9 @@ Redwood enables all the optional features (set, lambda, recursion, and reassigni
 It imports the `json`, `math`, and `time` modules that are available in the Starlark REPL,
 and several modules from github.com/qri-io/starlib (`base64`, `bsoup`, `csv`, `hash`, `html`, `http`, `re`, and `yaml`).
 
+The output from Starlark functions (`print` statements and error tracebacks)
+goes to a CSV log file specified with the `starlark-log` configuration option.
+
 ### Predefined Functions
 
 - `lookup_host`: does a DNS lookup and returns the IP address.

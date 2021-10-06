@@ -36,46 +36,46 @@ func runURLTest(u string) {
 	fmt.Println("URL:", URL)
 	fmt.Println()
 
-	tally := conf.URLRules.MatchingRules(URL)
-	scores := conf.categoryScores(tally)
+	request := &Request{
+		Request: &http.Request{
+			Method: "GET",
+			URL:    URL,
+			Header: make(http.Header),
+		},
+	}
 
-	if len(tally) == 0 {
+	filterRequest(request, false)
+
+	if len(request.Tally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
 		fmt.Println("The following URL rules match:")
-		for s, _ := range tally {
+		for s, _ := range request.Tally {
 			fmt.Println(s)
 		}
 	}
 
-	if len(scores) > 0 {
+	if len(request.Scores.data) > 0 {
 		fmt.Println()
 		fmt.Println("The request has the following category scores:")
-		printSortedTally(scores)
+		printSortedTally(request.Scores.data)
 	}
 
-	req := &http.Request{
-		Method: "GET",
-		URL:    URL,
-		Header: make(http.Header),
-	}
-	reqACLs := conf.ACLs.requestACLs(req, "")
-	if len(reqACLs) > 0 {
+	if len(request.ACLs.data) > 0 {
 		fmt.Println()
 		fmt.Println("The request matches the following ACLs:")
-		for acl := range reqACLs {
+		for acl := range request.ACLs.data {
 			fmt.Println(acl)
 		}
 	}
 
-	thisRule, ignored := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "allow", "block", "block-invisible")
 	fmt.Println()
-	if thisRule.Action == "" {
+	if request.Action.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
 	} else {
-		fmt.Println("Triggered rule:", thisRule.Action, thisRule.Conditions())
-		if len(ignored) > 0 {
-			fmt.Println("Ignored categories:", strings.Join(ignored, ", "))
+		fmt.Println("Triggered rule:", request.Action.Action, request.Action.Conditions())
+		if len(request.Ignored) > 0 {
+			fmt.Println("Ignored categories:", strings.Join(request.Ignored, ", "))
 		}
 	}
 
@@ -86,7 +86,7 @@ func runURLTest(u string) {
 
 	fmt.Println()
 	fmt.Println("Downloading content...")
-	resp, err := http.DefaultTransport.RoundTrip(req)
+	resp, err := http.DefaultTransport.RoundTrip(request.Request)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -97,7 +97,7 @@ func runURLTest(u string) {
 	fmt.Println()
 
 	respACLs := conf.ACLs.responseACLs(resp)
-	acls := unionACLSets(reqACLs, respACLs)
+	acls := unionACLSets(request.ACLs.data, respACLs)
 
 	if len(respACLs) > 0 {
 		fmt.Println("The response matches the following ACLs:")
@@ -107,7 +107,7 @@ func runURLTest(u string) {
 		fmt.Println()
 	}
 
-	thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
+	thisRule, ignored := conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, "allow", "block", "block-invisible", "hash-image", "phrase-scan")
 
 	if thisRule.Action == "" {
 		fmt.Println("No ACL rule was triggered.")
@@ -122,6 +122,11 @@ func runURLTest(u string) {
 		return
 	}
 	fmt.Println()
+
+	tally := make(map[rule]int)
+	for k, v := range request.Tally {
+		tally[k] = v
+	}
 
 	contentType := resp.Header.Get("Content-Type")
 
@@ -171,7 +176,7 @@ func runURLTest(u string) {
 		}
 	}
 
-	scores = conf.categoryScores(tally)
+	scores := conf.categoryScores(tally)
 
 	if len(scores) > 0 {
 		fmt.Println()

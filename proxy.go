@@ -100,10 +100,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request := &Request{
-		Request: r,
-	}
-
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {
@@ -158,8 +154,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if authUser != "" {
 		user = authUser
 	}
-	request.User = authUser
-	request.ClientIP = client
 
 	// Handle IPv6 hostname without brackets in CONNECT request.
 	if r.Method == "CONNECT" {
@@ -199,43 +193,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.tlsFingerprint != "" {
 		r = r.WithContext(context.WithValue(r.Context(), tlsFingerprintKey{}, h.tlsFingerprint))
-		request.Request = r
 	}
-
-	tally := getConfig().URLRules.MatchingRules(r.URL)
-	scores := getConfig().categoryScores(tally)
-
-	for _, classifier := range getConfig().ExternalClassifiers {
-		v := make(url.Values)
-		v.Set("url", r.URL.String())
-		v.Set("method", r.Method)
-		cr, err := clientWithExtraRootCerts.PostForm(classifier, v)
-		if err != nil {
-			log.Printf("Error checking external-classifier (%s): %v", classifier, err)
-			continue
-		}
-		if cr.StatusCode != 200 {
-			log.Printf("Bad HTTP status checking external-classifier (%s): %s", classifier, cr.Status)
-			continue
-		}
-		jd := json.NewDecoder(cr.Body)
-		externalScores := make(map[string]int)
-		err = jd.Decode(&externalScores)
-		cr.Body.Close()
-		if err != nil {
-			log.Printf("Error decoding response from external-classifier (%s): %v", classifier, err)
-			continue
-		}
-		if scores == nil {
-			scores = make(map[string]int)
-		}
-		for k, v := range externalScores {
-			scores[k] += v
-		}
-	}
-
-	reqScores := scores
-	request.Scores.data = scores
 
 	if r.Method == "CONNECT" && getConfig().TLSReady {
 		// Go ahead and start the SSLBump process without checking the ACLs.
@@ -250,48 +208,31 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var thisRule ACLActionRule
-	var ignored []string
-	var reqACLs map[string]bool
-	{
-		conf := getConfig()
-		reqACLs = conf.ACLs.requestACLs(r, authUser)
-		request.ACLs.data = reqACLs
-
-		callStarlarkFunctions("filter_request", request)
-
-		thisRule = request.Action
-		if thisRule.Action == "" {
-			possibleActions := []string{
-				"allow",
-				"block",
-				"block-invisible",
-			}
-			if authUser == "" && !h.TLS {
-				possibleActions = append(possibleActions, "require-auth")
-			}
-
-			thisRule, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-		}
+	request := &Request{
+		Request:  r,
+		User:     authUser,
+		ClientIP: client,
 	}
 
-	switch thisRule.Action {
+	filterRequest(request, !h.TLS)
+
+	switch request.Action.Action {
 	case "require-auth":
 		send407(w)
 		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
 		return
 	case "block":
-		showBlockPage(w, r, nil, user, tally, scores, thisRule)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		showBlockPage(w, r, nil, user, request.Tally, request.Scores.data, request.Action)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
 		return
 	}
 
 	if r.Host == localServer {
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
 		getConfig().ServeMux.ServeHTTP(w, r)
 		return
 	}
@@ -304,13 +245,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
 		connectDirect(conn, r.URL.Host, nil, dialer)
 		return
 	}
 
 	if r.Header.Get("Upgrade") == "websocket" {
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
 		h.makeWebsocketConnection(w, r)
 		return
 	}
@@ -324,7 +265,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	{
 		conf := getConfig()
-		headerRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "disable-proxy-headers")
+		headerRule, _ := conf.ChooseACLCategoryAction(request.ACLs.data, request.Scores.data, conf.Threshold, "disable-proxy-headers")
 		if headerRule.Action != "disable-proxy-headers" {
 			viaHosts := r.Header["Via"]
 			viaHosts = append(viaHosts, strings.TrimPrefix(r.Proto, "HTTP/")+" Redwood")
@@ -385,7 +326,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		showErrorPage(w, r, err)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
 		return
 	}
 	defer resp.Body.Close()
@@ -408,12 +349,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var acls map[string]bool
+	var thisRule ACLActionRule
+	var ignored []string
 	{
 		conf := getConfig()
 		respACLs := conf.ACLs.responseACLs(resp)
-		acls = unionACLSets(reqACLs, respACLs)
+		acls = unionACLSets(request.ACLs.data, respACLs)
 
-		headerRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "disable-proxy-headers")
+		headerRule, _ := conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, "disable-proxy-headers")
 		if headerRule.Action != "disable-proxy-headers" {
 			viaHosts := resp.Header["Via"]
 			viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
@@ -428,7 +371,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, possibleActions...)
+		thisRule, ignored = conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, possibleActions...)
 		if thisRule.Action == "" {
 			thisRule.Action = "allow"
 		}
@@ -441,20 +384,25 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
-		logAccess(r, resp, int(n), false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, resp, int(n), false, user, request.Tally, request.Scores.data, thisRule, "", ignored, nil)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
 		}
 		return
 	case "block":
-		showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		showBlockPage(w, r, resp, user, request.Tally, request.Scores.data, thisRule)
+		logAccess(r, resp, 0, false, user, request.Tally, request.Scores.data, thisRule, "", ignored, nil)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, tally, scores, thisRule, "", ignored, nil)
+		logAccess(r, resp, 0, false, user, request.Tally, request.Scores.data, thisRule, "", ignored, nil)
 		return
+	}
+
+	tally := make(map[rule]int)
+	for k, v := range request.Tally {
+		tally[k] = v
 	}
 
 	lr := &io.LimitedReader{
@@ -503,7 +451,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if destCloser != nil {
 			destCloser.Close()
 		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, scores, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored, <-virusChan)
+		logAccess(r, resp, int(n)+len(content), false, user, tally, request.Scores.data, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored, <-virusChan)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
@@ -573,14 +521,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if strings.Contains(contentType, "html") {
 			aclsWithCategories := copyACLSet(acls)
-			for name, score := range reqScores {
+			for name, score := range request.Scores.data {
 				if conf.Categories[name].action == ACL && score > 0 {
 					aclsWithCategories[name] = true
 				}
 			}
 			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, aclsWithCategories, &doc)
 
-			censorRule, _ := conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "censor-words")
+			censorRule, _ := conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, "censor-words")
 			if censorRule.Action == "censor-words" {
 				if doc == nil {
 					doc, _ = parseHTML(content, cs)
@@ -663,13 +611,14 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Action: "block",
 					Needed: []string{"virus", res.Signature},
 				}
-				showBlockPage(w, r, resp, user, tally, scores, virusRule)
-				logAccess(r, resp, len(content), false, user, tally, scores, virusRule, "", nil, clamResponses)
+				showBlockPage(w, r, resp, user, tally, request.Scores.data, virusRule)
+				logAccess(r, resp, len(content), false, user, tally, request.Scores.data, virusRule, "", nil, clamResponses)
 				return
 			}
 		}
 	}
 
+	var scores map[string]int
 	{
 		conf := getConfig()
 		scores = conf.categoryScores(tally)
@@ -705,6 +654,60 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(content)
 
 	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
+}
+
+func filterRequest(req *Request, checkAuth bool) {
+	r := req.Request
+
+	req.Tally = getConfig().URLRules.MatchingRules(r.URL)
+	req.Scores.data = getConfig().categoryScores(req.Tally)
+
+	for _, classifier := range getConfig().ExternalClassifiers {
+		v := make(url.Values)
+		v.Set("url", r.URL.String())
+		v.Set("method", r.Method)
+		cr, err := clientWithExtraRootCerts.PostForm(classifier, v)
+		if err != nil {
+			log.Printf("Error checking external-classifier (%s): %v", classifier, err)
+			continue
+		}
+		if cr.StatusCode != 200 {
+			log.Printf("Bad HTTP status checking external-classifier (%s): %s", classifier, cr.Status)
+			continue
+		}
+		jd := json.NewDecoder(cr.Body)
+		externalScores := make(map[string]int)
+		err = jd.Decode(&externalScores)
+		cr.Body.Close()
+		if err != nil {
+			log.Printf("Error decoding response from external-classifier (%s): %v", classifier, err)
+			continue
+		}
+		if req.Scores.data == nil {
+			req.Scores.data = make(map[string]int)
+		}
+		for k, v := range externalScores {
+			req.Scores.data[k] += v
+		}
+	}
+
+	req.ACLs.data = getConfig().ACLs.requestACLs(r, req.User)
+
+	callStarlarkFunctions("filter_request", req)
+
+	if req.Action.Action == "" {
+		possibleActions := []string{
+			"allow",
+			"block",
+			"block-invisible",
+		}
+		if req.User == "" && checkAuth {
+			possibleActions = append(possibleActions, "require-auth")
+		}
+
+		conf := getConfig()
+		req.Action, req.Ignored = conf.ChooseACLCategoryAction(req.ACLs.data, req.Scores.data, conf.Threshold, possibleActions...)
+	}
 }
 
 // copyResponseHeader writes resp's header and status code to w.
@@ -896,6 +899,9 @@ type Request struct {
 	Scores StringIntDict
 
 	Action ACLActionRule
+
+	Tally   map[rule]int
+	Ignored []string
 
 	frozen bool
 }

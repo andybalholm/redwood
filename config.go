@@ -117,7 +117,7 @@ type config struct {
 	ClamAV      *clamd.Client
 
 	StarlarkScripts   []string
-	StarlarkFunctions map[string]starlarkFunction
+	StarlarkFunctions map[string][]starlarkFunction
 	StarlarkLog       string
 
 	flags *flag.FlagSet

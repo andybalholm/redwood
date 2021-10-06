@@ -6,6 +6,8 @@ Redwood uses the Go implementation from https://github.com/google/starlark-go.
 It loads Starlark script files specified with `starlark-script` in the configuration,
 collects the functions defined there, 
 and calls the functions with certain names as it processes a request.
+If there are multiple functions defined with the same name (in separate files),
+they will be called in the order they were defined.
 
 ## An Example
 

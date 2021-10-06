@@ -258,14 +258,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reqACLs = conf.ACLs.requestACLs(r, authUser)
 		request.ACLs.data = reqACLs
 
-		if f, ok := conf.StarlarkFunctions["filter_request"]; ok {
-			_, err := f(request)
-			if err != nil {
-				logStarlarkError(err)
-			}
-		}
-		thisRule = request.Action
+		callStarlarkFunctions("filter_request", request)
 
+		thisRule = request.Action
 		if thisRule.Action == "" {
 			possibleActions := []string{
 				"allow",

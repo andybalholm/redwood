@@ -220,13 +220,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	session.ACLs.data = reqACLs
 	session.Scores.data = scores
 
-	if f, ok := getConfig().StarlarkFunctions["ssl_bump"]; ok {
-		_, err := f(session)
-		if err != nil {
-			logStarlarkError(err)
-		}
-	}
-
+	callStarlarkFunctions("ssl_bump", session)
 	var ignored []string
 
 	dialer := &net.Dialer{

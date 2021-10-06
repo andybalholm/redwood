@@ -74,7 +74,7 @@ func newStarlarkThread() *starlark.Thread {
 
 func (c *config) loadStarlarkScripts() {
 	if c.StarlarkFunctions == nil {
-		c.StarlarkFunctions = make(map[string]starlarkFunction)
+		c.StarlarkFunctions = make(map[string][]starlarkFunction)
 	}
 
 	thread := newStarlarkThread()
@@ -90,13 +90,19 @@ func (c *config) loadStarlarkScripts() {
 		// Collect the functions defined by the script.
 		for k, v := range defs {
 			if f, ok := v.(starlark.Callable); ok {
-				if _, ok := c.StarlarkFunctions[k]; ok {
-					log.Println("Multiple definitions of starlark function", k)
-				}
-				c.StarlarkFunctions[k] = func(args ...starlark.Value) (starlark.Value, error) {
+				c.StarlarkFunctions[k] = append(c.StarlarkFunctions[k], func(args ...starlark.Value) (starlark.Value, error) {
 					return starlark.Call(newStarlarkThread(), f, starlark.Tuple(args), nil)
-				}
+				})
 			}
+		}
+	}
+}
+
+func callStarlarkFunctions(name string, args ...starlark.Value) {
+	for _, f := range getConfig().StarlarkFunctions[name] {
+		_, err := f(args...)
+		if err != nil {
+			logStarlarkError(err)
 		}
 	}
 }

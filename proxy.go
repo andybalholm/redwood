@@ -348,15 +348,18 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var acls map[string]bool
-	var thisRule ACLActionRule
-	var ignored []string
+	response := &Response{
+		Request:  request,
+		Response: resp,
+		Scores:   request.Scores,
+	}
+
 	{
 		conf := getConfig()
 		respACLs := conf.ACLs.responseACLs(resp)
-		acls = unionACLSets(request.ACLs.data, respACLs)
+		response.ACLs.data = unionACLSets(request.ACLs.data, respACLs)
 
-		headerRule, _ := conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, "disable-proxy-headers")
+		headerRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "disable-proxy-headers")
 		if headerRule.Action != "disable-proxy-headers" {
 			viaHosts := resp.Header["Via"]
 			viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
@@ -371,32 +374,32 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, possibleActions...)
-		if thisRule.Action == "" {
-			thisRule.Action = "allow"
+		response.Action, response.Ignored = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, possibleActions...)
+		if response.Action.Action == "" {
+			response.Action.Action = "allow"
 		}
 	}
 
-	switch thisRule.Action {
+	switch response.Action.Action {
 	case "allow":
 		if resp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
 		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
-		logAccess(r, resp, int(n), false, user, request.Tally, request.Scores.data, thisRule, "", ignored, nil)
+		logAccess(r, resp, int(n), false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
 		}
 		return
 	case "block":
-		showBlockPage(w, r, resp, user, request.Tally, request.Scores.data, thisRule)
-		logAccess(r, resp, 0, false, user, request.Tally, request.Scores.data, thisRule, "", ignored, nil)
+		showBlockPage(w, r, resp, user, request.Tally, response.Scores.data, response.Action)
+		logAccess(r, resp, 0, false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, request.Tally, request.Scores.data, thisRule, "", ignored, nil)
+		logAccess(r, resp, 0, false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
 		return
 	}
 
@@ -431,7 +434,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		virusChan := make(chan []*clamd.Response, 1)
 		var dest io.Writer = w
 		var destCloser io.Closer
-		if thisRule.Action == "virus-scan" {
+		if response.Action.Action == "virus-scan" {
 			// Although the response is too long for synchronous virus scanning, scan it anyway,
 			// so that we can log the result.
 			clam := getConfig().ClamAV
@@ -451,7 +454,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if destCloser != nil {
 			destCloser.Close()
 		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, request.Scores.data, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", ignored, <-virusChan)
+		logAccess(r, resp, int(n)+len(content), false, user, tally, response.Scores.data, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", response.Ignored, <-virusChan)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
@@ -490,7 +493,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var clamResponses []*clamd.Response
-	switch thisRule.Action {
+	switch response.Action.Action {
 	case "phrase-scan":
 		conf := getConfig()
 		contentType := resp.Header.Get("Content-Type")
@@ -520,15 +523,15 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		conf.scanContent(content, contentType, cs, tally)
 
 		if strings.Contains(contentType, "html") {
-			aclsWithCategories := copyACLSet(acls)
-			for name, score := range request.Scores.data {
+			aclsWithCategories := copyACLSet(response.ACLs.data)
+			for name, score := range response.Scores.data {
 				if conf.Categories[name].action == ACL && score > 0 {
 					aclsWithCategories[name] = true
 				}
 			}
 			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, aclsWithCategories, &doc)
 
-			censorRule, _ := conf.ChooseACLCategoryAction(acls, request.Scores.data, conf.Threshold, "censor-words")
+			censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
 			if censorRule.Action == "censor-words" {
 				if doc == nil {
 					doc, _ = parseHTML(content, cs)
@@ -611,37 +614,36 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Action: "block",
 					Needed: []string{"virus", res.Signature},
 				}
-				showBlockPage(w, r, resp, user, tally, request.Scores.data, virusRule)
-				logAccess(r, resp, len(content), false, user, tally, request.Scores.data, virusRule, "", nil, clamResponses)
+				showBlockPage(w, r, resp, user, tally, response.Scores.data, virusRule)
+				logAccess(r, resp, len(content), false, user, tally, response.Scores.data, virusRule, "", nil, clamResponses)
 				return
 			}
 		}
 	}
 
-	var scores map[string]int
 	{
 		conf := getConfig()
-		scores = conf.categoryScores(tally)
+		response.Scores.data = conf.categoryScores(tally)
 
-		contentRule, _ := conf.ChooseACLCategoryAction(acls, scores, 1, "log-content")
+		contentRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, 1, "log-content")
 		if contentRule.Action == "log-content" {
-			logContent(r.URL, content, scores)
+			logContent(r.URL, content, response.Scores.data)
 		}
 
-		thisRule, ignored = conf.ChooseACLCategoryAction(acls, scores, conf.Threshold, "allow", "block", "block-invisible")
-		if thisRule.Action == "" {
-			thisRule.Action = "allow"
+		response.Action, response.Ignored = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "allow", "block", "block-invisible")
+		if response.Action.Action == "" {
+			response.Action.Action = "allow"
 		}
 	}
 
-	switch thisRule.Action {
+	switch response.Action.Action {
 	case "block":
-		showBlockPage(w, r, resp, user, tally, scores, thisRule)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
+		showBlockPage(w, r, resp, user, tally, response.Scores.data, response.Action)
+		logAccess(r, resp, len(content), modified, user, tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
+		logAccess(r, resp, len(content), modified, user, tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
 		return
 	}
 
@@ -653,7 +655,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	copyResponseHeader(w, resp)
 	w.Write(content)
 
-	logAccess(r, resp, len(content), modified, user, tally, scores, thisRule, pageTitle, ignored, clamResponses)
+	logAccess(r, resp, len(content), modified, user, tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
 }
 
 func filterRequest(req *Request, checkAuth bool) {
@@ -1143,4 +1145,20 @@ func requestSetAction(thread *starlark.Thread, fn *starlark.Builtin, args starla
 	}
 
 	return starlark.None, nil
+}
+
+// A Response is the parameter for the Starlark filter_response function.
+type Response struct {
+	Request  *Request
+	Response *http.Response
+
+	ACLs   StringSet
+	Scores StringIntDict
+
+	Action ACLActionRule
+
+	Tally   map[rule]int
+	Ignored []string
+
+	frozen bool
 }

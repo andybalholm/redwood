@@ -251,7 +251,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	switch session.Action.Action {
 	case "allow", "":
 		upload, download := connectDirect(conn, session.ServerAddr, clientHello, dialer)
-		logAccess(cr, nil, int(upload+download), false, user, tally, scores, session.Action, "", ignored, nil)
+		logAccess(cr, nil, upload+download, false, user, tally, scores, session.Action, "", ignored, nil)
 		return
 	case "block":
 		conn.Close()

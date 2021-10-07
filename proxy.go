@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -387,7 +388,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		copyResponseHeader(w, resp)
 		n, err := io.Copy(w, resp.Body)
-		logAccess(r, resp, int(n), false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
+		logAccess(r, resp, n, false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
 		if err != nil && err != context.Canceled {
 			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 			panic(http.ErrAbortHandler)
@@ -403,231 +404,145 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tally := make(map[rule]int)
+	response.Tally = make(map[rule]int)
 	for k, v := range request.Tally {
-		tally[k] = v
+		response.Tally[k] = v
 	}
 
-	lr := &io.LimitedReader{
-		R: resp.Body,
-		N: int64(getConfig().MaxContentScanSize),
-	}
-	content, err := ioutil.ReadAll(lr)
-	if err == context.Canceled {
-		return
-	}
-	if err != nil {
-		log.Printf("error while reading response body (URL: %s): %s", r.URL, err)
-		// Servers that use broken chunked Transfer-Encoding can give us unexpected EOFs,
-		// even if we got all the content.
-		if err != io.ErrUnexpectedEOF {
-			showErrorPage(w, r, err)
-			return
-		}
-	}
-	if lr.N == 0 {
-		log.Println("response body too long to filter:", r.URL)
-		if resp.ContentLength > 0 {
-			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
-		}
-		copyResponseHeader(w, resp)
-		virusChan := make(chan []*clamd.Response, 1)
-		var dest io.Writer = w
-		var destCloser io.Closer
-		if response.Action.Action == "virus-scan" {
-			// Although the response is too long for synchronous virus scanning, scan it anyway,
-			// so that we can log the result.
-			clam := getConfig().ClamAV
-			pr, pw := io.Pipe()
-			go func() {
-				clamResponses, err := clam.ScanReader(r.Context(), pr)
-				pr.CloseWithError(err)
-				virusChan <- clamResponses
-			}()
-			dest = io.MultiWriter(w, &swallowErrorsWriter{w: pw})
-			destCloser = pw
-		} else {
-			virusChan <- nil
-		}
-		dest.Write(content)
-		n, err := io.Copy(dest, resp.Body)
-		if destCloser != nil {
-			destCloser.Close()
-		}
-		logAccess(r, resp, int(n)+len(content), false, user, tally, response.Scores.data, ACLActionRule{Action: "allow", Needed: []string{"too-long-to-filter"}}, "", response.Ignored, <-virusChan)
-		if err != nil && err != context.Canceled {
-			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
-			panic(http.ErrAbortHandler)
-		}
-		return
-	}
-
-	modified := false
 	pageTitle := ""
-
-	var compressedContent []byte
-	if ce := resp.Header.Get("Content-Encoding"); ce != "" && len(content) > 0 {
-		compressedContent = content
-		br := bytes.NewReader(compressedContent)
-		var decompressor io.Reader
-		switch ce {
-		case "br":
-			decompressor = brotli.NewReader(br)
-		case "deflate":
-			decompressor = flate.NewReader(br)
-		case "gzip":
-			decompressor, err = gzip.NewReader(br)
-			if err != nil {
-				log.Printf("Error creating gzip.Reader for %v: %v", r.URL, err)
-			}
-		default:
-			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, r.URL)
-		}
-		if decompressor != nil {
-			content, err = ioutil.ReadAll(decompressor)
-			if err != nil {
-				log.Printf("Error decompressing response body from %v: %v", r.URL, err)
-				content = compressedContent
-			}
-		}
-	}
 
 	var clamResponses []*clamd.Response
 	switch response.Action.Action {
 	case "phrase-scan":
-		conf := getConfig()
-		contentType := resp.Header.Get("Content-Type")
-		_, cs, _ := charset.DetermineEncoding(content, contentType)
-		var doc *html.Node
-		if strings.Contains(contentType, "html") {
-			if conf.LogTitle {
-				doc, err = parseHTML(content, cs)
-				if err != nil {
-					log.Printf("Error parsing HTML from %s: %s", r.URL, err)
-				} else {
-					t := titleSelector.MatchFirst(doc)
-					if t != nil {
-						if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
-							pageTitle = strings.Replace(strings.TrimSpace(titleText.Data), "\n", " ", -1)
+		content, err := response.Content(getConfig().MaxContentScanSize)
+		if err != nil {
+			showErrorPage(w, r, err)
+			return
+		}
+		if content != nil {
+			conf := getConfig()
+			contentType := resp.Header.Get("Content-Type")
+			_, cs, _ := charset.DetermineEncoding(content, contentType)
+			var doc *html.Node
+			modified := false
+			if strings.Contains(contentType, "html") {
+				if conf.LogTitle {
+					doc, err = parseHTML(content, cs)
+					if err != nil {
+						log.Printf("Error parsing HTML from %s: %s", r.URL, err)
+					} else {
+						t := titleSelector.MatchFirst(doc)
+						if t != nil {
+							if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
+								pageTitle = strings.Replace(strings.TrimSpace(titleText.Data), "\n", " ", -1)
+							}
 						}
 					}
 				}
-			}
 
-			modified = conf.pruneContent(r.URL, &content, cs, &doc)
-			if modified {
-				cs = "utf-8"
-			}
-		}
-
-		conf.scanContent(content, contentType, cs, tally)
-
-		if strings.Contains(contentType, "html") {
-			aclsWithCategories := copyACLSet(response.ACLs.data)
-			for name, score := range response.Scores.data {
-				if conf.Categories[name].action == ACL && score > 0 {
-					aclsWithCategories[name] = true
-				}
-			}
-			modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, aclsWithCategories, &doc)
-
-			censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
-			if censorRule.Action == "censor-words" {
-				if doc == nil {
-					doc, _ = parseHTML(content, cs)
-				}
-				if censorHTML(doc, conf.CensoredWords) {
-					modifiedAfterScan = true
+				modified = conf.pruneContent(r.URL, &content, cs, &doc)
+				if modified {
+					cs = "utf-8"
 				}
 			}
 
-			if modifiedAfterScan {
-				b := new(bytes.Buffer)
-				if err := html.Render(b, doc); err != nil {
-					log.Printf("Error rendering modified content from %s: %v", r.URL, err)
-				} else {
-					content = b.Bytes()
-					modified = true
-				}
-			}
-			if modified {
-				resp.Header.Set("Content-Type", "text/html; charset=utf-8")
-				resp.Header.Del("Content-Encoding")
-				compressedContent = nil
-			}
-		}
+			conf.scanContent(content, contentType, cs, response.Tally)
 
-		if compressedContent == nil && len(content) > 1000 && resp.Header.Get("Content-Type") != "" {
-			// Either the content was not compressed from upstream,
-			// or we invalidated the original compressed content due to pruning.
-			// So we should probably compress the content now.
-			encoding := httputil.NegotiateContentEncoding(r, []string{"br", "gzip"})
-			buf := new(bytes.Buffer)
-			var compressor io.WriteCloser
-			switch encoding {
-			case "br":
-				compressor = brotli.NewWriterOptions(buf, brotli.WriterOptions{Quality: conf.BrotliLevel})
-			case "gzip":
-				compressor, err = gzip.NewWriterLevel(buf, conf.GZIPLevel)
-				if err != nil {
-					log.Println("Error creating gzip compressor:", err)
-					compressor = nil
+			if strings.Contains(contentType, "html") {
+				aclsWithCategories := copyACLSet(response.ACLs.data)
+				for name, score := range response.Scores.data {
+					if conf.Categories[name].action == ACL && score > 0 {
+						aclsWithCategories[name] = true
+					}
 				}
-			}
-			if compressor != nil {
-				compressor.Write(content)
-				if err := compressor.Close(); err != nil {
-					log.Printf("Error compressing content of %v: %v", r.URL, err)
-				} else {
-					compressedContent = buf.Bytes()
-					resp.Header.Set("Content-Encoding", encoding)
+				modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, aclsWithCategories, &doc)
+
+				censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
+				if censorRule.Action == "censor-words" {
+					if doc == nil {
+						doc, _ = parseHTML(content, cs)
+					}
+					if censorHTML(doc, conf.CensoredWords) {
+						modifiedAfterScan = true
+					}
+				}
+
+				if modifiedAfterScan {
+					b := new(bytes.Buffer)
+					if err := html.Render(b, doc); err != nil {
+						log.Printf("Error rendering modified content from %s: %v", r.URL, err)
+					} else {
+						content = b.Bytes()
+						modified = true
+					}
+				}
+				if modified {
+					response.SetContent(content, "text/html; charset=utf-8")
 				}
 			}
 		}
 
 	case "hash-image":
-		conf := getConfig()
-		img, _, err := image.Decode(bytes.NewReader(content))
+		content, err := response.Content(getConfig().MaxContentScanSize)
 		if err != nil {
-			log.Printf("Error decoding image from %v: %v", r.URL, err)
-			break
+			showErrorPage(w, r, err)
+			return
 		}
-		hash := dhash.New(img)
+		if content != nil {
+			conf := getConfig()
+			img, _, err := image.Decode(bytes.NewReader(content))
+			if err != nil {
+				log.Printf("Error decoding image from %v: %v", r.URL, err)
+				break
+			}
+			hash := dhash.New(img)
 
-		for _, h := range conf.ImageHashes {
-			distance := dhash.Distance(hash, h.Hash)
-			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
-				tally[rule{imageHash, h.String()}]++
+			for _, h := range conf.ImageHashes {
+				distance := dhash.Distance(hash, h.Hash)
+				if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
+					response.Tally[rule{imageHash, h.String()}]++
+				}
 			}
 		}
 
 	case "virus-scan":
-		clam := getConfig().ClamAV
-		clamResponses, err = clam.ScanReader(r.Context(), bytes.NewReader(content))
+		content, err := response.Content(getConfig().MaxContentScanSize)
 		if err != nil {
-			log.Printf("Error doing virus scan on %v: %v", r.URL, err)
+			showErrorPage(w, r, err)
+			return
 		}
-		for _, res := range clamResponses {
-			if res.Status == "FOUND" {
-				log.Printf("Detected virus in %v: %s", r.URL, res.Signature)
-				virusRule := ACLActionRule{
-					Action: "block",
-					Needed: []string{"virus", res.Signature},
+		// TODO: asynchronous virus scanning
+		if content != nil {
+			clam := getConfig().ClamAV
+			clamResponses, err = clam.ScanReader(r.Context(), bytes.NewReader(content))
+			if err != nil {
+				log.Printf("Error doing virus scan on %v: %v", r.URL, err)
+			}
+			for _, res := range clamResponses {
+				if res.Status == "FOUND" {
+					log.Printf("Detected virus in %v: %s", r.URL, res.Signature)
+					virusRule := ACLActionRule{
+						Action: "block",
+						Needed: []string{"virus", res.Signature},
+					}
+					showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, virusRule)
+					logAccess(r, resp, int64(len(content)), false, user, response.Tally, response.Scores.data, virusRule, "", nil, clamResponses)
+					return
 				}
-				showBlockPage(w, r, resp, user, tally, response.Scores.data, virusRule)
-				logAccess(r, resp, len(content), false, user, tally, response.Scores.data, virusRule, "", nil, clamResponses)
-				return
 			}
 		}
 	}
 
 	{
 		conf := getConfig()
-		response.Scores.data = conf.categoryScores(tally)
+		response.Scores.data = conf.categoryScores(response.Tally)
 
 		contentRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, 1, "log-content")
 		if contentRule.Action == "log-content" {
-			logContent(r.URL, content, response.Scores.data)
+			content, _ := response.Content(math.MaxInt)
+			if content != nil {
+				logContent(r.URL, content, response.Scores.data)
+			}
 		}
 
 		response.Action, response.Ignored = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "allow", "block", "block-invisible")
@@ -638,24 +553,25 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch response.Action.Action {
 	case "block":
-		showBlockPage(w, r, resp, user, tally, response.Scores.data, response.Action)
-		logAccess(r, resp, len(content), modified, user, tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
+		showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
+		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, len(content), modified, user, tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
+		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
 		return
 	}
 
-	if compressedContent == nil {
-		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
-	} else {
-		content = compressedContent
+	if response.Response.ContentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(response.Response.ContentLength, 10))
 	}
 	copyResponseHeader(w, resp)
-	w.Write(content)
+	n, err := io.Copy(w, response.Response.Body)
+	if err != nil && err != context.Canceled {
+		log.Printf("error while copying response (URL: %s): %s", r.URL, err)
+	}
 
-	logAccess(r, resp, len(content), modified, user, tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
+	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
 }
 
 func filterRequest(req *Request, checkAuth bool) {
@@ -1157,8 +1073,111 @@ type Response struct {
 
 	Action ACLActionRule
 
-	Tally   map[rule]int
-	Ignored []string
+	Tally    map[rule]int
+	Ignored  []string
+	Modified bool
 
 	frozen bool
+}
+
+// Content reads the response body and returns it as a byte slice.
+// If the Content-Encoding header indicates that the body is compressed,
+// it will be decompressed.
+// If the length of the body is more than maxLen, or it is a response to a HEAD
+// request, it will return nil, nil.
+func (resp *Response) Content(maxLen int) ([]byte, error) {
+	if resp.Response.ContentLength > int64(maxLen) || resp.Request.Request.Method == "HEAD" {
+		return nil, nil
+	}
+
+	lr := &io.LimitedReader{
+		R: resp.Response.Body,
+		N: int64(maxLen),
+	}
+	content, err := ioutil.ReadAll(lr)
+
+	// Servers that use broken chunked Transfer-Encoding can give us unexpected EOFs,
+	// even if we got all the content.
+	if err == io.ErrUnexpectedEOF && resp.Response.ContentLength == -1 {
+		err = nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if lr.N == 0 {
+		// We read maxLen without reaching the end.
+		resp.Response.Body = io.NopCloser(io.MultiReader(bytes.NewReader(content), resp.Response.Body))
+		return nil, nil
+	}
+
+	if resp.Response.Header.Get("Content-Encoding") == "" {
+		resp.Response.ContentLength = int64(len(content))
+	}
+	resp.Response.Body = io.NopCloser(bytes.NewReader(content))
+
+	if ce := resp.Response.Header.Get("Content-Encoding"); ce != "" && len(content) > 0 {
+		br := bytes.NewReader(content)
+		var decompressor io.Reader
+		switch ce {
+		case "br":
+			decompressor = brotli.NewReader(br)
+		case "deflate":
+			decompressor = flate.NewReader(br)
+		case "gzip":
+			decompressor, err = gzip.NewReader(br)
+			if err != nil {
+				log.Printf("Error creating gzip.Reader for %v: %v", resp.Request.Request.URL, err)
+			}
+		default:
+			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, resp.Request.Request.URL)
+		}
+		if decompressor != nil {
+			decompressed, err := ioutil.ReadAll(decompressor)
+			if err != nil {
+				log.Printf("Error decompressing response body from %v: %v", resp.Request.Request.URL, err)
+			} else {
+				return decompressed, nil
+			}
+		}
+	}
+
+	return content, nil
+}
+
+// SetContent replaces the request body with the provided content, and sets
+// the Content-Type header.
+func (resp *Response) SetContent(data []byte, contentType string) {
+	resp.Response.Header.Set("Content-Type", contentType)
+	resp.Response.Header.Del("Content-Encoding")
+	resp.Modified = true
+
+	if len(data) > 1000 {
+		encoding := httputil.NegotiateContentEncoding(resp.Request.Request, []string{"br", "gzip"})
+		buf := new(bytes.Buffer)
+		var compressor io.WriteCloser
+		var err error
+		switch encoding {
+		case "br":
+			compressor = brotli.NewWriterOptions(buf, brotli.WriterOptions{Quality: getConfig().BrotliLevel})
+		case "gzip":
+			compressor, err = gzip.NewWriterLevel(buf, getConfig().GZIPLevel)
+			if err != nil {
+				log.Println("Error creating gzip compressor:", err)
+				compressor = nil
+			}
+		}
+		if compressor != nil {
+			compressor.Write(data)
+			if err := compressor.Close(); err == nil {
+				resp.Response.Body = io.NopCloser(buf)
+				resp.Response.Header.Set("Content-Encoding", encoding)
+				resp.Response.ContentLength = -1
+				return
+			}
+		}
+	}
+
+	resp.Response.ContentLength = int64(len(data))
+	resp.Response.Body = io.NopCloser(bytes.NewReader(data))
 }

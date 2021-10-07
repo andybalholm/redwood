@@ -64,7 +64,7 @@ func (l *CSVLog) Log(data []string) {
 	l.csv.Flush()
 }
 
-func logAccess(req *http.Request, resp *http.Response, contentLength int, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string, clamdResponse []*clamd.Response) []string {
+func logAccess(req *http.Request, resp *http.Response, contentLength int64, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string, clamdResponse []*clamd.Response) []string {
 	conf := getConfig()
 
 	modified := ""

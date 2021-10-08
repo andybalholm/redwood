@@ -432,7 +432,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses())
 			return
 		}
-
 	}
 
 	{
@@ -629,9 +628,8 @@ func doVirusScan(response *Response) error {
 	if err != nil {
 		return err
 	}
-	// TODO: asynchronous virus scanning
+	clam := getConfig().ClamAV
 	if content != nil {
-		clam := getConfig().ClamAV
 		response.clamResponses, err = clam.ScanReader(response.Request.Request.Context(), bytes.NewReader(content))
 		if err != nil {
 			log.Printf("Error doing virus scan on %v: %v", response.Request.Request.URL, err)
@@ -645,6 +643,20 @@ func doVirusScan(response *Response) error {
 				}
 			}
 		}
+	} else {
+		// Although the response is too long for synchronous virus scanning, scan it anyway,
+		// so that we can log the result.
+
+		// Make the channel buffered, so that sending won't block.
+		response.clamChan = make(chan []*clamd.Response, 1)
+		pr, pw := io.Pipe()
+		tr := io.TeeReader(response.Response.Body, pw)
+		response.Response.Body = pr
+		go func() {
+			cr, err := clam.ScanReader(response.Request.Request.Context(), tr)
+			pw.CloseWithError(err)
+			response.clamChan <- cr
+		}()
 	}
 	return nil
 }

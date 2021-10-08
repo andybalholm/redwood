@@ -409,128 +409,30 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response.Tally[k] = v
 	}
 
-	pageTitle := ""
-
-	var clamResponses []*clamd.Response
 	switch response.Action.Action {
 	case "phrase-scan":
-		content, err := response.Content(getConfig().MaxContentScanSize)
-		if err != nil {
+		if err := doPhraseScan(response); err != nil {
 			showErrorPage(w, r, err)
 			return
-		}
-		if content != nil {
-			conf := getConfig()
-			contentType := resp.Header.Get("Content-Type")
-			_, cs, _ := charset.DetermineEncoding(content, contentType)
-			var doc *html.Node
-			modified := false
-			if strings.Contains(contentType, "html") {
-				if conf.LogTitle {
-					doc, err = parseHTML(content, cs)
-					if err != nil {
-						log.Printf("Error parsing HTML from %s: %s", r.URL, err)
-					} else {
-						t := titleSelector.MatchFirst(doc)
-						if t != nil {
-							if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
-								pageTitle = strings.Replace(strings.TrimSpace(titleText.Data), "\n", " ", -1)
-							}
-						}
-					}
-				}
-
-				modified = conf.pruneContent(r.URL, &content, cs, &doc)
-				if modified {
-					cs = "utf-8"
-				}
-			}
-
-			conf.scanContent(content, contentType, cs, response.Tally)
-
-			if strings.Contains(contentType, "html") {
-				aclsWithCategories := copyACLSet(response.ACLs.data)
-				for name, score := range response.Scores.data {
-					if conf.Categories[name].action == ACL && score > 0 {
-						aclsWithCategories[name] = true
-					}
-				}
-				modifiedAfterScan := conf.doFilteredPruning(r.URL, content, cs, aclsWithCategories, &doc)
-
-				censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
-				if censorRule.Action == "censor-words" {
-					if doc == nil {
-						doc, _ = parseHTML(content, cs)
-					}
-					if censorHTML(doc, conf.CensoredWords) {
-						modifiedAfterScan = true
-					}
-				}
-
-				if modifiedAfterScan {
-					b := new(bytes.Buffer)
-					if err := html.Render(b, doc); err != nil {
-						log.Printf("Error rendering modified content from %s: %v", r.URL, err)
-					} else {
-						content = b.Bytes()
-						modified = true
-					}
-				}
-				if modified {
-					response.SetContent(content, "text/html; charset=utf-8")
-				}
-			}
 		}
 
 	case "hash-image":
-		content, err := response.Content(getConfig().MaxContentScanSize)
-		if err != nil {
+		if err := doImageHash(response); err != nil {
 			showErrorPage(w, r, err)
 			return
-		}
-		if content != nil {
-			conf := getConfig()
-			img, _, err := image.Decode(bytes.NewReader(content))
-			if err != nil {
-				log.Printf("Error decoding image from %v: %v", r.URL, err)
-				break
-			}
-			hash := dhash.New(img)
-
-			for _, h := range conf.ImageHashes {
-				distance := dhash.Distance(hash, h.Hash)
-				if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
-					response.Tally[rule{imageHash, h.String()}]++
-				}
-			}
 		}
 
 	case "virus-scan":
-		content, err := response.Content(getConfig().MaxContentScanSize)
-		if err != nil {
+		if err := doVirusScan(response); err != nil {
 			showErrorPage(w, r, err)
 			return
 		}
-		// TODO: asynchronous virus scanning
-		if content != nil {
-			clam := getConfig().ClamAV
-			clamResponses, err = clam.ScanReader(r.Context(), bytes.NewReader(content))
-			if err != nil {
-				log.Printf("Error doing virus scan on %v: %v", r.URL, err)
-			}
-			for _, res := range clamResponses {
-				if res.Status == "FOUND" {
-					log.Printf("Detected virus in %v: %s", r.URL, res.Signature)
-					virusRule := ACLActionRule{
-						Action: "block",
-						Needed: []string{"virus", res.Signature},
-					}
-					showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, virusRule)
-					logAccess(r, resp, int64(len(content)), false, user, response.Tally, response.Scores.data, virusRule, "", nil, clamResponses)
-					return
-				}
-			}
+		if response.Action.Action == "block" {
+			showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
+			logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses())
+			return
 		}
+
 	}
 
 	{
@@ -554,11 +456,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch response.Action.Action {
 	case "block":
 		showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
-		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
+		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
+		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())
 		return
 	}
 
@@ -571,7 +473,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error while copying response (URL: %s): %s", r.URL, err)
 	}
 
-	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, pageTitle, response.Ignored, clamResponses)
+	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())
 }
 
 func filterRequest(req *Request, checkAuth bool) {
@@ -626,6 +528,125 @@ func filterRequest(req *Request, checkAuth bool) {
 		conf := getConfig()
 		req.Action, req.Ignored = conf.ChooseACLCategoryAction(req.ACLs.data, req.Scores.data, conf.Threshold, possibleActions...)
 	}
+}
+
+func doPhraseScan(response *Response) error {
+	content, err := response.Content(getConfig().MaxContentScanSize)
+	if err != nil {
+		return err
+	}
+	if content != nil {
+		conf := getConfig()
+		contentType := response.Response.Header.Get("Content-Type")
+		_, cs, _ := charset.DetermineEncoding(content, contentType)
+		var doc *html.Node
+		modified := false
+		if strings.Contains(contentType, "html") {
+			if conf.LogTitle {
+				doc, err = parseHTML(content, cs)
+				if err != nil {
+					log.Printf("Error parsing HTML from %s: %s", response.Request.Request.URL, err)
+				} else {
+					t := titleSelector.MatchFirst(doc)
+					if t != nil {
+						if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
+							response.PageTitle = strings.Replace(strings.TrimSpace(titleText.Data), "\n", " ", -1)
+						}
+					}
+				}
+			}
+
+			modified = conf.pruneContent(response.Request.Request.URL, &content, cs, &doc)
+			if modified {
+				cs = "utf-8"
+			}
+		}
+
+		conf.scanContent(content, contentType, cs, response.Tally)
+
+		if strings.Contains(contentType, "html") {
+			aclsWithCategories := copyACLSet(response.ACLs.data)
+			for name, score := range response.Scores.data {
+				if conf.Categories[name].action == ACL && score > 0 {
+					aclsWithCategories[name] = true
+				}
+			}
+			modifiedAfterScan := conf.doFilteredPruning(response.Request.Request.URL, content, cs, aclsWithCategories, &doc)
+
+			censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
+			if censorRule.Action == "censor-words" {
+				if doc == nil {
+					doc, _ = parseHTML(content, cs)
+				}
+				if censorHTML(doc, conf.CensoredWords) {
+					modifiedAfterScan = true
+				}
+			}
+
+			if modifiedAfterScan {
+				b := new(bytes.Buffer)
+				if err := html.Render(b, doc); err != nil {
+					log.Printf("Error rendering modified content from %s: %v", response.Request.Request.URL, err)
+				} else {
+					content = b.Bytes()
+					modified = true
+				}
+			}
+			if modified {
+				response.SetContent(content, "text/html; charset=utf-8")
+			}
+		}
+	}
+	return nil
+}
+
+func doImageHash(response *Response) error {
+	content, err := response.Content(getConfig().MaxContentScanSize)
+	if err != nil {
+		return err
+	}
+	if content != nil {
+		conf := getConfig()
+		img, _, err := image.Decode(bytes.NewReader(content))
+		if err != nil {
+			log.Printf("Error decoding image from %v: %v", response.Request.Request.URL, err)
+			return nil
+		}
+		hash := dhash.New(img)
+
+		for _, h := range conf.ImageHashes {
+			distance := dhash.Distance(hash, h.Hash)
+			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
+				response.Tally[rule{imageHash, h.String()}]++
+			}
+		}
+	}
+	return nil
+}
+
+func doVirusScan(response *Response) error {
+	content, err := response.Content(getConfig().MaxContentScanSize)
+	if err != nil {
+		return err
+	}
+	// TODO: asynchronous virus scanning
+	if content != nil {
+		clam := getConfig().ClamAV
+		response.clamResponses, err = clam.ScanReader(response.Request.Request.Context(), bytes.NewReader(content))
+		if err != nil {
+			log.Printf("Error doing virus scan on %v: %v", response.Request.Request.URL, err)
+		}
+		for _, res := range response.clamResponses {
+			if res.Status == "FOUND" {
+				log.Printf("Detected virus in %v: %s", response.Request.Request.URL, res.Signature)
+				response.Action = ACLActionRule{
+					Action: "block",
+					Needed: []string{"virus", res.Signature},
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // copyResponseHeader writes resp's header and status code to w.
@@ -1077,6 +1098,13 @@ type Response struct {
 	Ignored  []string
 	Modified bool
 
+	// PageTitle is the content of the page's title tag.
+	// It is filled in by doPhraseScan.
+	PageTitle string
+
+	clamResponses []*clamd.Response
+	clamChan      chan []*clamd.Response
+
 	frozen bool
 }
 
@@ -1180,4 +1208,17 @@ func (resp *Response) SetContent(data []byte, contentType string) {
 
 	resp.Response.ContentLength = int64(len(data))
 	resp.Response.Body = io.NopCloser(bytes.NewReader(data))
+}
+
+// ClamdResponses returns the results from ClamAV scanning, or nil if the
+// response was not scanned.
+func (resp *Response) ClamdResponses() []*clamd.Response {
+	if resp.clamResponses != nil {
+		return resp.clamResponses
+	}
+	if resp.clamChan != nil {
+		resp.clamResponses = <-resp.clamChan
+		return resp.clamResponses
+	}
+	return nil
 }

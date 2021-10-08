@@ -354,7 +354,12 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Response: resp,
 		Scores:   request.Scores,
 	}
+	response.Tally = make(map[rule]int)
+	for k, v := range request.Tally {
+		response.Tally[k] = v
+	}
 
+	var scanAction ACLActionRule
 	{
 		conf := getConfig()
 		respACLs := conf.ACLs.responseACLs(resp)
@@ -367,7 +372,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			resp.Header.Set("Via", strings.Join(viaHosts, ", "))
 		}
 
-		possibleActions := []string{"allow", "block", "block-invisible"}
+		var possibleActions []string
 		if r.Method != "HEAD" {
 			possibleActions = append(possibleActions, "hash-image", "phrase-scan")
 			if conf.ClamAV != nil {
@@ -375,41 +380,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		response.Action, response.Ignored = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, possibleActions...)
-		if response.Action.Action == "" {
-			response.Action.Action = "allow"
-		}
+		scanAction, _ = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, possibleActions...)
 	}
 
-	switch response.Action.Action {
-	case "allow":
-		if resp.ContentLength > 0 {
-			w.Header().Set("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
-		}
-		copyResponseHeader(w, resp)
-		n, err := io.Copy(w, resp.Body)
-		logAccess(r, resp, n, false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
-		if err != nil && err != context.Canceled {
-			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
-			panic(http.ErrAbortHandler)
-		}
-		return
-	case "block":
-		showBlockPage(w, r, resp, user, request.Tally, response.Scores.data, response.Action)
-		logAccess(r, resp, 0, false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
-		return
-	case "block-invisible":
-		showInvisibleBlock(w)
-		logAccess(r, resp, 0, false, user, request.Tally, response.Scores.data, response.Action, "", response.Ignored, nil)
-		return
-	}
-
-	response.Tally = make(map[rule]int)
-	for k, v := range request.Tally {
-		response.Tally[k] = v
-	}
-
-	switch response.Action.Action {
+	switch scanAction.Action {
 	case "phrase-scan":
 		if err := doPhraseScan(response); err != nil {
 			showErrorPage(w, r, err)

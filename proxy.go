@@ -408,18 +408,20 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	{
-		conf := getConfig()
-		response.Scores.data = conf.categoryScores(response.Tally)
+	response.Scores.data = getConfig().categoryScores(response.Tally)
 
-		contentRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, 1, "log-content")
-		if contentRule.Action == "log-content" {
-			content, _ := response.Content(math.MaxInt)
-			if content != nil {
-				logContent(r.URL, content, response.Scores.data)
-			}
+	contentRule, _ := getConfig().ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, 1, "log-content")
+	if contentRule.Action == "log-content" {
+		content, _ := response.Content(math.MaxInt)
+		if content != nil {
+			logContent(r.URL, content, response.Scores.data)
 		}
+	}
 
+	callStarlarkFunctions("filter_response", response)
+
+	if response.Action.Action == "" {
+		conf := getConfig()
 		response.Action, response.Ignored = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "allow", "block", "block-invisible")
 		if response.Action.Action == "" {
 			response.Action.Action = "allow"
@@ -1094,6 +1096,61 @@ type Response struct {
 	frozen bool
 }
 
+func (r *Response) String() string {
+	return fmt.Sprintf("Response(%q)", r.Request.Request.URL.String())
+}
+
+func (r *Response) Type() string {
+	return "Response"
+}
+
+func (r *Response) Freeze() {
+	if !r.frozen {
+		r.frozen = true
+		r.Request.Freeze()
+		r.ACLs.Freeze()
+		r.Scores.Freeze()
+	}
+}
+
+func (r *Response) Truth() starlark.Bool {
+	return starlark.True
+}
+
+func (r *Response) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: Response")
+}
+
+var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible"}
+
+func (r *Response) AttrNames() []string {
+	return responseAttrNames
+}
+
+func (r *Response) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "request":
+		return r.Request, nil
+	case "acls":
+		return &r.ACLs, nil
+	case "scores":
+		return &r.Scores, nil
+
+	case "header":
+		return starlark.NewBuiltin("header", responseGetHeader).BindReceiver(r), nil
+	case "set_header":
+		return starlark.NewBuiltin("set_header", responseSetHeader).BindReceiver(r), nil
+	case "delete_header":
+		return starlark.NewBuiltin("delete_header", responseDeleteHeader).BindReceiver(r), nil
+
+	case "allow", "block", "block_invisible":
+		return starlark.NewBuiltin(name, responseSetAction).BindReceiver(r), nil
+
+	default:
+		return nil, nil
+	}
+}
+
 // Content reads the response body and returns it as a byte slice.
 // If the Content-Encoding header indicates that the body is compressed,
 // it will be decompressed.
@@ -1207,4 +1264,90 @@ func (resp *Response) ClamdResponses() []*clamd.Response {
 		return resp.clamResponses
 	}
 	return nil
+}
+
+func responseGetHeader(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Response)
+
+	var name string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &name); err != nil {
+		return nil, err
+	}
+
+	values := r.Response.Header.Values(name)
+	if len(values) == 0 {
+		return starlark.None, nil
+	}
+	return starlark.String(values[0]), nil
+}
+
+func responseSetHeader(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Response)
+	if r.frozen {
+		return nil, errors.New("can't set headers for a frozen Response")
+	}
+
+	if len(kwargs) == 0 || len(args) > 0 {
+		return nil, errors.New(`set_header should be called with keyword arguments`)
+	}
+
+	h := r.Response.Header
+	for _, pair := range kwargs {
+		name := string(pair[0].(starlark.String))
+		name = strings.Replace(name, "_", "-", -1)
+		switch val := pair[1].(type) {
+		case starlark.String:
+			h.Set(name, string(val))
+		default:
+			return nil, fmt.Errorf("parameters to set_header must be String, not %s", val.Type())
+		}
+	}
+	return starlark.None, nil
+}
+
+func responseDeleteHeader(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Response)
+	if r.frozen {
+		return nil, errors.New("can't delete headers for a frozen Response")
+	}
+
+	h := r.Response.Header
+	for _, name := range args {
+		switch name := name.(type) {
+		case starlark.String:
+			h.Del(string(name))
+		default:
+			return nil, fmt.Errorf("headereters to delete_header must be String, not %s", name.Type())
+		}
+	}
+	return starlark.None, nil
+}
+
+func responseSetAction(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	s := fn.Receiver().(*Response)
+	if s.frozen {
+		return nil, errors.New("can't set the action for a frozen Response")
+	}
+
+	var reason string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 0, &reason); err != nil {
+		return nil, err
+	}
+
+	switch fn.Name() {
+	case "allow":
+		s.Action.Action = "allow"
+	case "block":
+		s.Action.Action = "block"
+	case "block_invisible":
+		s.Action.Action = "block-invisible"
+	}
+
+	if reason == "" {
+		s.Action.Needed = nil
+	} else {
+		s.Action.Needed = []string{reason}
+	}
+
+	return starlark.None, nil
 }

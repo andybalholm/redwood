@@ -72,7 +72,7 @@ The `TLSSession` object has the following attributes:
 ### `filter_request`
 
 For each HTTP request that Redwood receives, it calls the `filter_request` function.
-The function’s parameter isa `Request` object,
+The function’s parameter is a `Request` object,
 which gives information about the request and lets you customize how Redwood handles it.
 
 The `Request` object has the following attributes:
@@ -130,6 +130,42 @@ There are methods to get and set the request’s HTTP headers:
 
 - `block_invisible`: block the request and send a small transparent image instead of a block page.
 
+### `filter_response`
+
+For each HTTP response that Redwood receives, it calls the `filter_response` function.
+The function’s parameter is a `Response` object,
+which gives information about the response and lets you customize how Redwood handles it.
+
+The `Response` object has the following attributes:
+
+- `request`: the Request object for the associated HTTP request.
+
+- `acls`: a set containing the ACL tags that have been assigned to the response.
+  If you modify the set, it can affect the action that Redwood takes.
+
+- `scores`: a dictionary containing the category scores that have been assigned to the response.
+  (The keys are strings, and the values are integers.)
+  If you modify the dictionary, it can affect the action that Redwood takes.
+
+There are methods to get and set the response’s HTTP headers:
+
+- `header("Content-Type")` returns the value of the Content-Type header.
+
+- `set_header(content_type="text/html")` sets the Content-Type header to "text/html".
+  Note that underscores are used instead of hyphens in the header name, 
+  to make the syntax work for keyword parameters.
+  Multiple headers may be set at once.
+
+- `delete_header("Content-Type")` removes the Content-Type header.
+  Multiple headers may be deleted at once.
+
+`Response` also has methods to directly set what action Redwood will take:
+
+- `allow`: don’t block the request.
+
+- `block`: block the request and show a block page.
+
+- `block_invisible`: block the request and send a small transparent image instead of a block page.
 
 ## Language and Library Notes
 

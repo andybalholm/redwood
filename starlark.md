@@ -144,7 +144,7 @@ The `Response` object has the following attributes:
   It can be changed to affect the status code the client receives.
 
 - `body`: The response’s body content, as a string. Assigning to body replaces the
-  response’s content.
+  response’s content. If the body is larger than `max-content-scan-size`, `body` will be `None`.
 
 - `acls`: a set containing the ACL tags that have been assigned to the response.
   If you modify the set, it can affect the action that Redwood takes.
@@ -172,6 +172,13 @@ There are methods to get and set the response’s HTTP headers:
 - `block`: block the request and show a block page.
 
 - `block_invisible`: block the request and send a small transparent image instead of a block page.
+
+Other methods of `Response`:
+
+- `thumbnail(500)`: returns a JPEG thumbnail of the response, no more than 500 pixels in width and height.
+  If no thumbnail is available (either because the response body is not a supported image format,
+  or because the body is too large), `thumbnail` returns `None`.
+  The default size is 1000 pixels.
 
 ## Language and Library Notes
 

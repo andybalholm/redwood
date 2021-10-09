@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image"
 	_ "image/gif"
+	"image/jpeg"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
@@ -30,6 +31,7 @@ import (
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
 	"go.starlark.net/starlark"
+	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
@@ -582,12 +584,12 @@ func doImageHash(response *Response) error {
 	}
 	if content != nil {
 		conf := getConfig()
-		img, _, err := image.Decode(bytes.NewReader(content))
+		response.image, _, err = image.Decode(bytes.NewReader(content))
 		if err != nil {
 			log.Printf("Error decoding image from %v: %v", response.Request.Request.URL, err)
 			return nil
 		}
-		hash := dhash.New(img)
+		hash := dhash.New(response.image)
 
 		for _, h := range conf.ImageHashes {
 			distance := dhash.Distance(hash, h.Hash)
@@ -597,6 +599,47 @@ func doImageHash(response *Response) error {
 		}
 	}
 	return nil
+}
+
+// Thumbnail returns a JPEG thumbnail of the image in the response body.
+// It will be no more than maxSize pixels in width or height.
+// If the response body isn't a supported image type, or if it is
+// longer than MaxContentScanSize, Thumbnail returns nil.
+func (resp *Response) Thumbnail(maxSize int) []byte {
+	if resp.image == nil {
+		content, err := resp.Content(getConfig().MaxContentScanSize)
+		if err != nil {
+			log.Printf("Error downloading image from %v to make thumbnail: %v", resp.Request.Request.URL, err)
+		}
+		if content == nil {
+			return nil
+		}
+		resp.image, _, err = image.Decode(bytes.NewReader(content))
+		if err != nil {
+			log.Printf("Error decoding image from %v: %v", resp.Request.Request.URL, err)
+			return nil
+		}
+	}
+
+	img := resp.image
+	sb := img.Bounds()
+	size := sb.Dx()
+	if dy := sb.Dy(); dy > size {
+		size = dy
+	}
+	if size > maxSize {
+		ratio := float64(maxSize) / float64(size)
+		dst := image.NewRGBA(image.Rect(0, 0, int(ratio*float64(sb.Dx())), int(ratio*float64(sb.Dy()))))
+		draw.BiLinear.Scale(dst, dst.Bounds(), img, sb, draw.Over, nil)
+		img = dst
+	}
+
+	b := new(bytes.Buffer)
+	err := jpeg.Encode(b, img, &jpeg.Options{Quality: 80})
+	if err != nil {
+		return nil
+	}
+	return b.Bytes()
 }
 
 func doVirusScan(response *Response) error {
@@ -1093,6 +1136,8 @@ type Response struct {
 	clamResponses []*clamd.Response
 	clamChan      chan []*clamd.Response
 
+	image image.Image
+
 	frozen bool
 }
 
@@ -1121,7 +1166,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible", "status", "body"}
+var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible", "status", "body", "thumbnail"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1156,6 +1201,9 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 
 	case "allow", "block", "block_invisible":
 		return starlark.NewBuiltin(name, responseSetAction).BindReceiver(r), nil
+
+	case "thumbnail":
+		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -1391,4 +1439,23 @@ func responseSetAction(thread *starlark.Thread, fn *starlark.Builtin, args starl
 	}
 
 	return starlark.None, nil
+}
+
+func responseGetThumbnail(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	s := fn.Receiver().(*Response)
+	if s.frozen && s.image == nil {
+		return nil, errors.New("can't get a thumbnail for a frozen Response unless the image is already loaded")
+	}
+
+	size := 1000
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 0, &size); err != nil {
+		return nil, err
+	}
+
+	thumbnail := s.Thumbnail(size)
+	if thumbnail == nil {
+		return starlark.None, nil
+	}
+
+	return starlark.String(thumbnail), nil
 }

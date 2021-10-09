@@ -1121,7 +1121,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible", "status"}
+var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible", "status", "body"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1137,6 +1137,15 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return &r.Scores, nil
 	case "status":
 		return starlark.MakeInt(r.Response.StatusCode), nil
+	case "body":
+		content, err := r.Content(getConfig().MaxContentScanSize)
+		if err != nil {
+			return starlark.None, err
+		}
+		if content == nil {
+			return starlark.None, nil
+		}
+		return starlark.String(content), nil
 
 	case "header":
 		return starlark.NewBuiltin("header", responseGetHeader).BindReceiver(r), nil
@@ -1169,6 +1178,14 @@ func (r *Response) SetField(name string, val starlark.Value) error {
 			return fmt.Errorf("invalid HTTP status code: %v", val)
 		}
 		r.Response.StatusCode = int(status64)
+		return nil
+	case "body":
+		var body string
+		err := assignStarlarkString(&body, val)
+		if err != nil {
+			return err
+		}
+		r.SetContent([]byte(body), r.Response.Header.Get("Content-Type"))
 		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Response", name))

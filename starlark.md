@@ -143,6 +143,9 @@ The `Response` object has the following attributes:
 - `status`: the HTTP status code.
   It can be changed to affect the status code the client receives.
 
+- `body`: The response’s body content, as a string. Assigning to body replaces the
+  response’s content.
+
 - `acls`: a set containing the ACL tags that have been assigned to the response.
   If you modify the set, it can affect the action that Redwood takes.
 

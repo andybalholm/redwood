@@ -140,6 +140,9 @@ The `Response` object has the following attributes:
 
 - `request`: the Request object for the associated HTTP request.
 
+- `status`: the HTTP status code.
+  It can be changed to affect the status code the client receives.
+
 - `acls`: a set containing the ACL tags that have been assigned to the response.
   If you modify the set, it can affect the action that Redwood takes.
 

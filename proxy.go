@@ -1121,7 +1121,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible"}
+var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible", "status"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1135,6 +1135,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return &r.ACLs, nil
 	case "scores":
 		return &r.Scores, nil
+	case "status":
+		return starlark.MakeInt(r.Response.StatusCode), nil
 
 	case "header":
 		return starlark.NewBuiltin("header", responseGetHeader).BindReceiver(r), nil
@@ -1148,6 +1150,28 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 
 	default:
 		return nil, nil
+	}
+}
+
+func (r *Response) SetField(name string, val starlark.Value) error {
+	if r.frozen {
+		return errors.New("can't set a field of a frozen object")
+	}
+
+	switch name {
+	case "status":
+		status, err := starlark.NumberToInt(val)
+		if err != nil {
+			return err
+		}
+		status64, ok := status.Int64()
+		if !ok || status64 >= 600 || status64 < 100 {
+			return fmt.Errorf("invalid HTTP status code: %v", val)
+		}
+		r.Response.StatusCode = int(status64)
+		return nil
+	default:
+		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Response", name))
 	}
 }
 

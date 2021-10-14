@@ -60,14 +60,9 @@ The `TLSSession` object has the following attributes:
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
 
-`TLSSession` also has methods to directly set what action Redwood will take for the request:
+- `action`: a string indicating what action Redwood will take for the connection.
 
-- `intercept`: intercept the TLS session as a man-in-the-middle,
-  to filter the HTTPS requests inside. (This is equivalent to the `ssl-bump` ACL action.)
-
-- `bypass`: don't intercept the TLS session; just connect directly to the origin server.
-
-- `block`: close the connection immediately.
+- `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
 
 ### `filter_request`
 

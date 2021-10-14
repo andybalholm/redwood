@@ -452,3 +452,11 @@ func lookupHostStarlark(thread *starlark.Thread, fn *starlark.Builtin, args star
 	}
 	return starlark.String(result), err
 }
+
+func stringTuple(s []string) starlark.Tuple {
+	t := make(starlark.Tuple, len(s))
+	for i, v := range s {
+		t[i] = starlark.String(v)
+	}
+	return t
+}

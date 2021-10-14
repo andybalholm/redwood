@@ -219,9 +219,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	}
 	session.ACLs.data = reqACLs
 	session.Scores.data = scores
+	session.PossibleActions = []string{"allow", "block"}
+	if getConfig().TLSReady && !obsoleteVersion && !invalidSSL {
+		session.PossibleActions = append(session.PossibleActions, "ssl-bump")
+	}
 
 	callStarlarkFunctions("ssl_bump", session)
-	var ignored []string
 
 	dialer := &net.Dialer{
 		Timeout:   30 * time.Second,
@@ -234,24 +237,14 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}
 
-	if session.Action.Action == "" {
-		conf := getConfig()
-		possibleActions := []string{
-			"allow",
-			"block",
-		}
-		if conf.TLSReady && !obsoleteVersion && !invalidSSL {
-			possibleActions = append(possibleActions, "ssl-bump")
-		}
+	session.chooseAction()
 
-		session.Action, ignored = conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, possibleActions...)
-	}
-	logAccess(cr, nil, 0, false, user, tally, scores, session.Action, "", ignored, nil)
+	logAccess(cr, nil, 0, false, user, tally, scores, session.Action, "", session.Ignored, nil)
 
 	switch session.Action.Action {
 	case "allow", "":
 		upload, download := connectDirect(conn, session.ServerAddr, clientHello, dialer)
-		logAccess(cr, nil, upload+download, false, user, tally, scores, session.Action, "", ignored, nil)
+		logAccess(cr, nil, upload+download, false, user, tally, scores, session.Action, "", session.Ignored, nil)
 		return
 	case "block":
 		conn.Close()
@@ -417,12 +410,44 @@ type TLSSession struct {
 	// the upstream connection.
 	SourceIP net.IP
 
+	scoresAndACLs
+
+	frozen bool
+}
+
+type scoresAndACLs struct {
 	ACLs   StringSet
 	Scores StringIntDict
 
-	Action ACLActionRule
+	PossibleActions []string
+	Action          ACLActionRule
+	Ignored         []string
+}
 
-	frozen bool
+func (s *scoresAndACLs) currentAction() (ar ACLActionRule, ignored []string) {
+	if s.Action.Action != "" {
+		return s.Action, s.Ignored
+	}
+	conf := getConfig()
+	ar, ignored = conf.ChooseACLCategoryAction(s.ACLs.data, s.Scores.data, conf.Threshold, s.PossibleActions...)
+	if ar.Action == "" {
+		ar.Action = "allow"
+	}
+	return ar, ignored
+}
+
+func (s *scoresAndACLs) chooseAction() {
+	s.Action, s.Ignored = s.currentAction()
+}
+
+func (s *scoresAndACLs) setAction(newAction string) error {
+	for _, a := range s.PossibleActions {
+		if newAction == a {
+			s.Action = ACLActionRule{Action: newAction}
+			return nil
+		}
+	}
+	return fmt.Errorf("can't set action to %q; expected one of %q", newAction, s.PossibleActions)
 }
 
 func (s *TLSSession) String() string {
@@ -449,7 +474,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "intercept", "bypass", "block", "acls", "scores", "source_ip"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -471,9 +496,12 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return &s.ACLs, nil
 	case "scores":
 		return &s.Scores, nil
+	case "action":
+		ar, _ := s.currentAction()
+		return starlark.String(ar.Action), nil
+	case "possible_actions":
+		return stringTuple(s.PossibleActions), nil
 
-	case "intercept", "bypass", "block":
-		return starlark.NewBuiltin(name, tlsSessionSetAction).BindReceiver(s), nil
 	default:
 		return nil, nil
 	}
@@ -500,38 +528,15 @@ func (s *TLSSession) SetField(name string, val starlark.Value) error {
 		}
 		s.SourceIP = parsed
 		return nil
+	case "action":
+		var newAction string
+		if err := assignStarlarkString(&newAction, val); err != nil {
+			return err
+		}
+		return s.setAction(newAction)
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of TLSSession", name))
 	}
-}
-
-func tlsSessionSetAction(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	s := fn.Receiver().(*TLSSession)
-	if s.frozen {
-		return nil, errors.New("can't set the action for a frozen TLSSession")
-	}
-
-	var reason string
-	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 0, &reason); err != nil {
-		return nil, err
-	}
-
-	switch fn.Name() {
-	case "intercept":
-		s.Action.Action = "ssl-bump"
-	case "bypass":
-		s.Action.Action = "allow"
-	case "block":
-		s.Action.Action = "block"
-	}
-
-	if reason == "" {
-		s.Action.Needed = nil
-	} else {
-		s.Action.Needed = []string{reason}
-	}
-
-	return starlark.None, nil
 }
 
 var errCertMismatch = errors.New("server certificate changed between original connection and redial")

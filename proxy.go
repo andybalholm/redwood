@@ -354,8 +354,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := &Response{
 		Request:  request,
 		Response: resp,
-		Scores:   request.Scores,
 	}
+	response.Scores = request.Scores
 	response.Tally = make(map[rule]int)
 	for k, v := range request.Tally {
 		response.Tally[k] = v
@@ -420,15 +420,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	response.PossibleActions = []string{"allow", "block", "block-invisible"}
 	callStarlarkFunctions("filter_response", response)
 
-	if response.Action.Action == "" {
-		conf := getConfig()
-		response.Action, response.Ignored = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "allow", "block", "block-invisible")
-		if response.Action.Action == "" {
-			response.Action.Action = "allow"
-		}
-	}
+	response.chooseAction()
 
 	switch response.Action.Action {
 	case "block":
@@ -489,22 +484,17 @@ func filterRequest(req *Request, checkAuth bool) {
 	}
 
 	req.ACLs.data = getConfig().ACLs.requestACLs(r, req.User)
+	req.PossibleActions = []string{
+		"allow",
+		"block",
+		"block-invisible",
+	}
+	if req.User == "" && checkAuth {
+		req.PossibleActions = append(req.PossibleActions, "require-auth")
+	}
 
 	callStarlarkFunctions("filter_request", req)
-
-	if req.Action.Action == "" {
-		possibleActions := []string{
-			"allow",
-			"block",
-			"block-invisible",
-		}
-		if req.User == "" && checkAuth {
-			possibleActions = append(possibleActions, "require-auth")
-		}
-
-		conf := getConfig()
-		req.Action, req.Ignored = conf.ChooseACLCategoryAction(req.ACLs.data, req.Scores.data, conf.Threshold, possibleActions...)
-	}
+	req.chooseAction()
 }
 
 func doPhraseScan(response *Response) error {
@@ -865,13 +855,7 @@ type Request struct {
 	User     string
 	ClientIP string
 
-	ACLs   StringSet
-	Scores StringIntDict
-
-	Action ACLActionRule
-
-	Tally   map[rule]int
-	Ignored []string
+	scoresAndACLs
 
 	frozen bool
 }
@@ -900,7 +884,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "header", "set_header", "delete_header", "client_ip", "acls", "scores", "allow", "block", "block_invisible"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "header", "set_header", "delete_header", "client_ip", "acls", "scores", "action", "possible_actions"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -924,6 +908,11 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return &r.ACLs, nil
 	case "scores":
 		return &r.Scores, nil
+	case "action":
+		ar, _ := r.currentAction()
+		return starlark.String(ar.Action), nil
+	case "possible_actions":
+		return stringTuple(r.PossibleActions), nil
 
 	case "param":
 		return starlark.NewBuiltin("param", requestGetParam).BindReceiver(r), nil
@@ -938,9 +927,6 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin("set_header", requestSetHeader).BindReceiver(r), nil
 	case "delete_header":
 		return starlark.NewBuiltin("delete_header", requestDeleteHeader).BindReceiver(r), nil
-
-	case "allow", "block", "block_invisible":
-		return starlark.NewBuiltin(name, requestSetAction).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -966,6 +952,12 @@ func (r *Request) SetField(name string, val starlark.Value) error {
 		return nil
 	case "path":
 		return assignStarlarkString(&r.Request.URL.Path, val)
+	case "action":
+		var newAction string
+		if err := assignStarlarkString(&newAction, val); err != nil {
+			return err
+		}
+		return r.setAction(newAction)
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Request", name))
 	}
@@ -1120,13 +1112,8 @@ type Response struct {
 	Request  *Request
 	Response *http.Response
 
-	ACLs   StringSet
-	Scores StringIntDict
+	scoresAndACLs
 
-	Action ACLActionRule
-
-	Tally    map[rule]int
-	Ignored  []string
 	Modified bool
 
 	// PageTitle is the content of the page's title tag.
@@ -1166,7 +1153,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "allow", "block", "block_invisible", "status", "body", "thumbnail"}
+var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1191,6 +1178,11 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return starlark.String(content), nil
+	case "action":
+		ar, _ := r.currentAction()
+		return starlark.String(ar.Action), nil
+	case "possible_actions":
+		return stringTuple(r.PossibleActions), nil
 
 	case "header":
 		return starlark.NewBuiltin("header", responseGetHeader).BindReceiver(r), nil
@@ -1198,9 +1190,6 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin("set_header", responseSetHeader).BindReceiver(r), nil
 	case "delete_header":
 		return starlark.NewBuiltin("delete_header", responseDeleteHeader).BindReceiver(r), nil
-
-	case "allow", "block", "block_invisible":
-		return starlark.NewBuiltin(name, responseSetAction).BindReceiver(r), nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil
@@ -1235,6 +1224,12 @@ func (r *Response) SetField(name string, val starlark.Value) error {
 		}
 		r.SetContent([]byte(body), r.Response.Header.Get("Content-Type"))
 		return nil
+	case "action":
+		var newAction string
+		if err := assignStarlarkString(&newAction, val); err != nil {
+			return err
+		}
+		return r.setAction(newAction)
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Response", name))
 	}

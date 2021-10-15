@@ -418,6 +418,7 @@ type TLSSession struct {
 type scoresAndACLs struct {
 	ACLs   StringSet
 	Scores StringIntDict
+	Tally  map[rule]int
 
 	PossibleActions []string
 	Action          ACLActionRule
@@ -443,7 +444,10 @@ func (s *scoresAndACLs) chooseAction() {
 func (s *scoresAndACLs) setAction(newAction string) error {
 	for _, a := range s.PossibleActions {
 		if newAction == a {
-			s.Action = ACLActionRule{Action: newAction}
+			s.Action = ACLActionRule{
+				Action: newAction,
+				Needed: []string{"starlark"},
+			}
 			return nil
 		}
 	}

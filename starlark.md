@@ -94,6 +94,10 @@ The `Request` object has the following attributes:
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
 
+- `action`: a string indicating what action Redwood will take for the request.
+
+- `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
+
 There are methods to get and set the URL’s query parameters:
 
 - `param("q")` returns the value of the `q` query parameter.
@@ -116,14 +120,6 @@ There are methods to get and set the request’s HTTP headers:
 
 - `delete_header("User-Agent")` removes the User-Agent header.
   Multiple headers may be deleted at once.
-
-`Request` also has methods to directly set what action Redwood will take for the request:
-
-- `allow`: don’t block the request (though it could still be blocked at the response stage).
-
-- `block`: block the request and show a block page.
-
-- `block_invisible`: block the request and send a small transparent image instead of a block page.
 
 ### `filter_response`
 
@@ -148,6 +144,10 @@ The `Response` object has the following attributes:
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
 
+- `action`: a string indicating what action Redwood will take for the request.
+
+- `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
+
 There are methods to get and set the response’s HTTP headers:
 
 - `header("Content-Type")` returns the value of the Content-Type header.
@@ -159,14 +159,6 @@ There are methods to get and set the response’s HTTP headers:
 
 - `delete_header("Content-Type")` removes the Content-Type header.
   Multiple headers may be deleted at once.
-
-`Response` also has methods to directly set what action Redwood will take:
-
-- `allow`: don’t block the request.
-
-- `block`: block the request and show a block page.
-
-- `block_invisible`: block the request and send a small transparent image instead of a block page.
 
 Other methods of `Response`:
 

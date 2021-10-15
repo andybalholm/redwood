@@ -89,6 +89,8 @@ The `Request` object has the following attributes:
 
 - `header`: a dictionary containing the request’s HTTP headers.
 
+- `query`: a dictionary containg the request’s URL query parameters.
+
 - `acls`: a set containing the ACL tags that have been assigned to the request. 
   If you modify the set, it can affect the action that Redwood takes.
 
@@ -99,17 +101,6 @@ The `Request` object has the following attributes:
 - `action`: a string indicating what action Redwood will take for the request.
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
-
-There are methods to get and set the URL’s query parameters:
-
-- `param("q")` returns the value of the `q` query parameter.
-
-- `set_param(q="redwood")` sets the `q` parameter to "redwood",
-  either adding it, or replacing an existing parameter.
-  Multiple parameters may be set at once: `set_param(q="redwood", safe="vss")`.
-
-- `delete_param("q")` removes the `q` query parameter. 
-  Multiple parameters may be deleted at once: `delete_param("utm_content", "utm_medium")`.
 
 ### `filter_response`
 

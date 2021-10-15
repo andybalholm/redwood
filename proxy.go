@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -884,7 +885,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "header", "set_header", "delete_header", "client_ip", "acls", "scores", "action", "possible_actions"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "param", "set_param", "delete_param", "header", "client_ip", "acls", "scores", "action", "possible_actions"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -913,6 +914,8 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.String(ar.Action), nil
 	case "possible_actions":
 		return stringTuple(r.PossibleActions), nil
+	case "header":
+		return &HeaderDict{data: r.Request.Header}, nil
 
 	case "param":
 		return starlark.NewBuiltin("param", requestGetParam).BindReceiver(r), nil
@@ -920,13 +923,6 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin("set_param", requestSetParam).BindReceiver(r), nil
 	case "delete_param":
 		return starlark.NewBuiltin("delete_param", requestDeleteParam).BindReceiver(r), nil
-
-	case "header":
-		return starlark.NewBuiltin("header", requestGetHeader).BindReceiver(r), nil
-	case "set_header":
-		return starlark.NewBuiltin("set_header", requestSetHeader).BindReceiver(r), nil
-	case "delete_header":
-		return starlark.NewBuiltin("delete_header", requestDeleteHeader).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -1153,7 +1149,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "set_header", "delete_header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1183,13 +1179,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.String(ar.Action), nil
 	case "possible_actions":
 		return stringTuple(r.PossibleActions), nil
-
 	case "header":
-		return starlark.NewBuiltin("header", responseGetHeader).BindReceiver(r), nil
-	case "set_header":
-		return starlark.NewBuiltin("set_header", responseSetHeader).BindReceiver(r), nil
-	case "delete_header":
-		return starlark.NewBuiltin("delete_header", responseDeleteHeader).BindReceiver(r), nil
+		return &HeaderDict{data: r.Response.Header}, nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil
@@ -1453,4 +1444,164 @@ func responseGetThumbnail(thread *starlark.Thread, fn *starlark.Builtin, args st
 	}
 
 	return starlark.String(thumbnail), nil
+}
+
+// A HeaderDict wraps an http.Header to make it act like a Starlark dictionary.
+type HeaderDict struct {
+	frozen    bool
+	itercount int
+	data      http.Header
+}
+
+func (h *HeaderDict) String() string {
+	b := new(strings.Builder)
+	h.data.Write(b)
+	return b.String()
+}
+
+func (h *HeaderDict) Type() string {
+	return "HeaderDict"
+}
+
+func (h *HeaderDict) Freeze() {
+	if !h.frozen {
+		h.frozen = true
+	}
+}
+
+func (h *HeaderDict) Truth() starlark.Bool {
+	return starlark.Bool(len(h.data) > 0)
+}
+
+func (h *HeaderDict) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: HeaderDict")
+}
+
+type headerDictIterator struct {
+	ss       *HeaderDict
+	elements []string
+}
+
+func (it *headerDictIterator) Next(p *starlark.Value) bool {
+	if len(it.elements) > 0 {
+		*p = starlark.String(it.elements[0])
+		it.elements = it.elements[1:]
+		return true
+	}
+	return false
+}
+
+func (it *headerDictIterator) Done() {
+	if !it.ss.frozen {
+		it.ss.itercount--
+	}
+}
+
+func (h *HeaderDict) keys() []string {
+	keys := make([]string, 0, len(h.data))
+	for k := range h.data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func (h *HeaderDict) Iterate() starlark.Iterator {
+	if !h.frozen {
+		h.itercount++
+	}
+	return &headerDictIterator{
+		ss:       h,
+		elements: h.keys(),
+	}
+}
+
+func (h *HeaderDict) Len() int {
+	return len(h.data)
+}
+
+func (h *HeaderDict) Get(k starlark.Value) (v starlark.Value, found bool, err error) {
+	ks, ok := k.(starlark.String)
+	if !ok {
+		return nil, false, nil
+	}
+
+	vals := h.data.Values(string(ks))
+	if len(vals) == 0 {
+		return nil, false, nil
+	}
+	return starlark.String(vals[0]), true, nil
+}
+
+func (h *HeaderDict) SetKey(k, v starlark.Value) error {
+	ks, ok := k.(starlark.String)
+	if !ok {
+		return fmt.Errorf("keys for HeaderDict must be String, not %s", k.Type())
+	}
+	vs, ok := v.(starlark.String)
+	if !ok {
+		return fmt.Errorf("values for HeaderDict must be String, not %s", v.Type())
+	}
+	h.data.Set(string(ks), string(vs))
+	return nil
+}
+
+var headerDictAttrNames = []string{"get", "pop"}
+
+func (h *HeaderDict) AttrNames() []string {
+	return headerDictAttrNames
+}
+
+func (h *HeaderDict) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "get", "pop":
+		return starlark.NewBuiltin(name, headerDictGet).BindReceiver(h), nil
+	default:
+		return nil, nil
+	}
+}
+
+func headerDictGet(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	pop := fn.Name() == "pop"
+
+	s := fn.Receiver().(*HeaderDict)
+	if pop {
+		if s.frozen {
+			return nil, errors.New("can't modify a frozen HeaderDict")
+		}
+		if s.itercount > 0 {
+			return nil, errors.New("can't modify a HeaderDict during iteration")
+		}
+	}
+
+	var key string
+	var defaultValue starlark.Value
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &key, &defaultValue); err != nil {
+		return nil, err
+	}
+	if defaultValue == nil && !pop {
+		defaultValue = starlark.None
+	}
+
+	vals := s.data.Values(key)
+	if len(vals) == 0 {
+		if defaultValue != nil {
+			return defaultValue, nil
+		}
+		return nil, fmt.Errorf("key %q not in dict", key)
+	}
+	if pop {
+		s.data.Del(key)
+	}
+	return starlark.String(vals[0]), nil
+}
+
+func (h *HeaderDict) Items() (result []starlark.Tuple) {
+	for _, k := range h.keys() {
+		result = append(result, starlark.Tuple{
+			starlark.String(k),
+			starlark.String(h.data.Get(k)),
+		})
+	}
+	return result
 }

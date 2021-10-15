@@ -87,6 +87,8 @@ The `Request` object has the following attributes:
 
 - `path`: the request’s URL path. It can be changed to fetch a different URL.
 
+- `header`: a dictionary containing the request’s HTTP headers.
+
 - `acls`: a set containing the ACL tags that have been assigned to the request. 
   If you modify the set, it can affect the action that Redwood takes.
 
@@ -109,18 +111,6 @@ There are methods to get and set the URL’s query parameters:
 - `delete_param("q")` removes the `q` query parameter. 
   Multiple parameters may be deleted at once: `delete_param("utm_content", "utm_medium")`.
 
-There are methods to get and set the request’s HTTP headers:
-
-- `header("User-Agent")` returns the value of the User-Agent header.
-
-- `set_header(user_agent="Mozilla")` sets the User-Agent header to "Mozilla".
-  Note that underscores are used instead of hyphens in the header name, 
-  to make the syntax work for keyword parameters.
-  Multiple headers may be set at once.
-
-- `delete_header("User-Agent")` removes the User-Agent header.
-  Multiple headers may be deleted at once.
-
 ### `filter_response`
 
 For each HTTP response that Redwood receives, it calls the `filter_response` function.
@@ -137,6 +127,8 @@ The `Response` object has the following attributes:
 - `body`: The response’s body content, as a string. Assigning to body replaces the
   response’s content. If the body is larger than `max-content-scan-size`, `body` will be `None`.
 
+- `header`: a dictionary containing the response’s HTTP headers.
+
 - `acls`: a set containing the ACL tags that have been assigned to the response.
   If you modify the set, it can affect the action that Redwood takes.
 
@@ -147,18 +139,6 @@ The `Response` object has the following attributes:
 - `action`: a string indicating what action Redwood will take for the request.
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
-
-There are methods to get and set the response’s HTTP headers:
-
-- `header("Content-Type")` returns the value of the Content-Type header.
-
-- `set_header(content_type="text/html")` sets the Content-Type header to "text/html".
-  Note that underscores are used instead of hyphens in the header name, 
-  to make the syntax work for keyword parameters.
-  Multiple headers may be set at once.
-
-- `delete_header("Content-Type")` removes the Content-Type header.
-  Multiple headers may be deleted at once.
 
 Other methods of `Response`:
 

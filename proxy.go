@@ -535,7 +535,7 @@ func doPhraseScan(response *Response) error {
 		if strings.Contains(contentType, "html") {
 			aclsWithCategories := copyACLSet(response.ACLs.data)
 			for name, score := range response.Scores.data {
-				if conf.Categories[name].action == ACL && score > 0 {
+				if category, ok := conf.Categories[name]; ok && category.action == ACL && score > 0 {
 					aclsWithCategories[name] = true
 				}
 			}

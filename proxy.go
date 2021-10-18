@@ -663,8 +663,9 @@ func doVirusScan(response *Response) error {
 		tr := io.TeeReader(response.Response.Body, pw)
 		response.Response.Body = pr
 		go func() {
-			cr, err := clam.ScanReader(response.Request.Request.Context(), tr)
-			pw.CloseWithError(err)
+			cr, _ := clam.ScanReader(response.Request.Request.Context(), tr)
+			io.Copy(ioutil.Discard, tr)
+			pw.Close()
 			response.clamChan <- cr
 		}()
 	}

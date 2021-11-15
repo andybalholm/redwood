@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/qri-io/starlib/bsoup"
 	"github.com/qri-io/starlib/encoding/base64"
 	"github.com/qri-io/starlib/encoding/csv"
@@ -49,6 +52,7 @@ func init() {
 	}
 
 	starlark.Universe["lookup_host"] = starlark.NewBuiltin("lookup_host", lookupHostStarlark)
+	starlark.Universe["lookup_addr"] = starlark.NewBuiltin("lookup_addr", lookupAddrStarlark)
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){
@@ -451,6 +455,47 @@ func lookupHostStarlark(thread *starlark.Thread, fn *starlark.Builtin, args star
 		result, err = lookupHost(host, server)
 	}
 	return starlark.String(result), err
+}
+
+func lookupAddrStarlark(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var addr, server string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &addr, &server); err != nil {
+		return nil, err
+	}
+
+	if len(args) == 1 {
+		names, err := net.LookupAddr(addr)
+		if err != nil {
+			var dnsError *net.DNSError
+			if errors.As(err, &dnsError) {
+				if dnsError.IsNotFound {
+					return starlark.String(""), nil
+				}
+			}
+			return nil, err
+		}
+		if len(names) == 0 {
+			return starlark.String(""), nil
+		}
+		return starlark.String(strings.TrimSuffix(names[0], ".")), nil
+	}
+
+	reverse, err := dns.ReverseAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+	m := new(dns.Msg)
+	m.SetQuestion(reverse, dns.TypePTR)
+	resp, err := dns.Exchange(m, net.JoinHostPort(server, "53"))
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range resp.Answer {
+		if a, ok := a.(*dns.PTR); ok {
+			return starlark.String(strings.TrimSuffix(a.Ptr, ".")), nil
+		}
+	}
+	return starlark.String(""), nil
 }
 
 func stringTuple(s []string) starlark.Tuple {

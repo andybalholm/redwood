@@ -1129,6 +1129,10 @@ func (resp *Response) Content(maxLen int) ([]byte, error) {
 			decompressor, err = gzip.NewReader(br)
 			if err != nil {
 				log.Printf("Error creating gzip.Reader for %v: %v", resp.Request.Request.URL, err)
+				// At this point, decompressor is io.Reader(*gzip.Reader(nil)),
+				// but it needs to be just io.Reader(nil), or we won't catch that it's nil
+				// later on.
+				decompressor = nil
 			}
 		default:
 			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, resp.Request.Request.URL)

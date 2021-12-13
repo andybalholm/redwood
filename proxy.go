@@ -199,9 +199,23 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(context.WithValue(r.Context(), tlsFingerprintKey{}, h.tlsFingerprint))
 	}
 
+	request := &Request{
+		Request:  r,
+		User:     authUser,
+		ClientIP: client,
+	}
+
+	filterRequest(request, !h.TLS)
+
+	if request.Action.Action == "require-auth" {
+		send407(w)
+		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
+		return
+	}
+
 	if r.Method == "CONNECT" && getConfig().TLSReady {
-		// Go ahead and start the SSLBump process without checking the ACLs.
-		// They will be checked in sslBump anyway.
+		// SSLBump takes priority overy any action besides require-auth, because showing a block page
+		// doesn't work till after the connection is bumped.
 		conn, err := newHijackedConn(w)
 		if err != nil {
 			log.Println("Error hijacking connection for CONNECT request to %s: %v", r.URL.Host, err)
@@ -212,19 +226,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request := &Request{
-		Request:  r,
-		User:     authUser,
-		ClientIP: client,
-	}
-
-	filterRequest(request, !h.TLS)
-
 	switch request.Action.Action {
-	case "require-auth":
-		send407(w)
-		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
-		return
 	case "block":
 		showBlockPage(w, r, nil, user, request.Tally, request.Scores.data, request.Action)
 		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)

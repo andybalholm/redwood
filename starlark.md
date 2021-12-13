@@ -154,3 +154,8 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
 - `lookup_host`: does a DNS lookup and returns the IP address.
   You can do the lookup with your system’s default DNS resolver (`lookup_host("www.google.com")`),
   or specify a specific DNS server to use (`lookup_host("www.google.com", "208.67.222.123")`).
+
+- `lookup_addr`: does a reverse DNS lookup and returns the hostname.
+  You can do the lookup with your system’s default DNS resolver(`lookup_addr("8.8.8.8")`),
+  or specify a specific DNS server to use (`lookup_addr("8.8.8.8", "208.67.222.123")`).
+  The trailing dot that is normally returned by a reverse DNS query is stripped off.

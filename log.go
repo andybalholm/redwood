@@ -104,6 +104,10 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int64, prun
 		}
 	}
 
+	if len(title) > 500 {
+		title = title[:500]
+	}
+
 	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp), clamdStatus, rule.Description)
 
 	accessLog.Log(logLine)

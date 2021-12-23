@@ -143,6 +143,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 		} else if err == ErrInvalidSSL {
 			invalidSSL = true
+			if r != nil {
+				// This is a real CONNECT request, not an intercepted connection.
+				// Since we don't want remote users to do things like CONNECT to port 22 on
+				// a host behind our firewall, we'll block it without even checking the ACLs.
+				conn.Close()
+				return
+			}
 		} else {
 			conn.Close()
 			return

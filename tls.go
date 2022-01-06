@@ -611,10 +611,12 @@ func (s *singleListener) Addr() net.Addr {
 // self-signed.
 func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, sni string) (cert tls.Certificate, err error) {
 	conf := getConfig()
-	// Use a hash of the real certificate as the serial number.
+	// Use a hash of the real certificate (plus some other things) as the serial number.
 	h := md5.New()
 	h.Write(serverCert.Raw)
-	h.Write([]byte{2})
+	for _, c := range conf.TLSCert.Certificate {
+		h.Write(c)
+	}
 	if sni != "" {
 		io.WriteString(h, sni)
 	}

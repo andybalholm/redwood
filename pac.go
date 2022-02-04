@@ -285,6 +285,12 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if conf.IPToUser[host] == configuredUser {
+		p.AllowIP(host)
+		handler.ServeHTTP(w, r)
+		return
+	}
+
 	expectedNetwork := false
 	ip := net.ParseIP(host)
 	p.expectedNetLock.RLock()

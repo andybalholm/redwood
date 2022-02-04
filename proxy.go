@@ -112,11 +112,9 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	authUser := ""
 
-	switch {
-	case h.user != "":
+	if h.user != "" {
 		authUser = h.user
-
-	case r.Header.Get("Proxy-Authorization") != "":
+	} else if r.Header.Get("Proxy-Authorization") != "" {
 		user, pass, ok := ProxyCredentials(r)
 		if ok {
 			if getConfig().ValidCredentials(user, pass) {
@@ -127,6 +125,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf("Invalid Proxy-Authorization header from %v: %q", r.RemoteAddr, r.Header.Get("Proxy-Authorization"))
 		}
+	} else if u, ok := getConfig().IPToUser[client]; ok {
+		authUser = u
 	}
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).

@@ -621,6 +621,17 @@ Multiple networks can be specified, separated by commas.
 If a device successfully authenticates (using the username and password)
 from a network that is not on the list, that network will be added to the list of expected networks. 
 
+You can configure certain IP addresses (normally LAN addresses)
+to be pre-authenticated as specific users by specifying a mapping 
+file with the `ip-to-user` option. The file must be formatted like this:
+
+	192.168.1.66 joe_pc
+	192.168.1.87 fred_pc
+
+In this example, requests coming from 192.168.1.66 would be automatically 
+authenticated as `joe_pc`, and requests coming from 192.168.1.87
+would be authenticated as `fred_pc`.
+
 SSLBump
 =======
 

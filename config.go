@@ -96,6 +96,7 @@ type config struct {
 	CustomPorts    map[string]customPortInfo
 	UserForPort    map[int]string
 	PACTemplate    string
+	IPToUser       map[string]string
 
 	AccessLog     string
 	LogTitle      bool
@@ -145,6 +146,7 @@ func loadConfiguration() (*config, error) {
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]customPortInfo{},
 		UserForPort:          map[int]string{},
+		IPToUser:             map[string]string{},
 		Verbose:              map[string]bool{},
 	}
 
@@ -172,6 +174,7 @@ func loadConfiguration() (*config, error) {
 	c.flags.BoolVar(&c.HTTP2Downstream, "http2-downstream", true, "Use HTTP/2 for connections to clients.")
 	c.flags.BoolVar(&c.HTTP2Upstream, "http2-upstream", true, "Use HTTP/2 for connections to upstream servers.")
 	c.newActiveFlag("include", "", "additional config file to read", c.readConfigFile)
+	c.newActiveFlag("ip-to-user", "", "map of IP addresses to user names", c.loadIPToUser)
 	c.flags.BoolVar(&c.LogTitle, "log-title", false, "Include page title in access log.")
 	c.flags.BoolVar(&c.LogUserAgent, "log-user-agent", false, "Include User-Agent header in access log.")
 	c.flags.IntVar(&c.MaxContentScanSize, "max-content-scan-size", 1e6, "maximum size (in bytes) of page to do content scan on")

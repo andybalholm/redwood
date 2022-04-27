@@ -148,6 +148,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				// Since we don't want remote users to do things like CONNECT to port 22 on
 				// a host behind our firewall, we'll block it without even checking the ACLs.
 				conn.Close()
+				logAccess(r, nil, 0, false, user, nil, nil, ACLActionRule{Action: "block", Needed: []string{"invalid-ssl"}, Description: "Block non-TLS CONNECT request"}, "", nil, nil)
 				return
 			}
 		} else {

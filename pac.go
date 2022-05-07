@@ -35,6 +35,9 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 					if err == nil {
 						client = host
 					}
+					if originalHost := r.Header.Get("X-Forwarded-For"); originalHost != "" && net.ParseIP(originalHost) != nil {
+						client = originalHost
+					}
 					p.AllowIP(client)
 					proxyHost, _, err := net.SplitHostPort(proxyAddr)
 					if err == nil {

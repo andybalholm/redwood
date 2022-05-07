@@ -258,6 +258,8 @@ threshold).
 There is also an ACL `invalid-ssl`, which is automatically assigned to
 CONNECT requests when the data being sent over the connection is not
 valid SSL or TLS.
+Another virtual ACL is `transparent`, which is assigned to 
+TLS connections intercepted on the `transparent-https` port.
 
 The following attributes are available:
 

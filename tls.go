@@ -143,14 +143,6 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			}
 		} else if err == ErrInvalidSSL {
 			invalidSSL = true
-			if r != nil {
-				// This is a real CONNECT request, not an intercepted connection.
-				// Since we don't want remote users to do things like CONNECT to port 22 on
-				// a host behind our firewall, we'll block it without even checking the ACLs.
-				conn.Close()
-				logAccess(r, nil, 0, false, user, nil, nil, ACLActionRule{Action: "block", Needed: []string{"invalid-ssl"}, Description: "Block non-TLS CONNECT request"}, "", nil, nil)
-				return
-			}
 		} else {
 			conn.Close()
 			return
@@ -223,6 +215,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		reqACLs = conf.ACLs.requestACLs(cr, authUser)
 		if invalidSSL {
 			reqACLs["invalid-ssl"] = true
+		}
+		if r == nil {
+			// It's a transparently-intercepted request instead of a real
+			// CONNECT request.
+			reqACLs["transparent"] = true
 		}
 	}
 	session.ACLs.data = reqACLs

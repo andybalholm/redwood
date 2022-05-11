@@ -54,6 +54,7 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
+	w.Header().Set("Content-Disposition", "attachment; filename=proxy.pac")
 	if strings.Contains(pacTemplate, "%s") {
 		fmt.Fprintf(w, pacTemplate, proxyAddr)
 	} else {

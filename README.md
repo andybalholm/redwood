@@ -735,6 +735,19 @@ in the PAC request URL (e.g. `/proxy.pac?a=dXNlcm5hbWU6cGFzc3dvcmQ=`).
 All requests received on that port from the same IP address as the PAC file request will be automatically
 authenticated as that user.
 
+For devices that require an HTTPS PAC URL, an upstream proxy can be configured to handle the TLS termination.
+The reverse proxy config must set the `X-Forwarded-For` header so that Redwood can authenticate the correct 
+IP Address. Also, the `X-Forwarded-Host` header should be set to return the hostname and default proxy port.
+
+```
+# Nginx example location block
+location /proxy.pac {
+    proxy_pass http://127.0.0.1:6502/proxy.pac;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Host $host:6502;
+}
+```
+
 Scripting
 =========
 

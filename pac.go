@@ -19,7 +19,10 @@ import (
 // handlePACFile serves an automatically-generated PAC (Proxy Auto-Config) file
 // pointing to this proxy server.
 func handlePACFile(w http.ResponseWriter, r *http.Request) {
-	proxyAddr := r.Host
+        proxyAddr := r.Header.Get("X-Forwarded-Host")
+        if len(proxyAddr) == 0 {
+		proxyAddr = r.Host
+	}
 	conf := getConfig()
 
 	if a := r.FormValue("a"); a != "" {

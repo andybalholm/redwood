@@ -64,6 +64,9 @@ The `TLSSession` object has the following attributes:
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
 
+- `header`: the header from the HTTP CONNECT request that initiated this session, if any.
+  (Sessions that were transparently intercepted do not have a CONNECT request.)
+
 ### `filter_request`
 
 For each HTTP request that Redwood receives, it calls the `filter_request` function.

@@ -117,6 +117,9 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		ServerAddr: serverAddr,
 		User:       authUser,
 	}
+	if r != nil {
+		session.ConnectHeader = r.Header
+	}
 
 	client := conn.RemoteAddr().String()
 	if host, _, err := net.SplitHostPort(client); err == nil {
@@ -415,6 +418,9 @@ type TLSSession struct {
 	// the upstream connection.
 	SourceIP net.IP
 
+	// ConnectHeader is the header from the CONNECT request, if any.
+	ConnectHeader http.Header
+
 	scoresAndACLs
 
 	frozen bool
@@ -483,7 +489,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -510,6 +516,8 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return starlark.String(ar.Action), nil
 	case "possible_actions":
 		return stringTuple(s.PossibleActions), nil
+	case "header":
+		return &HeaderDict{data: s.ConnectHeader}, nil
 
 	default:
 		return nil, nil

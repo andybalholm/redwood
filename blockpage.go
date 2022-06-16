@@ -132,7 +132,15 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 			return
 		}
 
-		blockResp, err := http.Post(c.BlockpageURL, "application/json", bytes.NewReader(data))
+		blockReq, err := http.NewRequestWithContext(r.Context(), "POST", c.BlockpageURL, bytes.NewReader(data))
+		if err != nil {
+			log.Printf("Error fetching blockpage from %s: %v", c.BlockpageURL, err)
+			http.Error(w, "", http.StatusForbidden)
+			return
+		}
+		blockReq.Header.Set("Content-Type", "application/json")
+
+		blockResp, err := transportWithExtraRootCerts.RoundTrip(blockReq)
 		if err != nil {
 			log.Printf("Error fetching blockpage from %s: %v", c.BlockpageURL, err)
 			http.Error(w, "", http.StatusForbidden)
@@ -144,7 +152,9 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 		if blockResp.ContentLength > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(blockResp.ContentLength, 10))
 		}
-		blockResp.StatusCode = http.StatusForbidden
+		if blockResp.StatusCode == http.StatusOK {
+			blockResp.StatusCode = http.StatusForbidden
+		}
 		copyResponseHeader(w, blockResp)
 		_, err = io.Copy(w, blockResp.Body)
 		if err != nil {

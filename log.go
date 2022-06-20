@@ -114,7 +114,18 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int64, prun
 		clientIP = host
 	}
 
-	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(scores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp), clamdStatus, rule.Description, clientIP)
+	filteredScores := scores
+	if !conf.Verbose["acl-categories"] {
+		filteredScores = make(map[string]int, len(scores))
+		for category, score := range scores {
+			if c, ok := conf.Categories[category]; ok && c.action == ACL {
+				continue
+			}
+			filteredScores[category] = score
+		}
+	}
+
+	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(filteredScores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp), clamdStatus, rule.Description, clientIP)
 
 	accessLog.Log(logLine)
 	return logLine

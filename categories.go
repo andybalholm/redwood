@@ -140,10 +140,27 @@ func loadCategory(dirname string, parent *category) (c *category, err error) {
 		}
 	}
 
+	parentMultiplier := 1.0
+	s, _ = conf.Get("parent_multiplier")
+	if s != "" {
+		parentMultiplier, err = strconv.ParseFloat(strings.TrimSpace(s), 64)
+		if err != nil {
+			log.Printf("Invalid seting for 'parent_multiplier' in %s: %q", confFile, s)
+			parentMultiplier = 1.0
+		}
+		if parentMultiplier < 0 || parentMultiplier > 1 {
+			log.Printf("Value (%f) out of range for 'parent_multiplier' in %s (must be between 0 and 1)", parentMultiplier, confFile)
+			parentMultiplier = 1.0
+		}
+	}
+
 	if parent != nil {
 		// Copy rules from parent category.
 		for r, w := range parent.weights {
-			c.weights[r] = w
+			c.weights[r] = weight{
+				points:    int(float64(w.points) * parentMultiplier),
+				maxPoints: int(float64(w.maxPoints) * parentMultiplier),
+			}
 		}
 	}
 

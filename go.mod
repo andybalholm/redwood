@@ -13,7 +13,6 @@ require (
 	github.com/golang/gddo v0.0.0-20190312205958-5a2505f3dbf0
 	github.com/klauspost/compress v1.4.1
 	github.com/klauspost/cpuid v1.2.0 // indirect
-	github.com/kylelemons/go-gypsy v0.0.0-20160905020020-08cad365cd28
 	github.com/miekg/dns v1.1.43
 	github.com/open-ch/ja3 v1.0.0
 	github.com/qri-io/starlib v0.4.2
@@ -24,6 +23,7 @@ require (
 	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	golang.org/x/text v0.3.6
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 go 1.15

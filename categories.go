@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/dhash"
-	"github.com/kylelemons/go-gypsy/yaml"
+	"gopkg.in/yaml.v3"
 )
 
 // A weight contains the point values assigned to a rule+category combination.
@@ -106,16 +106,25 @@ func loadCategory(dirname string, parent *category) (c *category, err error) {
 	c.description = c.name
 
 	confFile := filepath.Join(dirname, "category.conf")
-	conf, err := yaml.ReadFile(confFile)
+	confData, err := os.ReadFile(confFile)
 	if err != nil {
 		return nil, err
 	}
-	s, _ := conf.Get("description")
-	if s != "" {
-		c.description = s
+
+	var conf struct {
+		Description      string
+		Action           string
+		Invisible        bool
+		ParentMultiplier float64 `yaml:"parent_multiplier"`
+	}
+	err = yaml.Unmarshal(confData, &conf)
+	if err != nil {
+		return nil, err
 	}
 
-	s, _ = conf.Get("action")
+	c.description = conf.Description
+
+	s := conf.Action
 	s = strings.TrimSpace(strings.ToLower(s))
 	switch s {
 	case "allow":
@@ -132,22 +141,11 @@ func loadCategory(dirname string, parent *category) (c *category, err error) {
 		return nil, fmt.Errorf("unrecognized action %s in %s", s, confFile)
 	}
 
-	s, _ = conf.Get("invisible")
-	if s != "" {
-		c.invisible, err = strconv.ParseBool(strings.TrimSpace(s))
-		if err != nil {
-			log.Printf("Invalid setting for 'invisible' in %s: %q", confFile, s)
-		}
-	}
+	c.invisible = conf.Invisible
 
 	parentMultiplier := 1.0
-	s, _ = conf.Get("parent_multiplier")
-	if s != "" {
-		parentMultiplier, err = strconv.ParseFloat(strings.TrimSpace(s), 64)
-		if err != nil {
-			log.Printf("Invalid seting for 'parent_multiplier' in %s: %q", confFile, s)
-			parentMultiplier = 1.0
-		}
+	if conf.ParentMultiplier != 0 {
+		parentMultiplier = conf.ParentMultiplier
 		if parentMultiplier < 0 || parentMultiplier > 1 {
 			log.Printf("Value (%f) out of range for 'parent_multiplier' in %s (must be between 0 and 1)", parentMultiplier, confFile)
 			parentMultiplier = 1.0

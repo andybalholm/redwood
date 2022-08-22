@@ -71,6 +71,12 @@ type starlarkFunction func(...starlark.Value) (starlark.Value, error)
 func newStarlarkThread() *starlark.Thread {
 	return &starlark.Thread{
 		Print: func(t *starlark.Thread, msg string) {
+			if starlarkLog.csv == nil {
+				// The log isn't set up (probably in test mode).
+				// Print to Stdout instead.
+				fmt.Println(msg)
+				return
+			}
 			starlarkLog.Log([]string{time.Now().Format("2006-01-02 15:04:05.000000"), "print", msg})
 		},
 	}

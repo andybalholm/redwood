@@ -868,6 +868,7 @@ type Request struct {
 	scoresAndACLs
 
 	frozen bool
+	misc   starlark.Dict
 }
 
 func (r *Request) String() string {
@@ -894,7 +895,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -935,6 +936,8 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return r.Session, nil
+	case "misc":
+		return &r.misc, nil
 
 	default:
 		return nil, nil
@@ -990,6 +993,7 @@ type Response struct {
 	image image.Image
 
 	frozen bool
+	misc   starlark.Dict
 }
 
 func (r *Response) String() string {
@@ -1017,7 +1021,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1049,6 +1053,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return stringTuple(r.PossibleActions), nil
 	case "header":
 		return &HeaderDict{data: r.Response.Header}, nil
+	case "misc":
+		return &r.misc, nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil

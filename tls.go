@@ -426,6 +426,7 @@ type TLSSession struct {
 	scoresAndACLs
 
 	frozen bool
+	misc   starlark.Dict
 }
 
 type scoresAndACLs struct {
@@ -491,7 +492,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -520,6 +521,8 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return stringTuple(s.PossibleActions), nil
 	case "header":
 		return &HeaderDict{data: s.ConnectHeader}, nil
+	case "misc":
+		return &s.misc, nil
 
 	default:
 		return nil, nil

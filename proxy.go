@@ -54,6 +54,10 @@ type proxyHandler struct {
 	// rt is the RoundTripper that will be used to fulfill the requests.
 	// If it is nil, a default Transport will be used.
 	rt http.RoundTripper
+
+	// session is the TLSSession object, if this is an SSLBumped connection,
+	// or nil otherwise.
+	session *TLSSession
 }
 
 var ip6Loopback = net.ParseIP("::1")
@@ -203,6 +207,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Request:  r,
 		User:     authUser,
 		ClientIP: client,
+		Session:  h.session,
 	}
 
 	filterRequest(request, !h.TLS)
@@ -858,6 +863,7 @@ type Request struct {
 	Request  *http.Request
 	User     string
 	ClientIP string
+	Session  *TLSSession
 
 	scoresAndACLs
 
@@ -888,7 +894,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -924,6 +930,11 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			data:     r.Request.URL.Query(),
 			rawQuery: &r.Request.URL.RawQuery,
 		}, nil
+	case "session":
+		if r.Session == nil {
+			return starlark.None, nil
+		}
+		return r.Session, nil
 
 	default:
 		return nil, nil

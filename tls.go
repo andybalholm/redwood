@@ -366,12 +366,14 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		rt = httpTransport
 	}
 
+	session.Freeze()
 	server.Handler = &proxyHandler{
 		TLS:            true,
 		tlsFingerprint: tlsFingerprint,
 		connectPort:    port,
 		user:           authUser,
 		rt:             rt,
+		session:        session,
 	}
 	tlsConfig := &tls.Config{
 		Certificates:             []tls.Certificate{cert, getConfig().TLSCert},

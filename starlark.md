@@ -75,6 +75,9 @@ which gives information about the request and lets you customize how Redwood han
 
 The `Request` object has the following attributes:
 
+- `session`: the TLSSession object for the connection this request was received on
+  (if it is an HTTPS request), or None.
+
 - `client_ip`: the client computer's IP address.
 
 - `user`: the username that the client has authenticated with.

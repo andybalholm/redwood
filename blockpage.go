@@ -111,6 +111,10 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 		}
 
 	case c.BlockpageURL != "":
+		clientIP := r.RemoteAddr
+		if host, _, err := net.SplitHostPort(clientIP); err == nil {
+			clientIP = host
+		}
 		d := map[string]interface{}{
 			"url":            r.URL.String(),
 			"rule":           rule,
@@ -119,6 +123,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 			"scores":         scores,
 			"categories":     c.aclDescriptions(rule),
 			"method":         r.Method,
+			"client-ip":      clientIP,
 			"referer":        r.Referer(),
 			"request-header": r.Header,
 		}

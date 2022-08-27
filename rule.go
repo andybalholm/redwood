@@ -18,6 +18,7 @@ type ruleType int
 const (
 	defaultRule ruleType = iota
 	urlMatch
+	ipAddr
 	urlRegex
 	hostRegex
 	domainRegex
@@ -31,6 +32,8 @@ func (r rule) String() string {
 	switch r.t {
 	case urlMatch:
 		return r.content
+	case ipAddr:
+		return "ip:" + r.content
 	case urlRegex, hostRegex, domainRegex, pathRegex, queryRegex:
 		suffix := ""
 		switch r.t {
@@ -125,6 +128,10 @@ func parseRule(s string) (r rule, leftover string, err error) {
 		}
 		if strings.HasSuffix(r.content, "/") {
 			r.content = r.content[:len(r.content)-1]
+		}
+		if strings.HasPrefix(r.content, "ip:") {
+			r.t = ipAddr
+			r.content = strings.TrimPrefix(r.content, "ip:")
 		}
 	}
 

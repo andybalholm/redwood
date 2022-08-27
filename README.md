@@ -148,6 +148,11 @@ There are four kinds of filter rules:
     and `support.xerox.com` were listed with 50 points,
     `support.xerox.com` would actually get a score of 150 points.
 
+	If the host in the URL is an IP address, it can by matched by an IP
+	rule. An IP rule starts with `ip:` (with no space after the colon).
+	Then it has an IP address or an IP address range in any of three forms:
+	"10.1.10.0-10.1.10.255", "10.1.10.0-255", and "10.1.10.0/24".
+
 - URL regular expressions
 
     A regular expression to match the URL is listed between slashes. The

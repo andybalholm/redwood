@@ -4,6 +4,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -93,6 +94,7 @@ type URLMatcher struct {
 	pathRegexes    *regexMap
 	queryRegexes   *regexMap
 	publicSuffixes []string
+	ipAddrs        IPMap
 }
 
 // finalize should be called after all rules have been added, but before
@@ -131,6 +133,8 @@ func (m *URLMatcher) AddRule(r rule) {
 		m.pathRegexes.addRule(r)
 	case queryRegex:
 		m.queryRegexes.addRule(r)
+	case ipAddr:
+		m.ipAddrs.add(r.content, r.content)
 	}
 }
 
@@ -225,6 +229,13 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 			break
 		}
 		s = s[dot+1:]
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		for _, ipRule := range m.ipAddrs.matches(ip) {
+			r := rule{t: ipAddr, content: ipRule}
+			result[r] = 1
+		}
 	}
 
 	return result

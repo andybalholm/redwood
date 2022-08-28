@@ -54,6 +54,10 @@ type proxyHandler struct {
 	// rt is the RoundTripper that will be used to fulfill the requests.
 	// If it is nil, a default Transport will be used.
 	rt http.RoundTripper
+
+	// session is the TLSSession object, if this is an SSLBumped connection,
+	// or nil otherwise.
+	session *TLSSession
 }
 
 var ip6Loopback = net.ParseIP("::1")
@@ -203,6 +207,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Request:  r,
 		User:     authUser,
 		ClientIP: client,
+		Session:  h.session,
 	}
 
 	filterRequest(request, !h.TLS)
@@ -858,10 +863,12 @@ type Request struct {
 	Request  *http.Request
 	User     string
 	ClientIP string
+	Session  *TLSSession
 
 	scoresAndACLs
 
 	frozen bool
+	misc   starlark.Dict
 }
 
 func (r *Request) String() string {
@@ -888,7 +895,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -924,6 +931,13 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			data:     r.Request.URL.Query(),
 			rawQuery: &r.Request.URL.RawQuery,
 		}, nil
+	case "session":
+		if r.Session == nil {
+			return starlark.None, nil
+		}
+		return r.Session, nil
+	case "misc":
+		return &r.misc, nil
 
 	default:
 		return nil, nil
@@ -979,6 +993,7 @@ type Response struct {
 	image image.Image
 
 	frozen bool
+	misc   starlark.Dict
 }
 
 func (r *Response) String() string {
@@ -1006,7 +1021,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1038,6 +1053,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return stringTuple(r.PossibleActions), nil
 	case "header":
 		return &HeaderDict{data: r.Response.Header}, nil
+	case "misc":
+		return &r.misc, nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil

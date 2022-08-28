@@ -67,6 +67,8 @@ The `TLSSession` object has the following attributes:
 - `header`: the header from the HTTP CONNECT request that initiated this session, if any.
   (Sessions that were transparently intercepted do not have a CONNECT request.)
 
+- `misc`: a dictionary where the script can store miscellaneous data
+
 ### `filter_request`
 
 For each HTTP request that Redwood receives, it calls the `filter_request` function.
@@ -74,6 +76,9 @@ The function’s parameter is a `Request` object,
 which gives information about the request and lets you customize how Redwood handles it.
 
 The `Request` object has the following attributes:
+
+- `session`: the TLSSession object for the connection this request was received on
+  (if it is an HTTPS request), or None.
 
 - `client_ip`: the client computer's IP address.
 
@@ -105,6 +110,8 @@ The `Request` object has the following attributes:
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
 
+- `misc`: a dictionary where the script can store miscellaneous data
+
 ### `filter_response`
 
 For each HTTP response that Redwood receives, it calls the `filter_response` function.
@@ -133,6 +140,8 @@ The `Response` object has the following attributes:
 - `action`: a string indicating what action Redwood will take for the request.
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
+
+- `misc`: a dictionary where the script can store miscellaneous data
 
 Other methods of `Response`:
 

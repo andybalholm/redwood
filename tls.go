@@ -481,6 +481,7 @@ func (s *TLSSession) Freeze() {
 		s.frozen = true
 		s.ACLs.Freeze()
 		s.Scores.Freeze()
+		s.misc.Freeze()
 	}
 }
 

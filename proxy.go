@@ -884,6 +884,7 @@ func (r *Request) Freeze() {
 		r.frozen = true
 		r.ACLs.Freeze()
 		r.Scores.Freeze()
+		r.misc.Freeze()
 	}
 }
 
@@ -1010,6 +1011,7 @@ func (r *Response) Freeze() {
 		r.Request.Freeze()
 		r.ACLs.Freeze()
 		r.Scores.Freeze()
+		r.misc.Freeze()
 	}
 }
 

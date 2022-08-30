@@ -67,7 +67,8 @@ The `TLSSession` object has the following attributes:
 - `header`: the header from the HTTP CONNECT request that initiated this session, if any.
   (Sessions that were transparently intercepted do not have a CONNECT request.)
 
-- `misc`: a dictionary where the script can store miscellaneous data
+- `misc`: a dictionary-like object where the script can store miscellaneous data.
+  (Rather than a regular dictionary, it's a concurrency-safe wrapper around one.)
 
 ### `filter_request`
 

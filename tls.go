@@ -426,7 +426,7 @@ type TLSSession struct {
 	scoresAndACLs
 
 	frozen bool
-	misc   starlark.Dict
+	misc   SyncDict
 }
 
 type scoresAndACLs struct {
@@ -481,7 +481,6 @@ func (s *TLSSession) Freeze() {
 		s.frozen = true
 		s.ACLs.Freeze()
 		s.Scores.Freeze()
-		s.misc.Freeze()
 	}
 }
 

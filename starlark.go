@@ -8,6 +8,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -510,4 +511,120 @@ func stringTuple(s []string) starlark.Tuple {
 		t[i] = starlark.String(v)
 	}
 	return t
+}
+
+// A SyncDict wraps a starlark.Dict, and adds locking for concurrent access.
+type SyncDict struct {
+	d    starlark.Dict
+	lock sync.Mutex
+}
+
+func (d *SyncDict) Clear() error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.Clear()
+}
+
+func (d *SyncDict) Delete(k starlark.Value) (v starlark.Value, found bool, err error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.Delete(k)
+}
+
+func (d *SyncDict) Get(k starlark.Value) (v starlark.Value, found bool, err error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.Get(k)
+}
+
+func (d *SyncDict) Items() []starlark.Tuple {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.Items()
+}
+
+func (d *SyncDict) Keys() []starlark.Value {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.Keys()
+}
+
+func (d *SyncDict) Len() int {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.Len()
+}
+
+func (d *SyncDict) SetKey(k, v starlark.Value) error {
+	k.Freeze()
+	v.Freeze()
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.SetKey(k, v)
+}
+
+func (d *SyncDict) String() string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.d.String()
+}
+
+func (d *SyncDict) Type() string {
+	return "SyncDict"
+}
+
+func (d *SyncDict) Freeze() {
+	// Do nothing; a SyncDict is thread-safe and doesn't need to actually freeze.
+}
+
+func (d *SyncDict) Truth() starlark.Bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.Truth()
+}
+
+func (d *SyncDict) Hash() (uint32, error) {
+	return 0, fmt.Errorf("unhashable type: SyncDict")
+}
+
+func (d *SyncDict) doMethod(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	switch fn.Name() {
+	case "setdefault":
+		if len(args) >= 2 {
+			args[1].Freeze()
+		}
+	}
+
+	innerMethod, err := d.d.Attr(fn.Name())
+	if err != nil {
+		return starlark.None, err
+	}
+
+	return starlark.Call(thread, innerMethod, args, kwargs)
+}
+
+func (d *SyncDict) AttrNames() []string {
+	return []string{
+		"clear",
+		"get",
+		"items",
+		"keys",
+		"pop",
+		"popitem",
+		"setdefault",
+		"values",
+	}
+}
+
+func (d *SyncDict) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "clear", "get", "items", "keys", "pop", "popitem", "setdefault", "values":
+		return starlark.NewBuiltin(name, d.doMethod), nil
+
+	default:
+		return nil, nil
+	}
 }

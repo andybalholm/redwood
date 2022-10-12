@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,8 +20,8 @@ import (
 // handlePACFile serves an automatically-generated PAC (Proxy Auto-Config) file
 // pointing to this proxy server.
 func handlePACFile(w http.ResponseWriter, r *http.Request) {
-        proxyAddr := r.Header.Get("X-Forwarded-Host")
-        if len(proxyAddr) == 0 {
+	proxyAddr := r.Header.Get("X-Forwarded-Host")
+	if len(proxyAddr) == 0 {
 		proxyAddr = r.Host
 	}
 	conf := getConfig()
@@ -33,15 +34,7 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 				p := customPorts[port]
 				customPortLock.RUnlock()
 				if p != nil {
-					client := r.RemoteAddr
-					host, _, err := net.SplitHostPort(client)
-					if err == nil {
-						client = host
-					}
-					if originalHost := r.Header.Get("X-Forwarded-For"); originalHost != "" && net.ParseIP(originalHost) != nil {
-						client = originalHost
-					}
-					p.AllowIP(client)
+					p.AllowIP(clientIP(r))
 					proxyHost, _, err := net.SplitHostPort(proxyAddr)
 					if err == nil {
 						proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(p.Port))
@@ -63,6 +56,27 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		fmt.Fprint(w, pacTemplate)
 	}
+}
+
+// clientIP returns the client's IP address—either the first public IP address
+// from the X-Forwarded-For headers, or the address from r.RemoteAddr.
+func clientIP(r *http.Request) string {
+	for _, xff := range r.Header.Values("X-Forwarded-For") {
+		for _, addr := range strings.Split(xff, ",") {
+			addr = strings.TrimSpace(addr)
+			a, err := netip.ParseAddr(addr)
+			if err == nil && !a.IsLoopback() && !a.IsPrivate() {
+				return addr
+			}
+		}
+	}
+
+	client := r.RemoteAddr
+	host, _, err := net.SplitHostPort(client)
+	if err == nil {
+		return host
+	}
+	return client
 }
 
 const standardPACTemplate = `function FindProxyForURL(url, host) {

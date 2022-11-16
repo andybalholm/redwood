@@ -438,8 +438,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	copyResponseHeader(w, resp)
 	n, err := io.Copy(w, response.Response.Body)
-	if err != nil && err != context.Canceled {
-		log.Printf("error while copying response (URL: %s): %s", r.URL, err)
+	if err != nil {
+		if err != context.Canceled {
+			log.Printf("error while copying response (URL: %s): %s", r.URL, err)
+		}
+		if ct, ok := rt.(*connTransport); ok {
+			ct.Conn.Close()
+		}
 	}
 
 	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())

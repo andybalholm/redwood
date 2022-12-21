@@ -295,6 +295,11 @@ The following attributes are available:
     The request’s Referer header. (This matches the same way as regular
     URL matching rules.)
 
+- referer-category
+
+    A category in which the request’s Referer header has a positive score.
+    (Note that this is just based on a positive score, not on the top category.)
+
 - server-ip
 	
 	The server’s IP address, or a range of addresses

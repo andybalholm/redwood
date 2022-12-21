@@ -27,17 +27,18 @@ import (
 // An ACLDefinitions object contains information about how to assign ACLs to a
 // request.
 type ACLDefinitions struct {
-	ConnectPorts    map[int][]string
-	ContentTypes    map[string][]string
-	Methods         map[string][]string
-	Referers        map[string][]string
-	StatusCodes     map[int][]string
-	URLs            *URLMatcher
-	URLTags         map[string][]string
-	UserIPs         IPMap
-	UserNames       map[string][]string
-	ServerIPs       IPMap
-	JA3Fingerprints map[string][]string
+	ConnectPorts      map[int][]string
+	ContentTypes      map[string][]string
+	Methods           map[string][]string
+	Referers          map[string][]string
+	RefererCategories map[string][]string
+	StatusCodes       map[int][]string
+	URLs              *URLMatcher
+	URLTags           map[string][]string
+	UserIPs           IPMap
+	UserNames         map[string][]string
+	ServerIPs         IPMap
+	JA3Fingerprints   map[string][]string
 
 	// ExternalDeviceGroups is a cache of the device groups returned by the
 	// authenticator-api endpoint.
@@ -121,6 +122,19 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			u = strings.ToLower(u)
 			a.URLs.AddRule(rule{t: urlMatch, content: u})
 			a.Referers[u] = append(a.Referers[u], acl)
+		}
+
+	case "referer-category", "referrer-category":
+		if a.URLs == nil {
+			// Initializing a.URLs shouldn't be necessary here,
+			// but the rest of the referrer handling assumes it's initialized.
+			a.URLs = newURLMatcher()
+		}
+		if a.RefererCategories == nil {
+			a.RefererCategories = make(map[string][]string)
+		}
+		for _, rc := range args {
+			a.RefererCategories[rc] = append(a.RefererCategories[rc], acl)
 		}
 
 	case "server-ip":
@@ -352,6 +366,20 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 				for match := range a.URLs.MatchingRules(refURL) {
 					for _, acl := range a.Referers[match.content] {
 						acls[acl] = true
+					}
+				}
+
+				if a.RefererCategories != nil {
+					conf := getConfig()
+					tally := conf.URLRules.MatchingRules(refURL)
+					scores := conf.categoryScores(tally)
+					for c, score := range scores {
+						if score <= 0 {
+							continue
+						}
+						for _, acl := range a.RefererCategories[c] {
+							acls[acl] = true
+						}
 					}
 				}
 			}

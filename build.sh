@@ -1,3 +1,3 @@
 #!/bin/sh
 
-go build -ldflags="-X 'main.Version=$(git describe --tags)'"
+go build -pgo=auto -ldflags="-X 'main.Version=$(git describe --tags)'"

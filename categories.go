@@ -59,10 +59,10 @@ func (cf *config) LoadCategories(dirName string) error {
 	if cf.Categories == nil {
 		cf.Categories = map[string]*category{}
 	}
-	return cf.loadCategories(dirName, nil)
+	return cf.loadCategories(dirName, nil, dirName)
 }
 
-func (cf *config) loadCategories(dirName string, parent *category) error {
+func (cf *config) loadCategories(dirName string, parent *category, rootDir string) error {
 	dir, err := os.Open(dirName)
 	if err != nil {
 		return fmt.Errorf("Could not open category directory: %v", err)
@@ -77,7 +77,7 @@ func (cf *config) loadCategories(dirName string, parent *category) error {
 	for _, fi := range info {
 		if name := fi.Name(); fi.IsDir() && name[0] != '.' {
 			categoryPath := filepath.Join(dirName, name)
-			c, err := loadCategory(categoryPath, parent)
+			c, err := loadCategory(categoryPath, parent, rootDir)
 			if err != nil {
 				log.Printf("Error loading category %s: %v", name, err)
 				continue
@@ -85,7 +85,7 @@ func (cf *config) loadCategories(dirName string, parent *category) error {
 			cf.Categories[c.name] = c
 
 			// Load child categories.
-			err = cf.loadCategories(categoryPath, c)
+			err = cf.loadCategories(categoryPath, c, rootDir)
 			if err != nil {
 				log.Printf("Error loading child categories of %s: %v", c.name, err)
 			}
@@ -96,7 +96,7 @@ func (cf *config) loadCategories(dirName string, parent *category) error {
 }
 
 // loadCategory loads the configuration for one category
-func loadCategory(dirname string, parent *category) (c *category, err error) {
+func loadCategory(dirname string, parent *category, rootDir string) (c *category, err error) {
 	c = new(category)
 	c.weights = make(map[rule]weight)
 	c.name = filepath.Base(dirname)
@@ -116,6 +116,7 @@ func loadCategory(dirname string, parent *category) (c *category, err error) {
 		Action           string
 		Invisible        bool
 		ParentMultiplier float64 `yaml:"parent_multiplier"`
+		Includes         map[string]float64
 	}
 	err = yaml.Unmarshal(confData, &conf)
 	if err != nil {
@@ -162,49 +163,69 @@ func loadCategory(dirname string, parent *category) (c *category, err error) {
 		}
 	}
 
+	includes := make([]string, 0, len(conf.Includes))
+	for includedFile := range conf.Includes {
+		includes = append(includes, includedFile)
+	}
+	sort.Strings(includes)
+	for _, includedFile := range includes {
+		multiplier := conf.Includes[includedFile]
+		if !filepath.IsAbs(includedFile) {
+			includedFile = filepath.Join(rootDir, includedFile)
+		}
+		loadRuleFile(c, includedFile, multiplier)
+	}
+
 	ruleFiles, err := filepath.Glob(filepath.Join(dirname, "*.list"))
 	if err != nil {
 		return nil, fmt.Errorf("error listing rule files: %v", err)
 	}
 	sort.Strings(ruleFiles)
 	for _, list := range ruleFiles {
-		r, err := os.Open(list)
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		defer r.Close()
-		cr := newConfigReader(r)
-
-		defaultWeight := 0
-
-		for {
-			line, err := cr.ReadLine()
-			if err != nil {
-				break
-			}
-
-			r, line, err := parseRule(line)
-			if err != nil {
-				log.Printf("Error in line %d of %s: %s", cr.LineNo, list, err)
-				continue
-			}
-
-			var w weight
-			n, _ := fmt.Sscan(line, &w.points, &w.maxPoints)
-			if n == 0 {
-				w.points = defaultWeight
-			}
-
-			if r.t == defaultRule {
-				defaultWeight = w.points
-			} else {
-				c.weights[r] = w
-			}
-		}
+		loadRuleFile(c, list, 1)
 	}
 
 	return c, nil
+}
+
+func loadRuleFile(c *category, filename string, multiplier float64) {
+	r, err := os.Open(filename)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer r.Close()
+	cr := newConfigReader(r)
+
+	defaultWeight := 0
+
+	for {
+		line, err := cr.ReadLine()
+		if err != nil {
+			break
+		}
+
+		r, line, err := parseRule(line)
+		if err != nil {
+			log.Printf("Error in line %d of %s: %s", cr.LineNo, filename, err)
+			continue
+		}
+
+		var w weight
+		n, _ := fmt.Sscan(line, &w.points, &w.maxPoints)
+		if n == 0 {
+			w.points = defaultWeight
+		} else if multiplier != 1 {
+			w.points = int(float64(w.points) * multiplier)
+			w.maxPoints = int(float64(w.maxPoints) * multiplier)
+		}
+
+		if r.t == defaultRule {
+			defaultWeight = w.points
+		} else {
+			c.weights[r] = w
+		}
+	}
 }
 
 // collectRules collects the rules from all the categories and adds

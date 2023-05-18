@@ -30,11 +30,11 @@ type ACLDefinitions struct {
 	ConnectPorts      map[int][]string
 	ContentTypes      map[string][]string
 	Methods           map[string][]string
-	Referers          map[string][]string
+	Referers          map[rule][]string
 	RefererCategories map[string][]string
 	StatusCodes       map[int][]string
 	URLs              *URLMatcher
-	URLTags           map[string][]string
+	URLTags           map[rule][]string
 	UserIPs           IPMap
 	UserNames         map[string][]string
 	ServerIPs         IPMap
@@ -116,12 +116,13 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			a.URLs = newURLMatcher()
 		}
 		if a.Referers == nil {
-			a.Referers = make(map[string][]string)
+			a.Referers = make(map[rule][]string)
 		}
 		for _, u := range args {
 			u = strings.ToLower(u)
-			a.URLs.AddRule(rule{t: urlMatch, content: u})
-			a.Referers[u] = append(a.Referers[u], acl)
+			r := simpleRule{t: urlMatch, content: u}
+			a.URLs.AddRule(r)
+			a.Referers[r] = append(a.Referers[r], acl)
 		}
 
 	case "referer-category", "referrer-category":
@@ -171,12 +172,13 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			a.URLs = newURLMatcher()
 		}
 		if a.URLTags == nil {
-			a.URLTags = make(map[string][]string)
+			a.URLTags = make(map[rule][]string)
 		}
 		for _, u := range args {
 			u = strings.ToLower(u)
-			a.URLs.AddRule(rule{t: urlMatch, content: u})
-			a.URLTags[u] = append(a.URLTags[u], acl)
+			r := simpleRule{t: urlMatch, content: u}
+			a.URLs.AddRule(r)
+			a.URLTags[r] = append(a.URLTags[r], acl)
 		}
 
 	case "user-agent":
@@ -355,7 +357,7 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 
 	if a.URLs != nil {
 		for match := range a.URLs.MatchingRules(r.URL) {
-			for _, acl := range a.URLTags[match.content] {
+			for _, acl := range a.URLTags[match] {
 				acls[acl] = true
 			}
 		}
@@ -364,7 +366,7 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 			refURL, err := url.Parse(referer)
 			if err == nil {
 				for match := range a.URLs.MatchingRules(refURL) {
-					for _, acl := range a.Referers[match.content] {
+					for _, acl := range a.Referers[match] {
 						acls[acl] = true
 					}
 				}

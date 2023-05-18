@@ -117,7 +117,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		for _, h := range conf.ImageHashes {
 			distance := dhash.Distance(hash, h.Hash)
 			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
-				tally[rule{imageHash, h.String()}]++
+				tally[simpleRule{imageHash, h.String()}]++
 				scoresNeedUpdate = true
 			}
 		}

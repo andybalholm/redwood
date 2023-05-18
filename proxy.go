@@ -586,7 +586,7 @@ func doImageHash(response *Response) error {
 		for _, h := range conf.ImageHashes {
 			distance := dhash.Distance(hash, h.Hash)
 			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
-				response.Tally[rule{imageHash, h.String()}]++
+				response.Tally[simpleRule{imageHash, h.String()}]++
 			}
 		}
 	}

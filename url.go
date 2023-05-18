@@ -64,7 +64,7 @@ func (rm *regexMap) findMatches(s string, tally map[rule]int) {
 }
 
 // addRule adds a rule to the map.
-func (rm *regexMap) addRule(r rule) {
+func (rm *regexMap) addRule(r simpleRule) {
 	s := r.content
 
 	re, err := regexp.Compile(s)
@@ -119,7 +119,7 @@ func newURLMatcher() *URLMatcher {
 }
 
 // AddRule adds a rule to the matcher (unless it's already there).
-func (m *URLMatcher) AddRule(r rule) {
+func (m *URLMatcher) AddRule(r simpleRule) {
 	switch r.t {
 	case urlMatch:
 		m.fragments[r.content] = r
@@ -233,7 +233,7 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 
 	if ip := net.ParseIP(host); ip != nil {
 		for _, ipRule := range m.ipAddrs.matches(ip) {
-			r := rule{t: ipAddr, content: ipRule}
+			r := simpleRule{t: ipAddr, content: ipRule}
 			result[r] = 1
 		}
 	}

@@ -34,7 +34,7 @@ func (c *config) loadQueryConfig(filename string) error {
 			continue
 		}
 
-		r, line, err := parseRule(line)
+		r, line, err := parseSimpleRule(line)
 		if err != nil {
 			log.Printf("Syntax error in %s: %s", filename, err)
 			continue

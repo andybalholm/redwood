@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
-// A rule is a URL fragment, URL regular expression, or content phrase
+// A simpleRule is a URL fragment, URL regular expression, or content phrase
 // that will be matched against a page in the process of determining its score.
-type rule struct {
+type simpleRule struct {
 	t       ruleType
 	content string
 }
@@ -28,8 +30,10 @@ const (
 	imageHash
 )
 
-func (r rule) String() string {
+func (r simpleRule) String() string {
 	switch r.t {
+	case defaultRule:
+		return "default"
 	case urlMatch:
 		return r.content
 	case ipAddr:
@@ -55,12 +59,12 @@ func (r rule) String() string {
 	panic(fmt.Errorf("invalid rule type: %d", r.t))
 }
 
-// parseRule parses a rule from the beginning of s, returning the rule
+// parseSimpleRule parses a rule from the beginning of s, returning the rule
 // and any remaining unconsumed characters from s.
-func parseRule(s string) (r rule, leftover string, err error) {
+func parseSimpleRule(s string) (r simpleRule, leftover string, err error) {
 	s = strings.TrimLeft(s, " \t\r\n\f")
 	if s == "" {
-		return rule{}, "", errors.New("blank rule")
+		return simpleRule{}, "", errors.New("blank rule")
 	}
 
 	switch s[0] {
@@ -74,7 +78,7 @@ func parseRule(s string) (r rule, leftover string, err error) {
 			slash = strings.LastIndex(s[:space], "/")
 		}
 		if slash == 0 {
-			return rule{}, s, errors.New("unmatched slash")
+			return simpleRule{}, s, errors.New("unmatched slash")
 		}
 		r.content = s[1:slash]
 		s = s[slash+1:]
@@ -96,9 +100,9 @@ func parseRule(s string) (r rule, leftover string, err error) {
 		}
 	case '<':
 		r.t = contentPhrase
-		bracket := strings.LastIndex(s, ">")
+		bracket := strings.Index(s, ">")
 		if bracket == -1 {
-			return rule{}, s, errors.New("unmatched '<'")
+			return simpleRule{}, s, errors.New("unmatched '<'")
 		}
 		r.content = wordString(s[1:bracket])
 		s = s[bracket+1:]
@@ -114,26 +118,91 @@ func parseRule(s string) (r rule, leftover string, err error) {
 		}
 		r.content = strings.ToLower(r.content)
 	default:
-		r.t = urlMatch
-		space := strings.Index(s, " ")
-		if space == -1 {
-			r.content = strings.ToLower(s)
-			s = ""
+		if c, _ := utf8.DecodeRuneInString(s); unicode.IsLetter(c) || unicode.IsDigit(c) {
+			r.t = urlMatch
+			space := strings.Index(s, " ")
+			if space == -1 {
+				r.content = strings.ToLower(s)
+				s = ""
+			} else {
+				r.content = strings.ToLower(s[:space])
+				s = s[space:]
+			}
+			if r.content == "default" {
+				r.t = defaultRule
+			}
+			if strings.HasSuffix(r.content, "/") {
+				r.content = r.content[:len(r.content)-1]
+			}
+			if strings.HasPrefix(r.content, "ip:") {
+				r.t = ipAddr
+				r.content = strings.TrimPrefix(r.content, "ip:")
+			}
 		} else {
-			r.content = strings.ToLower(s[:space])
-			s = s[space:]
-		}
-		if r.content == "default" {
-			r.t = defaultRule
-		}
-		if strings.HasSuffix(r.content, "/") {
-			r.content = r.content[:len(r.content)-1]
-		}
-		if strings.HasPrefix(r.content, "ip:") {
-			r.t = ipAddr
-			r.content = strings.TrimPrefix(r.content, "ip:")
+			return simpleRule{}, s, fmt.Errorf("invalid rule: %q", s)
 		}
 	}
 
 	return r, s, nil
+}
+
+func (simpleRule) isARule() {}
+
+type rule interface {
+	isARule()
+	fmt.Stringer
+}
+
+// a compoundRule is two rules (or compoundRules) joined by a boolean operator
+// (&, |, or &^ [AND NOT]).
+type compoundRule struct {
+	left  rule
+	op    string
+	right rule
+}
+
+func (compoundRule) isARule() {}
+
+func parenthesesIfCompound(r rule) string {
+	switch r := r.(type) {
+	case compoundRule:
+		return "(" + r.String() + ")"
+	default:
+		return r.String()
+	}
+}
+
+func (r compoundRule) String() string {
+	return parenthesesIfCompound(r.left) + " " + r.op + " " + parenthesesIfCompound(r.right)
+}
+
+func parseCompoundRule(s string) (rule, string, error) {
+	left, afterLeft, err := alt(
+		delimited(tag("("), parseCompoundRule, tag(")")),
+		func(s string) (rule, string, error) { return parseSimpleRule(s) },
+	)(s)
+	if err != nil {
+		return nil, s, err
+	}
+
+	op, afterOp, err := alt(
+		tag("&^"),
+		tag("&"),
+		tag("|"),
+	)(afterLeft)
+	if err != nil {
+		// Since there's no operator, it's actually a simple rule.
+		// Return it.
+		return left, afterLeft, nil
+	}
+
+	right, afterRight, err := alt(
+		delimited(tag("("), parseCompoundRule, tag(")")),
+		func(s string) (rule, string, error) { return parseSimpleRule(s) },
+	)(afterOp)
+	if err != nil {
+		return nil, afterRight, err
+	}
+
+	return compoundRule{left, op, right}, afterRight, nil
 }

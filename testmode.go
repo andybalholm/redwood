@@ -49,6 +49,7 @@ func runURLTest(u string) {
 	if len(request.Tally) == 0 {
 		fmt.Println("No URL rules match.")
 	} else {
+		conf.applyCompoundRules(request.Tally)
 		fmt.Println("The following URL rules match:")
 		for s, _ := range request.Tally {
 			fmt.Println(s)
@@ -154,6 +155,7 @@ func runURLTest(u string) {
 		if len(tally) == 0 {
 			fmt.Println("No content phrases match.")
 		} else {
+			conf.applyCompoundRules(tally)
 			fmt.Println("The following rules match:")
 			printSortedTally(stringTally(tally))
 		}
@@ -170,7 +172,7 @@ func runURLTest(u string) {
 		for _, h := range conf.ImageHashes {
 			distance := dhash.Distance(hash, h.Hash)
 			if distance <= h.Threshold || h.Threshold == -1 && distance <= conf.DhashThreshold {
-				tally[rule{imageHash, h.String()}]++
+				tally[simpleRule{imageHash, h.String()}]++
 				fmt.Printf("Matching image hash found: %v (%d bits difference)\n", h, distance)
 			}
 		}

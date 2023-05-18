@@ -205,7 +205,7 @@ func loadRuleFile(c *category, filename string, multiplier float64) {
 			break
 		}
 
-		r, line, err := parseRule(line)
+		r, line, err := parseCompoundRule(line)
 		if err != nil {
 			log.Printf("Error in line %d of %s: %s", cr.LineNo, filename, err)
 			continue
@@ -220,7 +220,7 @@ func loadRuleFile(c *category, filename string, multiplier float64) {
 			w.maxPoints = int(float64(w.maxPoints) * multiplier)
 		}
 
-		if r.t == defaultRule {
+		if sr, ok := r.(simpleRule); ok && sr.t == defaultRule {
 			defaultWeight = w.points
 		} else {
 			c.weights[r] = w
@@ -228,35 +228,46 @@ func loadRuleFile(c *category, filename string, multiplier float64) {
 	}
 }
 
+func (cf *config) addRule(r rule) {
+	switch r := r.(type) {
+	case simpleRule:
+		switch r.t {
+		case contentPhrase:
+			cf.ContentPhraseList.addPhrase(r.content)
+		case imageHash:
+			content := r.content
+			threshold := -1
+			if dash := strings.Index(content, "-"); dash != -1 {
+				t, err := strconv.Atoi(content[dash+1:])
+				if err != nil {
+					log.Printf("%v: %v", r, err)
+					return
+				}
+				threshold = t
+				content = content[:dash]
+			}
+			h, err := dhash.Parse(content)
+			if err != nil {
+				log.Printf("%v: %v", r, err)
+				return
+			}
+			cf.ImageHashes = append(cf.ImageHashes, dhashWithThreshold{h, threshold})
+		default:
+			cf.URLRules.AddRule(r)
+		}
+	case compoundRule:
+		cf.addRule(r.left)
+		cf.addRule(r.right)
+		cf.CompoundRules = append(cf.CompoundRules, r)
+	}
+}
+
 // collectRules collects the rules from all the categories and adds
 // them to URLRules and phraseRules.
 func (cf *config) collectRules() {
 	for _, c := range cf.Categories {
-		for rule, _ := range c.weights {
-			switch rule.t {
-			case contentPhrase:
-				cf.ContentPhraseList.addPhrase(rule.content)
-			case imageHash:
-				content := rule.content
-				threshold := -1
-				if dash := strings.Index(content, "-"); dash != -1 {
-					t, err := strconv.Atoi(content[dash+1:])
-					if err != nil {
-						log.Printf("%v: %v", rule, err)
-						continue
-					}
-					threshold = t
-					content = content[:dash]
-				}
-				h, err := dhash.Parse(content)
-				if err != nil {
-					log.Printf("%v: %v", rule, err)
-					continue
-				}
-				cf.ImageHashes = append(cf.ImageHashes, dhashWithThreshold{h, threshold})
-			default:
-				cf.URLRules.AddRule(rule)
-			}
+		for r, _ := range c.weights {
+			cf.addRule(r)
 		}
 	}
 	cf.ContentPhraseList.findFallbackNodes(0, nil)
@@ -284,11 +295,38 @@ func (c *category) score(tally map[rule]int, conf *config) int {
 	return total
 }
 
+func (cf *config) applyCompoundRules(tally map[rule]int) {
+	for _, cr := range cf.CompoundRules {
+		left := tally[cr.left]
+		right := tally[cr.right]
+		combined := left
+		switch cr.op {
+		case "&":
+			if right < left {
+				combined = right
+			}
+		case "|":
+			if right > left {
+				combined = right
+			}
+		case "&^":
+			if right != 0 {
+				combined = 0
+			}
+		}
+		if combined != 0 {
+			tally[cr] = combined
+		}
+	}
+}
+
 // categoryScores returns a map containing a page's score for each category.
 func (cf *config) categoryScores(tally map[rule]int) map[string]int {
 	if len(tally) == 0 {
 		return nil
 	}
+
+	cf.applyCompoundRules(tally)
 
 	scores := make(map[string]int)
 	for _, c := range cf.Categories {

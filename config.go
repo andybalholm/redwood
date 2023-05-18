@@ -50,6 +50,7 @@ type config struct {
 	CountOnce          bool
 	Threshold          int
 	URLRules           *URLMatcher
+	CompoundRules      []compoundRule
 	MaxContentScanSize int
 	PublicSuffixes     []string
 

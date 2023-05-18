@@ -32,7 +32,7 @@ func (conf *config) scanContent(content []byte, contentType, cs string, tally ma
 	transformers = append(transformers, new(wordTransformer))
 
 	ps := newPhraseScanner(conf.ContentPhraseList, func(s string) {
-		tally[rule{t: contentPhrase, content: s}]++
+		tally[simpleRule{t: contentPhrase, content: s}]++
 	})
 	ps.scanByte(' ')
 
@@ -67,7 +67,7 @@ func (conf *config) scanContent(content []byte, contentType, cs string, tally ma
 func (conf *config) scanJSContent(content []byte, tally map[rule]int) {
 	_, items := lex(string(content))
 	ps := newPhraseScanner(conf.ContentPhraseList, func(s string) {
-		tally[rule{t: contentPhrase, content: s}]++
+		tally[simpleRule{t: contentPhrase, content: s}]++
 	})
 
 	for s := range items {

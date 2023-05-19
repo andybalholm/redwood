@@ -154,7 +154,7 @@ type rule interface {
 }
 
 // a compoundRule is two rules (or compoundRules) joined by a boolean operator
-// (&, |, or &^ [AND NOT]).
+// (&, |, or &! [AND NOT]).
 type compoundRule struct {
 	left  rule
 	op    string
@@ -186,7 +186,7 @@ func parseCompoundRule(s string) (rule, string, error) {
 	}
 
 	op, afterOp, err := alt(
-		tag("&^"),
+		tag("&!"),
 		tag("&"),
 		tag("|"),
 	)(afterLeft)

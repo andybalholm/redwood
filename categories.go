@@ -309,7 +309,7 @@ func (cf *config) applyCompoundRules(tally map[rule]int) {
 			if right > left {
 				combined = right
 			}
-		case "&^":
+		case "&!":
 			if right != 0 {
 				combined = 0
 			}

@@ -12,6 +12,7 @@ func init() {
 	apiServeMux.HandleFunc("/proxy.pac", handlePACFile)
 	apiServeMux.HandleFunc("/reload", handleReload)
 	apiServeMux.HandleFunc("/classify", handleClassification)
+	apiServeMux.HandleFunc("/classify/analyze-score", handleClassification)
 	apiServeMux.HandleFunc("/classify/verbose", handleClassification)
 	apiServeMux.HandleFunc("/classify-text", handleClassifyText)
 	apiServeMux.HandleFunc("/classify-text/verbose", handleClassifyText)

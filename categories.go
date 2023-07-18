@@ -274,23 +274,36 @@ func (cf *config) collectRules() {
 	cf.URLRules.finalize()
 }
 
+type ruleScore struct {
+	Count int
+	Score int
+}
+
 // score returns c's score for a page that matched
 // the rules in tally. The keys are the rule names, and the values
 // are the counts of how many times each rule was matched.
-func (c *category) score(tally map[rule]int, conf *config) int {
+//
+// If ruleScores is not nil, it will get an entry for each rule that contributes
+// to the score for the category.
+func (c *category) score(tally map[rule]int, conf *config, ruleScores map[string]ruleScore) int {
 	total := 0
 	weights := c.weights
 	for r, count := range tally {
 		w := weights[r]
-		if conf.CountOnce {
-			total += w.points
+		if w.points == 0 {
 			continue
 		}
 		p := w.points * count
+		if conf.CountOnce {
+			p = w.points
+		}
 		if w.maxPoints != 0 && (p > 0 && p > w.maxPoints || p < 0 && p < w.maxPoints) {
 			p = w.maxPoints
 		}
 		total += p
+		if ruleScores != nil {
+			ruleScores[r.String()] = ruleScore{count, p}
+		}
 	}
 	return total
 }
@@ -330,7 +343,7 @@ func (cf *config) categoryScores(tally map[rule]int) map[string]int {
 
 	scores := make(map[string]int)
 	for _, c := range cf.Categories {
-		s := c.score(tally, cf)
+		s := c.score(tally, cf, nil)
 		if s != 0 {
 			scores[c.name] = s
 		}

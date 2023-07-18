@@ -18,12 +18,13 @@ import (
 )
 
 type classificationResponse struct {
-	URL        string         `json:"url,omitempty"`
-	Text       string         `json:"text,omitempty"`
-	Categories map[string]int `json:"categories,omitempty"`
-	Rules      map[string]int `json:"rules,omitempty"`
-	Error      string         `json:"error,omitempty"`
-	LogLine    []string       `json:"logLine,omitempty"`
+	URL           string                          `json:"url,omitempty"`
+	Text          string                          `json:"text,omitempty"`
+	Categories    map[string]int                  `json:"categories,omitempty"`
+	Rules         map[string]int                  `json:"rules,omitempty"`
+	Error         string                          `json:"error,omitempty"`
+	LogLine       []string                        `json:"logLine,omitempty"`
+	ScoreAnalysis map[string]map[string]ruleScore `json:"scoreAnalysis,omitempty"`
 }
 
 // handleClassification responds to an HTTP request with a url parameter, and
@@ -138,9 +139,21 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 
 	result.Categories = scores
 	logLine := logAccess(req, resp, int64(len(content)), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil, nil)
-	if r.URL.Path == "/classify/verbose" {
+	switch r.URL.Path {
+	case "/classify/verbose":
 		result.LogLine = logLine
+	case "/classify/analyze-score":
+		sa := make(map[string]map[string]ruleScore)
+		for _, c := range conf.Categories {
+			rs := make(map[string]ruleScore)
+			c.score(tally, conf, rs)
+			if len(rs) > 0 {
+				sa[c.name] = rs
+			}
+		}
+		result.ScoreAnalysis = sa
 	}
+
 	ServeJSON(w, r, result)
 }
 

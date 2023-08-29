@@ -209,3 +209,58 @@ func ServeJSON(w http.ResponseWriter, r *http.Request, v interface{}) {
 		w.Write(data)
 	}
 }
+
+func parseTally(input string) (tally map[rule]int, rest string, err error) {
+	tally = make(map[rule]int)
+	rest = input
+
+	for {
+		var r rule
+		var n int
+		r, rest, err = parseCompoundRule(rest)
+		if err != nil {
+			return nil, rest, err
+		}
+		n, rest, err = integer(rest)
+		if err != nil {
+			return nil, rest, err
+		}
+		tally[r] = n
+
+		_, rest, err = tag(",")(rest)
+		if err != nil {
+			break
+		}
+	}
+
+	return tally, rest, nil
+}
+
+func handleAnalyzeTally(w http.ResponseWriter, r *http.Request) {
+	var result classificationResponse
+
+	tally, rest, err := parseTally(r.FormValue("tally"))
+	if rest != "" || err != nil {
+		result.Error = "invalid tally syntax"
+		ServeJSON(w, r, result)
+		return
+	}
+
+	result.Rules = make(map[string]int)
+	for r, n := range tally {
+		result.Rules[r.String()] = n
+	}
+
+	conf := getConfig()
+	sa := make(map[string]map[string]ruleScore)
+	for _, c := range conf.Categories {
+		rs := make(map[string]ruleScore)
+		c.score(tally, conf, rs)
+		if len(rs) > 0 {
+			sa[c.name] = rs
+		}
+	}
+	result.ScoreAnalysis = sa
+
+	ServeJSON(w, r, result)
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -57,4 +58,57 @@ func delimited[T, U, V any](left parser[T], inner parser[U], right parser[V]) pa
 		_, rest, err = right(rest)
 		return
 	}
+}
+
+func takeAny1(set string) parser[string] {
+	return func(input string) (string, string, error) {
+		rest := strings.TrimLeft(input, set)
+		if len(rest) == len(input) {
+			return "", input, fmt.Errorf("nothing matching %q was found", set)
+		}
+		return input[:len(input)-len(rest)], rest, nil
+	}
+}
+
+func opt[T any](p parser[T]) parser[*T] {
+	return func(input string) (*T, string, error) {
+		value, rest, err := p(input)
+		if err != nil {
+			return nil, input, nil
+		}
+		return &value, rest, nil
+	}
+}
+
+func recognize2[T, U any](p1 parser[T], p2 parser[U]) parser[string] {
+	return func(input string) (value string, rest string, err error) {
+		_, rest, err = p1(input)
+		if err != nil {
+			return
+		}
+		_, rest, err = p2(rest)
+		if err != nil {
+			return
+		}
+		return input[:len(input)-len(rest)], rest, nil
+	}
+}
+
+func mapWithError[T, U any](p parser[T], f func(T) (U, error)) parser[U] {
+	return func(input string) (value U, rest string, err error) {
+		v, rest, err := p(input)
+		if err != nil {
+			return value, input, err
+		}
+		value, err = f(v)
+		return value, rest, err
+	}
+}
+
+func integer(input string) (int, string, error) {
+	s := strings.TrimLeft(input, " \t\r\n\f")
+	return mapWithError(
+		recognize2(opt(tag("-")), takeAny1("0123456789")),
+		strconv.Atoi,
+	)(s)
 }

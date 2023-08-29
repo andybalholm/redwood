@@ -16,6 +16,7 @@ func init() {
 	apiServeMux.HandleFunc("/classify/verbose", handleClassification)
 	apiServeMux.HandleFunc("/classify-text", handleClassifyText)
 	apiServeMux.HandleFunc("/classify-text/verbose", handleClassifyText)
+	apiServeMux.HandleFunc("/analyze-tally", handleAnalyzeTally)
 
 	apiServeMux.HandleFunc("/per-user-ports", handlePerUserPortList)
 	apiServeMux.HandleFunc("/per-user-ports/authenticate", handlePerUserAuthenticate)

@@ -15,9 +15,9 @@ require (
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	go.starlark.net v0.0.0-20230128213706-3f75dec8e403
 	golang.org/x/crypto v0.6.0
-	golang.org/x/image v0.5.0
+	golang.org/x/image v0.10.0
 	golang.org/x/net v0.7.0
-	golang.org/x/text v0.7.0
+	golang.org/x/text v0.11.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

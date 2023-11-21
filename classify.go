@@ -48,7 +48,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Classifier: error creating request for %s: %v", url, err)
 		return
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 11_7_10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.53 Safari/537.36")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

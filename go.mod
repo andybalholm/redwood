@@ -14,7 +14,7 @@ require (
 	github.com/qri-io/starlib v0.5.0
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	go.starlark.net v0.0.0-20230128213706-3f75dec8e403
-	golang.org/x/crypto v0.14.0
+	golang.org/x/crypto v0.17.0
 	golang.org/x/image v0.14.0
 	golang.org/x/net v0.17.0
 	golang.org/x/text v0.14.0
@@ -30,7 +30,7 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/mod v0.8.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

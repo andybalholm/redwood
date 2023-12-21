@@ -172,3 +172,27 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
   You can do the lookup with your system’s default DNS resolver(`lookup_addr("8.8.8.8")`),
   or specify a specific DNS server to use (`lookup_addr("8.8.8.8", "208.67.222.123")`).
   The trailing dot that is normally returned by a reverse DNS query is stripped off.
+
+### Caches
+
+Redwood provides a `Cache` type that scripts can use to temporarily store the results of 
+calculations or network lookups.
+Caches have names, and are shared between scripts. 
+To get a cache, call `Cache(name, size)`.
+This either creates a cache with the specified name, or returns the cache that has already
+been created with that name.
+It sets the cache’s capacity (in number of items).
+
+The cache’s keys must be strings; the values can be any type.
+
+A `Cache` has the following methods:
+
+- `set(key, val, ttl)`: stores a value in the cache.
+  The ttl is an optional `time.duration` value that specifies when the entry will expire.
+  If it is omitted, the entry will stay in the cache until it is displaced by adding another entry.
+
+- `get(key)`: returns the last value that was stored with that key,
+  or `None` if the key is not found in the cache (either because it hasn’t been stored there
+  or because the entry has expired or been replaced).
+
+- `del(key)`: removes an entry from the cache.

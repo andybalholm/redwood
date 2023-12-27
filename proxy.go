@@ -233,7 +233,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch request.Action.Action {
 	case "block":
-		showBlockPage(w, r, nil, user, request.Tally, request.Scores.data, request.Action)
+		showBlockPage(w, r, nil, user, request.Tally, request.Scores.data, request.Action, request.LogData)
 		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		return
 	case "block-invisible":
@@ -414,7 +414,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if response.Action.Action == "block" {
-			showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
+			showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action, response.LogData)
 			logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses(), response.LogData)
 			return
 		}
@@ -437,7 +437,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch response.Action.Action {
 	case "block":
-		showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
+		showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action, response.LogData)
 		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses(), response.LogData)
 		return
 	case "block-invisible":

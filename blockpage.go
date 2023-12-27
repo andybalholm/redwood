@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"go.starlark.net/starlark"
 )
 
 // Functions for displaying block pages.
@@ -83,7 +85,7 @@ func (c *config) aclDescriptions(rule ACLActionRule) []string {
 }
 
 // showBlockPage shows a block page for a page that was blocked by an ACL.
-func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule) {
+func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, extraData any) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Redwood-Block-Page", "403 Access Denied")
 
@@ -115,6 +117,15 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 		if host, _, err := net.SplitHostPort(clientIP); err == nil {
 			clientIP = host
 		}
+		if e, ok := extraData.(starlark.Value); ok {
+			j, err := starlark.Call(&starlark.Thread{Name: "json.encode"}, starlarkJSONEncode, starlark.Tuple{e}, nil)
+			if err == nil {
+				if j, ok := j.(starlark.String); ok {
+					extraData = json.RawMessage(j)
+				}
+			}
+		}
+
 		d := map[string]interface{}{
 			"url":            r.URL.String(),
 			"rule":           rule,
@@ -126,6 +137,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 			"client-ip":      clientIP,
 			"referer":        r.Referer(),
 			"request-header": r.Header,
+			"log-data":       extraData,
 		}
 		if resp != nil {
 			d["response-header"] = resp.Header

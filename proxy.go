@@ -234,16 +234,16 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch request.Action.Action {
 	case "block":
 		showBlockPage(w, r, nil, user, request.Tally, request.Scores.data, request.Action)
-		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		return
 	}
 
 	if r.Host == localServer {
-		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		getConfig().ServeMux.ServeHTTP(w, r)
 		return
 	}
@@ -256,13 +256,13 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(http.ErrAbortHandler)
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
-		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		connectDirect(conn, r.URL.Host, nil, dialer)
 		return
 	}
 
 	if r.Header.Get("Upgrade") == "websocket" {
-		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		h.makeWebsocketConnection(w, r)
 		return
 	}
@@ -337,7 +337,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		showErrorPage(w, r, err)
 		log.Printf("error fetching %s: %s", r.URL, err)
-		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil)
+		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
 		return
 	}
 	defer resp.Body.Close()
@@ -363,6 +363,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	response := &Response{
 		Request:  request,
 		Response: resp,
+		LogData:  request.LogData,
 	}
 	response.Scores = request.Scores
 	response.Tally = make(map[rule]int)
@@ -414,7 +415,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if response.Action.Action == "block" {
 			showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
-			logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses())
+			logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses(), response.LogData)
 			return
 		}
 	}
@@ -437,11 +438,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch response.Action.Action {
 	case "block":
 		showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action)
-		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())
+		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses(), response.LogData)
 		return
 	case "block-invisible":
 		showInvisibleBlock(w)
-		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())
+		logAccess(r, resp, 0, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses(), response.LogData)
 		return
 	}
 
@@ -459,7 +460,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses())
+	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses(), response.LogData)
 }
 
 func filterRequest(req *Request, checkAuth bool) {
@@ -871,6 +872,9 @@ type Request struct {
 	ClientIP string
 	Session  *TLSSession
 
+	// LogData is extra data to be included in log lines.
+	LogData starlark.Value
+
 	scoresAndACLs
 
 	frozen bool
@@ -891,6 +895,9 @@ func (r *Request) Freeze() {
 		r.ACLs.Freeze()
 		r.Scores.Freeze()
 		r.misc.Freeze()
+		if r.LogData != nil {
+			r.LogData.Freeze()
+		}
 	}
 }
 
@@ -902,7 +909,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc", "log_data"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -945,6 +952,11 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return r.Session, nil
 	case "misc":
 		return &r.misc, nil
+	case "log_data":
+		if r.LogData == nil {
+			return starlark.None, nil
+		}
+		return r.LogData, nil
 
 	default:
 		return nil, nil
@@ -976,6 +988,9 @@ func (r *Request) SetField(name string, val starlark.Value) error {
 			return err
 		}
 		return r.setAction(newAction)
+	case "log_data":
+		r.LogData = val
+		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Request", name))
 	}
@@ -985,6 +1000,9 @@ func (r *Request) SetField(name string, val starlark.Value) error {
 type Response struct {
 	Request  *Request
 	Response *http.Response
+
+	// LogData is extra data to be included in log lines.
+	LogData starlark.Value
 
 	scoresAndACLs
 
@@ -1018,6 +1036,9 @@ func (r *Response) Freeze() {
 		r.ACLs.Freeze()
 		r.Scores.Freeze()
 		r.misc.Freeze()
+		if r.LogData != nil {
+			r.LogData.Freeze()
+		}
 	}
 }
 
@@ -1029,7 +1050,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1063,6 +1084,11 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return &HeaderDict{data: r.Response.Header}, nil
 	case "misc":
 		return &r.misc, nil
+	case "log_data":
+		if r.LogData == nil {
+			return starlark.None, nil
+		}
+		return r.LogData, nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil
@@ -1103,6 +1129,9 @@ func (r *Response) SetField(name string, val starlark.Value) error {
 			return err
 		}
 		return r.setAction(newAction)
+	case "log_data":
+		r.LogData = val
+		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Response", name))
 	}

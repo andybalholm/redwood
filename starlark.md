@@ -70,6 +70,8 @@ The `TLSSession` object has the following attributes:
 - `misc`: a dictionary-like object where the script can store miscellaneous data.
   (Rather than a regular dictionary, it's a concurrency-safe wrapper around one.)
 
+- `log_data`: the script can put data here to be included in the access log, encoded as JSON
+
 ### `filter_request`
 
 For each HTTP request that Redwood receives, it calls the `filter_request` function.
@@ -113,6 +115,8 @@ The `Request` object has the following attributes:
 
 - `misc`: a dictionary where the script can store miscellaneous data
 
+- `log_data`: the script can put data here to be included in the access log, encoded as JSON
+
 ### `filter_response`
 
 For each HTTP response that Redwood receives, it calls the `filter_response` function.
@@ -143,6 +147,8 @@ The `Response` object has the following attributes:
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
 
 - `misc`: a dictionary where the script can store miscellaneous data
+
+- `log_data`: the script can put data here to be included in the access log, encoded as JSON
 
 Other methods of `Response`:
 

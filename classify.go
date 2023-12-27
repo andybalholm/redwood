@@ -138,7 +138,7 @@ func handleClassification(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result.Categories = scores
-	logLine := logAccess(req, resp, int64(len(content)), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil, nil)
+	logLine := logAccess(req, resp, int64(len(content)), modified, "", tally, scores, ACLActionRule{Action: "classify"}, "", nil, nil, nil)
 	switch r.URL.Path {
 	case "/classify/verbose":
 		result.LogLine = logLine

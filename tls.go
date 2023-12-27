@@ -247,12 +247,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	session.chooseAction()
 
-	logAccess(cr, nil, 0, false, user, tally, scores, session.Action, "", session.Ignored, nil)
+	logAccess(cr, nil, 0, false, user, tally, scores, session.Action, "", session.Ignored, nil, session.LogData)
 
 	switch session.Action.Action {
 	case "allow", "":
 		upload, download := connectDirect(conn, session.ServerAddr, clientHello, dialer)
-		logAccess(cr, nil, upload+download, false, user, tally, scores, session.Action, "", session.Ignored, nil)
+		logAccess(cr, nil, upload+download, false, user, tally, scores, session.Action, "", session.Ignored, nil, session.LogData)
 		return
 	case "block":
 		conn.Close()
@@ -423,6 +423,9 @@ type TLSSession struct {
 	// ConnectHeader is the header from the CONNECT request, if any.
 	ConnectHeader http.Header
 
+	// LogData is extra data to be included in log lines.
+	LogData starlark.Value
+
 	scoresAndACLs
 
 	frozen bool
@@ -481,6 +484,9 @@ func (s *TLSSession) Freeze() {
 		s.frozen = true
 		s.ACLs.Freeze()
 		s.Scores.Freeze()
+		if s.LogData != nil {
+			s.LogData.Freeze()
+		}
 	}
 }
 
@@ -492,7 +498,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -523,6 +529,11 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return &HeaderDict{data: s.ConnectHeader}, nil
 	case "misc":
 		return &s.misc, nil
+	case "log_data":
+		if s.LogData == nil {
+			return starlark.None, nil
+		}
+		return s.LogData, nil
 
 	default:
 		return nil, nil
@@ -556,6 +567,9 @@ func (s *TLSSession) SetField(name string, val starlark.Value) error {
 			return err
 		}
 		return s.setAction(newAction)
+	case "log_data":
+		s.LogData = val
+		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of TLSSession", name))
 	}

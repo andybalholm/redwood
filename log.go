@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"log"
 	"mime"
@@ -18,6 +19,8 @@ import (
 	"time"
 
 	"github.com/baruwa-enterprise/clamd"
+	starlarkjson "go.starlark.net/lib/json"
+	"go.starlark.net/starlark"
 )
 
 // recording pages filtered to access log
@@ -65,7 +68,9 @@ func (l *CSVLog) Log(data []string) {
 	l.csv.Flush()
 }
 
-func logAccess(req *http.Request, resp *http.Response, contentLength int64, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string, clamdResponse []*clamd.Response) []string {
+var starlarkJSONEncode = starlarkjson.Module.Members["encode"]
+
+func logAccess(req *http.Request, resp *http.Response, contentLength int64, pruned bool, user string, tally map[rule]int, scores map[string]int, rule ACLActionRule, title string, ignored []string, clamdResponse []*clamd.Response, extraData any) []string {
 	conf := getConfig()
 
 	modified := ""
@@ -125,7 +130,27 @@ func logAccess(req *http.Request, resp *http.Response, contentLength int64, prun
 		}
 	}
 
-	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(filteredScores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp), clamdStatus, rule.Description, clientIP)
+	var extraDataString string
+	switch extraData := extraData.(type) {
+	case nil:
+		extraDataString = ""
+	case starlark.Value:
+		j, err := starlark.Call(&starlark.Thread{Name: "json.encode"}, starlarkJSONEncode, starlark.Tuple{extraData}, nil)
+		if err != nil {
+			log.Println("Error from starlark json.encode:", err)
+		} else if j, ok := j.(starlark.String); ok {
+			extraDataString = string(j)
+		} else {
+			log.Printf("Unexpected type returned from Starlark json.encode: %T", j)
+		}
+
+	default:
+		if b, err := json.Marshal(extraData); err == nil {
+			extraDataString = string(b)
+		}
+	}
+
+	logLine := toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), user, rule.Action, req.URL, req.Method, status, contentType, contentLength, modified, listTally(stringTally(tally)), listTally(filteredScores), rule.Conditions(), title, strings.Join(ignored, ","), userAgent, req.Proto, req.Referer(), platform(req.Header.Get("User-Agent")), downloadedFilename(resp), clamdStatus, rule.Description, clientIP, extraDataString)
 
 	accessLog.Log(logLine)
 	return logLine

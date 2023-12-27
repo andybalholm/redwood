@@ -348,6 +348,18 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	removeHopByHopHeaders(resp.Header)
 
+	// This was a workaround for https://github.com/golang/go/issues/31753,
+	// which has been fixed. But it's also needed to protect our own content sniffing in acl.go.
+	if resp.Header.Get("Content-Type") == "" && resp.Header.Get("Content-Encoding") == "gzip" && r.Method != "HEAD" {
+		gzr, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			log.Printf("Error creating gzip reader for %v: %v", r.URL, err)
+		} else {
+			resp.Body = gzr
+			resp.Header.Del("Content-Encoding")
+		}
+	}
+
 	response := &Response{
 		Request:  request,
 		Response: resp,

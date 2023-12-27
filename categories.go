@@ -47,11 +47,12 @@ func (a action) String() string {
 
 // A category represents one of the categories of filtering rules.
 type category struct {
-	name        string          // the directory name
-	description string          // the name presented to users
-	action      action          // the action to be taken with a page in this category
-	weights     map[rule]weight // the weight for each rule
-	invisible   bool            // use invisible GIF instead of block page
+	name        string                   // the directory name
+	description string                   // the name presented to users
+	action      action                   // the action to be taken with a page in this category
+	weights     map[rule]weight          // the weight for each rule
+	urlLists    map[string]*CuckooFilter // a cuckoo filter for each URL list in the category
+	invisible   bool                     // use invisible GIF instead of block page
 }
 
 // LoadCategories loads the category configuration files
@@ -173,7 +174,14 @@ func loadCategory(dirname string, parent *category, rootDir string) (c *category
 		if !filepath.IsAbs(includedFile) {
 			includedFile = filepath.Join(rootDir, includedFile)
 		}
-		loadRuleFile(c, includedFile, multiplier)
+		switch strings.ToLower(filepath.Ext(includedFile)) {
+		case ".list":
+			loadRuleFile(c, includedFile, multiplier)
+		case ".urllist":
+			loadURLList(c, includedFile, multiplier)
+		default:
+			log.Printf("Included file (%s) has unsupported extension in %s", includedFile, confFile)
+		}
 	}
 
 	ruleFiles, err := filepath.Glob(filepath.Join(dirname, "*.list"))
@@ -183,6 +191,15 @@ func loadCategory(dirname string, parent *category, rootDir string) (c *category
 	sort.Strings(ruleFiles)
 	for _, list := range ruleFiles {
 		loadRuleFile(c, list, 1)
+	}
+
+	urlLists, err := filepath.Glob(filepath.Join(dirname, "*.urllist"))
+	if err != nil {
+		return nil, fmt.Errorf("error listing URL list files: %v", err)
+	}
+	sort.Strings(urlLists)
+	for _, list := range urlLists {
+		loadURLList(c, list, 1)
 	}
 
 	return c, nil
@@ -228,6 +245,55 @@ func loadRuleFile(c *category, filename string, multiplier float64) {
 	}
 }
 
+func loadURLList(c *category, filename string, multiplier float64) {
+	r, err := os.Open(filename)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer r.Close()
+	cr := newConfigReader(r)
+
+	var urls []string
+	score := 1
+
+	for {
+		line, err := cr.ReadLine()
+		if err != nil {
+			break
+		}
+
+		if len(urls) == 0 {
+			n, _ := fmt.Sscanf(line, "score %d", &score)
+			if n == 1 {
+				continue
+			}
+		}
+
+		u := line
+		if strings.HasSuffix(u, "/") {
+			u = strings.TrimSuffix(u, "/")
+		}
+		u = strings.ToLower(u)
+
+		urls = append(urls, u)
+	}
+
+	f := NewCuckooFilter(len(urls))
+	for _, u := range urls {
+		f.Insert(u)
+	}
+
+	if c.urlLists == nil {
+		c.urlLists = make(map[string]*CuckooFilter)
+	}
+	c.urlLists[filename] = f
+	c.weights[simpleRule{
+		t:       urlList,
+		content: filename,
+	}] = weight{points: int(float64(score) * multiplier)}
+}
+
 func (cf *config) addRule(r rule) {
 	switch r := r.(type) {
 	case simpleRule:
@@ -269,6 +335,10 @@ func (cf *config) collectRules() {
 		for r, _ := range c.weights {
 			cf.addRule(r)
 		}
+		for filename, filter := range c.urlLists {
+			cf.URLRules.urlLists[filename] = filter
+		}
+		c.urlLists = nil // to allow duplicates to be garbage-collected
 	}
 	cf.ContentPhraseList.findFallbackNodes(0, nil)
 	cf.URLRules.finalize()

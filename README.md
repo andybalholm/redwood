@@ -106,6 +106,8 @@ indicates that when a page is blocked because it belongs to that
 category, the response will be an invisible image instead of the usual
 block page.
 
+### Rule Lists
+
 The rule-list files define the rules used to calculate the category’s
 score. Each rule-list file must have an extension of `.list`. (This rule
 ensures that files ending in `.bak`, `.orig`, etc. are ignored.) It is a
@@ -214,6 +216,22 @@ e.g.:
 If a page is blocked based on its URL (i.e. by URL matching and/or URL
 regular expressions), its content will not be evaluated because the page
 will not be downloaded.
+
+### URL Lists
+
+If you have a really large list of URL matching rules that should all have the 
+same score, you can put them in a special URL list file to save memory.
+The list will be stored in a much more compact format than regular rules,
+but there will be some false positives—URLs that are detected as matching
+the list, even though they actually don’t.
+
+URL list files have the extension `.urllist`.
+They can contain only URL matching rules.
+The individual rules can’t have scores assigned to them;
+instead the score is set at the start of the file
+with a line like
+
+    score 1000
 
 Access Control Lists (ACLs)
 ===========================

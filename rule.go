@@ -28,6 +28,7 @@ const (
 	queryRegex
 	contentPhrase
 	imageHash
+	urlList
 )
 
 func (r simpleRule) String() string {
@@ -55,6 +56,8 @@ func (r simpleRule) String() string {
 		return "<" + r.content + ">"
 	case imageHash:
 		return "%" + r.content
+	case urlList:
+		return "urllist " + r.content
 	}
 	panic(fmt.Errorf("invalid rule type: %d", r.t))
 }
@@ -118,6 +121,16 @@ func parseSimpleRule(s string) (r simpleRule, leftover string, err error) {
 		}
 		r.content = strings.ToLower(r.content)
 	default:
+		if strings.HasPrefix(s, "urllist ") {
+			s = strings.TrimPrefix(s, "urllist ")
+			var filename string
+			filename, s, _ = strings.Cut(s, " ")
+			return simpleRule{
+				t:       urlList,
+				content: filename,
+			}, s, nil
+		}
+
 		if c, _ := utf8.DecodeRuneInString(s); unicode.IsLetter(c) || unicode.IsDigit(c) {
 			r.t = urlMatch
 			space := strings.Index(s, " ")

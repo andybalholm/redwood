@@ -95,6 +95,7 @@ type URLMatcher struct {
 	queryRegexes   *regexMap
 	publicSuffixes []string
 	ipAddrs        IPMap
+	urlLists       map[string]*CuckooFilter
 }
 
 // finalize should be called after all rules have been added, but before
@@ -115,6 +116,7 @@ func newURLMatcher() *URLMatcher {
 	m.domainRegexes = newRegexMap()
 	m.pathRegexes = newRegexMap()
 	m.queryRegexes = newRegexMap()
+	m.urlLists = make(map[string]*CuckooFilter)
 	return m
 }
 
@@ -213,6 +215,14 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 			if r, ok := m.fragments[s2]; ok {
 				result[r] = 1
 			}
+			for filename, filter := range m.urlLists {
+				if filter.Contains(s2) {
+					result[simpleRule{
+						t:       urlList,
+						content: filename,
+					}] = 1
+				}
+			}
 			slash := strings.LastIndex(s2, "/")
 			if slash < 1 {
 				// It's either not found, or at the first character.
@@ -223,6 +233,14 @@ func (m *URLMatcher) MatchingRules(u *url.URL) map[rule]int {
 
 		if r, ok := m.fragments[s]; ok {
 			result[r] = 1
+		}
+		for filename, filter := range m.urlLists {
+			if filter.Contains(s) {
+				result[simpleRule{
+					t:       urlList,
+					content: filename,
+				}] = 1
+			}
 		}
 		dot := strings.Index(s, ".")
 		if dot == -1 {

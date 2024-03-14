@@ -316,11 +316,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Scheme == "ftp":
 		rt = FTPTransport{}
 	case request.hostChanged:
-		rt = httpTransport
+		rt = transportWithExtraRootCerts
 	case h.rt != nil:
 		rt = h.rt
 	default:
-		rt = httpTransport
+		rt = transportWithExtraRootCerts
 	}
 
 	// Some HTTP/2 servers don't like having a body on a GET request, even if

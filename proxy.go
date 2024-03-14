@@ -315,6 +315,8 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Scheme == "ftp":
 		rt = FTPTransport{}
+	case request.hostChanged:
+		rt = httpTransport
 	case h.rt != nil:
 		rt = h.rt
 	default:
@@ -877,8 +879,9 @@ type Request struct {
 
 	scoresAndACLs
 
-	frozen bool
-	misc   starlark.Dict
+	frozen      bool
+	misc        starlark.Dict
+	hostChanged bool
 }
 
 func (r *Request) String() string {
@@ -977,6 +980,10 @@ func (r *Request) SetField(name string, val starlark.Value) error {
 		parsed, err := url.Parse(u)
 		if err != nil {
 			return err
+		}
+		if parsed.Host != r.Request.URL.Host {
+			r.Request.Host = parsed.Host
+			r.hostChanged = true
 		}
 		r.Request.URL = parsed
 		return nil

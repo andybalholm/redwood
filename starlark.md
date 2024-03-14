@@ -91,8 +91,6 @@ The `Request` object has the following attributes:
 
 - `url`: the URL being fetched by the request.
   It can be changed to fetch a different URL.
-  (But with HTTPS requests, you can't change what server it comes from;
-  that would need to be done at the `ssl_bump` stage.)
 
 - `host`: the server name from the URL or from the `Host` header.
 

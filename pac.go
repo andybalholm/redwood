@@ -280,11 +280,11 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		switch {
 		case user != configuredUser:
-			log.Printf("Incorrect username for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, configuredUser)
+			logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, fmt.Sprint("Expected username ", configuredUser))
 		case !conf.ValidCredentials(user, pass):
-			log.Printf("Incorrect password for custom port in Proxy-Authorization header (client=%v, port=%d, user=%s, password=%s)", r.RemoteAddr, p.Port, user, pass)
+			logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, "Incorrect password")
 		default:
-			log.Printf("Authenticating on custom port based on Proxy-Authorization header (client=%v, port=%d, user=%s)", r.RemoteAddr, p.Port, user)
+			logAuthEvent("custom port", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in header and custom port" )
 			p.AllowIP(host)
 			handler.ServeHTTP(w, r)
 			return
@@ -295,11 +295,11 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		switch {
 		case user != configuredUser:
-			log.Printf("Incorrect username for custom port in URL parameter (client=%v, port=%d, user=%s, expected user=%s)", r.RemoteAddr, p.Port, user, configuredUser)
+			logAuthEvent("url parameter", "invalid", r.RemoteAddr, p.Port, user, "", "", "", r, fmt.Sprint("Expected username ", configuredUser))
 		case !conf.ValidCredentials(user, pass):
-			log.Printf("Incorrect password for custom port in URL parameter (client=%v, port=%d, user=%s, password=%s)", r.RemoteAddr, p.Port, user, pass)
+			logAuthEvent("url parameter", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, "Incorrect password")
 		default:
-			log.Printf("Authenticating on custom port based on URL parameter (client=%v, port=%d, user=%s)", r.RemoteAddr, p.Port, user)
+			logAuthEvent("url parameter", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in URL param and custom port")
 			p.AllowIP(host)
 			handler.ServeHTTP(w, r)
 			return
@@ -332,9 +332,9 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if expectedNetwork {
-		pf := platform(r.Header.Get("User-Agent"))
-		if expectedPlatform != "" && pf == expectedPlatform || darwinPlatforms[expectedPlatform] && pf == "Darwin" {
-			log.Printf("Authenticating %s as %s based on IP address and platform (domain=%s, platform=%s, user-agent=%q, port=%d)", host, configuredUser, domain, expectedPlatform, r.Header.Get("User-Agent"), p.Port)
+		derivedPlatform := platform(r.Header.Get("User-Agent"))
+		if expectedPlatform != "" && derivedPlatform == expectedPlatform || darwinPlatforms[expectedPlatform] && derivedPlatform == "Darwin" {
+			logAuthEvent("expected network", "correct", host, p.Port, configuredUser, "", derivedPlatform, domain, r, "Authenticated via expected platform and network")
 			p.AllowIP(host)
 			handler.ServeHTTP(w, r)
 			return
@@ -349,12 +349,12 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqACLs := conf.ACLs.requestACLs(r, "")
 	thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "allow", "require-auth")
 	if thisRule.Action != "require-auth" {
-		log.Printf("Allowing request in spite of missing authentication (url=%v, user=%s, port=%d, client=%s)", r.URL, configuredUser, p.Port, r.RemoteAddr)
+		logAuthEvent("acl exception", "correct", r.RemoteAddr, p.Port, configuredUser, "", "", domain, r, "Authenticated via ACL param despite missing credentials")
 		handler.ServeHTTP(w, r)
 		return
 	}
 
-	log.Printf("Missing required proxy authentication from %v to %v (User-Agent=%q, domain=%s, port=%d)", r.RemoteAddr, r.URL, r.Header.Get("User-Agent"), domain, p.Port)
+	logAuthEvent("", "missing", r.RemoteAddr, p.Port, "", "", "", domain, r, "No supported proxy auth credentials provided")
 	send407(w)
 }
 
@@ -465,10 +465,8 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	details := fmt.Sprintf("(ip=%s, user=%s, port=%d)", ip, user, port)
-	log.Printf("Added authenticated IP address via API: %s", details)
 	p.AllowIP(ip)
-	fmt.Fprintf(w, "Added authenticated IP address: %s", details)
+	logAuthEvent("api request", "correct", ip, port, user, "", "", "", r, "Authenticated via API call on behalf of device")
 }
 
 type authCacheKey struct {

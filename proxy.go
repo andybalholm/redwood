@@ -124,10 +124,10 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if getConfig().ValidCredentials(user, pass) {
 				authUser = user
 			} else {
-				log.Printf("Incorrect username or password from %v: %s:%s", r.RemoteAddr, user, pass)
+				logAuthEvent("proxy-auth-header", "invalid", r.RemoteAddr, 0, user, pass, "", "", r, "Incorrect username or password")
 			}
 		} else {
-			log.Printf("Invalid Proxy-Authorization header from %v: %q", r.RemoteAddr, r.Header.Get("Proxy-Authorization"))
+			logAuthEvent("proxy-auth-header", "invalid", r.RemoteAddr, 0, "", "", "", "", r, "Invalid auth header")
 		}
 	} else if u, ok := getConfig().IPToUser[client]; ok {
 		authUser = u
@@ -214,7 +214,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if request.Action.Action == "require-auth" {
 		send407(w)
-		log.Printf("Missing required proxy authentication from %v to %v", r.RemoteAddr, r.URL)
+		logAuthEvent("proxy-auth-header", "missing", r.RemoteAddr, 0, "", "", "", "", r, "Missing required proxy authentication")
 		return
 	}
 

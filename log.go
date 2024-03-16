@@ -30,6 +30,7 @@ var (
 	tlsLog      CSVLog
 	contentLog  CSVLog
 	starlarkLog CSVLog
+	authLog     CSVLog
 )
 
 type CSVLog struct {
@@ -249,3 +250,22 @@ func logVerbose(messageCategory string, format string, v ...interface{}) {
 		log.Printf(format, v...)
 	}
 }
+
+// logAuthEvent logs all remote device authentication events to the designated log file.
+func logAuthEvent(
+	authType string,
+	status string,
+	address string,
+	port int,
+	user string,
+	pwd string,
+	platform string,
+	network string,
+	req *http.Request,
+	message string,
+) {
+	ua := req.Header.Get("User-Agent")
+	url := req.URL
+	authLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), status, authType, address, port, user, pwd, platform, network, ua, url, message))
+}
+

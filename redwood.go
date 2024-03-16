@@ -39,6 +39,7 @@ func main() {
 	tlsLog.Open(conf.TLSLog)
 	contentLog.Open(filepath.Join(conf.ContentLogDir, "index.csv"))
 	starlarkLog.Open(conf.StarlarkLog)
+	authLog.Open(conf.AuthLog)
 
 	if conf.PIDFile != "" {
 		pid := os.Getpid()

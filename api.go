@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 )
 
@@ -30,7 +29,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		if conf.ValidCredentials(user, pass) {
 			authUser = user
 		} else {
-			log.Printf("Incorrect username or password for API request from %v: %s:%s", r.RemoteAddr, user, pass)
+			logAuthEvent("basic-auth", "invalid", r.RemoteAddr, 0, user, pass, "", "", r, "Incorrect username or password for API request")
 		}
 	}
 
@@ -45,7 +44,7 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	case "require-auth":
 		w.Header().Set("WWW-Authenticate", `Basic realm="Redwood API"`)
 		http.Error(w, "Authentication required", http.StatusUnauthorized)
-		log.Printf("Missing required API authentication from %v to %v", r.RemoteAddr, r.URL)
+		logAuthEvent("any-auth", "missing", r.RemoteAddr, 0, "", "", "", "", r, "Missing required API authentication")
 		return
 
 	case "block":

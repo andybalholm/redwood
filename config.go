@@ -98,6 +98,7 @@ type config struct {
 	UserForPort    map[int]string
 	PACTemplate    string
 	IPToUser       map[string]string
+	AuthLog        string
 
 	AccessLog     string
 	LogTitle      bool
@@ -157,6 +158,7 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("authenticator", "", "program to authenticate users", c.addAuthenticator)
 	c.newActiveFlag("authenticator-api", "", "HTTP API endpoint to authenticate users", c.addHTTPAuthenticator)
 	c.flags.StringVar(&c.AuthRealm, "auth-realm", "Redwood", "realm name for authentication prompts")
+	c.flags.StringVar(&c.AuthLog, "auth-log", "", "path to auth-log file")
 	c.flags.BoolVar(&c.BlockObsoleteSSL, "block-obsolete-ssl", false, "block SSL connections with protocol version too old to filter")
 	c.newActiveFlag("blockpage", "", "path to template for block page, or URL of dynamic block page", c.loadBlockPage)
 	c.flags.IntVar(&c.BrotliLevel, "brotli-level", 5, "level to use for brotli compression of content")

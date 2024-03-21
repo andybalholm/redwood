@@ -609,6 +609,13 @@ following fields: time, username or client IP address, server name,
 server address, any error that was encountered, 
 and whether the certificate used came from the certificate cache.
 
+The Auth log has a line for each authentication event. As the other
+loggers, it goes to standard output by default, and it can be sent to
+a specific file with the `auth-log` directive. The Auth log has the
+following fields: time, auth status, auth type, remote ip address,
+client port, username, password, device platform, remote network,
+user agent, and a message explaining the auth event.
+
 Authentication
 ==============
 
@@ -663,6 +670,8 @@ file with the `ip-to-user` option. The file must be formatted like this:
 In this example, requests coming from 192.168.1.66 would be automatically 
 authenticated as `joe_pc`, and requests coming from 192.168.1.87
 would be authenticated as `fred_pc`.
+
+See the Log Files section above for logging of Authentication events.
 
 SSLBump
 =======

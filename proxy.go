@@ -51,6 +51,9 @@ type proxyHandler struct {
 	// user is a user that has already been authenticated.
 	user string
 
+	// localPort is the TCP port that this proxyHandler is receiving requests on.
+	localPort int
+
 	// rt is the RoundTripper that will be used to fulfill the requests.
 	// If it is nil, a default Transport will be used.
 	rt http.RoundTripper
@@ -204,10 +207,11 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	request := &Request{
-		Request:  r,
-		User:     authUser,
-		ClientIP: client,
-		Session:  h.session,
+		Request:      r,
+		User:         authUser,
+		ExpectedUser: getConfig().UserForPort[h.localPort],
+		ClientIP:     client,
+		Session:      h.session,
 	}
 
 	filterRequest(request, !h.TLS)
@@ -869,10 +873,11 @@ func (s *swallowErrorsWriter) Write(p []byte) (n int, err error) {
 
 // A Request is the parameter for the Starlark filter_request function.
 type Request struct {
-	Request  *http.Request
-	User     string
-	ClientIP string
-	Session  *TLSSession
+	Request      *http.Request
+	User         string
+	ExpectedUser string
+	ClientIP     string
+	Session      *TLSSession
 
 	// LogData is extra data to be included in log lines.
 	LogData starlark.Value
@@ -912,7 +917,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc", "log_data"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "expected_user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc", "log_data"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -930,6 +935,8 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.String(r.Request.URL.Path), nil
 	case "user":
 		return starlark.String(r.User), nil
+	case "expected_user":
+		return starlark.String(r.ExpectedUser), nil
 	case "client_ip":
 		return starlark.String(r.ClientIP), nil
 	case "acls":

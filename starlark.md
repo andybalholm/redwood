@@ -87,6 +87,10 @@ The `Request` object has the following attributes:
 
 - `user`: the username that the client has authenticated with.
 
+- `expected_user`: the expected username, based on which port the request was received on.
+  (If the request was received on a per-user port but not authenticated,
+  `expected_user` will be set, but `user` will be empty.)
+
 - `method`: the HTTP method (`GET`, `POST`, etc.) of the request.
 
 - `url`: the URL being fetched by the request.

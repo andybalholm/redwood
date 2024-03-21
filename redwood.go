@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -67,8 +68,12 @@ func main() {
 			<-shutdownChan
 			proxyListener.Close()
 		}()
+		var port int
+		if _, p, err := net.SplitHostPort(addr); err == nil {
+			port, _ = strconv.Atoi(p)
+		}
 		server := http.Server{
-			Handler:     proxyHandler{},
+			Handler:     proxyHandler{localPort: port},
 			IdleTimeout: conf.CloseIdleConnections,
 		}
 		go func() {

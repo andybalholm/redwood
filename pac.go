@@ -259,7 +259,10 @@ func rdnsSOA(ip string) (server string, err error) {
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conf := getConfig()
 	configuredUser := conf.UserForPort[p.Port]
-	handler := proxyHandler{user: configuredUser}
+	handler := proxyHandler{
+		user:      configuredUser,
+		localPort: p.Port,
+	}
 
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
 	authCacheLock.RLock()
@@ -284,7 +287,7 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case !conf.ValidCredentials(user, pass):
 			logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, "Incorrect password")
 		default:
-			logAuthEvent("custom port", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in header and custom port" )
+			logAuthEvent("custom port", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in header and custom port")
 			p.AllowIP(host)
 			handler.ServeHTTP(w, r)
 			return
@@ -342,20 +345,11 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Maybe this is a request where authentication isn't even required according
-	// to the ACLs. If so, let it through, but don't mark the IP address as
+	// to the ACLs. Let it through, but don't mark it as
 	// authenticated.
-	tally := conf.URLRules.MatchingRules(r.URL)
-	scores := conf.categoryScores(tally)
-	reqACLs := conf.ACLs.requestACLs(r, "")
-	thisRule, _ := conf.ChooseACLCategoryAction(reqACLs, scores, conf.Threshold, "allow", "require-auth")
-	if thisRule.Action != "require-auth" {
-		logAuthEvent("acl exception", "correct", r.RemoteAddr, p.Port, configuredUser, "", "", domain, r, "Authenticated via ACL param despite missing credentials")
-		handler.ServeHTTP(w, r)
-		return
-	}
-
-	logAuthEvent("", "missing", r.RemoteAddr, p.Port, "", "", "", domain, r, "No supported proxy auth credentials provided")
-	send407(w)
+	// Leave checking for requre-auth ACLs to the main ServeHTTP method.
+	handler.user = ""
+	handler.ServeHTTP(w, r)
 }
 
 var customPorts = make(map[int]*perUserProxy)

@@ -113,6 +113,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 	}()
 
+	var localPort int
+	if a, ok := conn.LocalAddr().(*net.TCPAddr); ok {
+		localPort = a.Port
+	}
+
 	session := &TLSSession{
 		ServerAddr: serverAddr,
 		User:       authUser,
@@ -372,6 +377,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		tlsFingerprint: tlsFingerprint,
 		connectPort:    port,
 		user:           authUser,
+		localPort:      localPort,
 		rt:             rt,
 		session:        session,
 	}

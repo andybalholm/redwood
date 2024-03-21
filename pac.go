@@ -284,7 +284,7 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case !conf.ValidCredentials(user, pass):
 			logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, "Incorrect password")
 		default:
-			logAuthEvent("custom port", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in header and custom port" )
+			logAuthEvent("custom port", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in header and custom port")
 			p.AllowIP(host)
 			handler.ServeHTTP(w, r)
 			return

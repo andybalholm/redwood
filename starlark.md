@@ -91,6 +91,11 @@ The `Request` object has the following attributes:
   (If the request was received on a per-user port but not authenticated,
   `expected_user` will be set, but `user` will be empty.)
 
+- `local_port`: the port the request was received on.
+
+- `authenticated_clients`: the IP addresses that have successfully authenticated
+  on the same port this request was received on, with a username equal to `expected_user`.
+
 - `method`: the HTTP method (`GET`, `POST`, etc.) of the request.
 
 - `url`: the URL being fetched by the request.

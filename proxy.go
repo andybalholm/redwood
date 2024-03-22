@@ -209,6 +209,7 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	request := &Request{
 		Request:      r,
 		User:         authUser,
+		LocalPort:    h.localPort,
 		ExpectedUser: getConfig().UserForPort[h.localPort],
 		ClientIP:     client,
 		Session:      h.session,
@@ -877,6 +878,7 @@ type Request struct {
 	User         string
 	ExpectedUser string
 	ClientIP     string
+	LocalPort    int
 	Session      *TLSSession
 
 	// LogData is extra data to be included in log lines.
@@ -917,7 +919,7 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "expected_user", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc", "log_data"}
+var requestAttrNames = []string{"url", "method", "host", "path", "user", "expected_user", "local_port", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc", "log_data", "authenticated_clients"}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -939,6 +941,8 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.String(r.ExpectedUser), nil
 	case "client_ip":
 		return starlark.String(r.ClientIP), nil
+	case "local_port":
+		return starlark.MakeInt(r.LocalPort), nil
 	case "acls":
 		return &r.ACLs, nil
 	case "scores":
@@ -967,6 +971,16 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return r.LogData, nil
+	case "authenticated_clients":
+		var clients starlark.Tuple
+		authCacheLock.RLock()
+		defer authCacheLock.RUnlock()
+		for ip, user := range authCache[r.LocalPort] {
+			if user == r.ExpectedUser {
+				clients = append(clients, starlark.String(ip))
+			}
+		}
+		return clients, nil
 
 	default:
 		return nil, nil

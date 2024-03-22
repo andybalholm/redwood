@@ -294,21 +294,6 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	user, pass, ok = decodeBase64Credentials(r.FormValue("a"))
-	if ok {
-		switch {
-		case user != configuredUser:
-			logAuthEvent("url parameter", "invalid", r.RemoteAddr, p.Port, user, "", "", "", r, fmt.Sprint("Expected username ", configuredUser))
-		case !conf.ValidCredentials(user, pass):
-			logAuthEvent("url parameter", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, "Incorrect password")
-		default:
-			logAuthEvent("url parameter", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in URL param and custom port")
-			p.AllowIP(host)
-			handler.ServeHTTP(w, r)
-			return
-		}
-	}
-
 	if conf.IPToUser[host] == configuredUser {
 		p.AllowIP(host)
 		handler.ServeHTTP(w, r)

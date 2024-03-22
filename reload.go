@@ -54,6 +54,7 @@ func reloadConfig() error {
 	tlsLog.Open(newConf.TLSLog)
 	contentLog.Open(filepath.Join(newConf.ContentLogDir, "index.csv"))
 	starlarkLog.Open(newConf.StarlarkLog)
+	authLog.Open(newConf.AuthLog)
 	newConf.openPerUserPorts()
 
 	log.Println("Reloaded configuration")

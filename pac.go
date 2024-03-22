@@ -175,7 +175,12 @@ func (p *perUserProxy) AllowIP(ip string) {
 	}
 
 	authCacheLock.Lock()
-	authCache[authCacheKey{ip, p.Port}] = user
+	usersForPort := authCache[p.Port]
+	if usersForPort == nil {
+		usersForPort = make(map[string]string)
+		authCache[p.Port] = usersForPort
+	}
+	usersForPort[ip] = user
 	authCacheLock.Unlock()
 	log.Printf("Added IP address %s, authenticated as %s, on port %d", ip, user, p.Port)
 
@@ -266,7 +271,7 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
 	authCacheLock.RLock()
-	cachedUser := authCache[authCacheKey{host, p.Port}]
+	cachedUser := authCache[p.Port][host]
 	authCacheLock.RUnlock()
 
 	if cachedUser == configuredUser {
@@ -391,23 +396,25 @@ func handlePerUserPortList(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
+
+		var authenticatedClients []string
+		authCacheLock.RLock()
+		for ip, u := range authCache[p.Port] {
+			if u == user {
+				authenticatedClients = append(authenticatedClients, ip)
+			}
+		}
+		authCacheLock.RUnlock()
+
 		entries[user] = &portListEntry{
-			User:             user,
-			Port:             p.Port,
-			Platform:         clientPlatform,
-			ExpectedNetworks: networks,
+			User:                 user,
+			Port:                 p.Port,
+			Platform:             clientPlatform,
+			ExpectedNetworks:     networks,
+			AuthenticatedClients: authenticatedClients,
 		}
 	}
 	customPortLock.RUnlock()
-
-	authCacheLock.RLock()
-	for k, user := range authCache {
-		e := entries[user]
-		if e != nil && e.User == user {
-			e.AuthenticatedClients = append(e.AuthenticatedClients, k.remoteIP)
-		}
-	}
-	authCacheLock.RUnlock()
 
 	var data []*portListEntry
 	for _, e := range entries {
@@ -449,11 +456,6 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 	logAuthEvent("api request", "correct", ip, port, user, "", "", "", r, "Authenticated via API call on behalf of device")
 }
 
-type authCacheKey struct {
-	remoteIP  string
-	localPort int
-}
-
-// authCache maps from connection information to the authenticated username.
-var authCache = map[authCacheKey]string{}
+// authCache maps from local port and remote IP address to the authenticated username.
+var authCache = map[int]map[string]string{}
 var authCacheLock sync.RWMutex

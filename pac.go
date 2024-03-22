@@ -460,6 +460,7 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p.AllowIP(ip)
+	fmt.Fprintf(w, "Added authenticated IP address: (ip=%s, user=%s, port=%d)", ip, user, port)
 	logAuthEvent("api request", "correct", ip, port, user, "", "", "", r, "Authenticated via API call on behalf of device")
 }
 

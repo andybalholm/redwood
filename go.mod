@@ -5,6 +5,7 @@ require (
 	github.com/andybalholm/cascadia v1.3.1
 	github.com/andybalholm/dhash v1.0.0
 	github.com/baruwa-enterprise/clamd v1.0.1
+	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dop251/goja v0.0.0-20230216180835-5937a312edda
 	github.com/dop251/goja_nodejs v0.0.0-20230207183254-2229640ea097
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
@@ -13,6 +14,7 @@ require (
 	github.com/open-ch/ja3 v1.0.1
 	github.com/qri-io/starlib v0.5.0
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
+	github.com/zeebo/xxh3 v1.0.2
 	go.starlark.net v0.0.0-20230128213706-3f75dec8e403
 	golang.org/x/crypto v0.17.0
 	golang.org/x/image v0.14.0
@@ -26,7 +28,6 @@ require (
 	github.com/andybalholm/go-bit v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
-	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dlclark/regexp2 v1.8.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/dustmop/soup v1.1.2-0.20190516214245-38228baa104e // indirect
@@ -34,7 +35,6 @@ require (
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
 	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect

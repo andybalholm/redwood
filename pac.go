@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"github.com/miekg/dns"
 
 	"golang.org/x/net/publicsuffix"
 )
@@ -207,10 +204,6 @@ func rdnsDomain(ip string) string {
 		host = names[0]
 	}
 	if host == "" {
-		// If a PTR record isn't available, fall back to SOA.
-		host, _ = rdnsSOA(ip)
-	}
-	if host == "" {
 		return ""
 	}
 	host = strings.TrimSuffix(host, ".")
@@ -219,46 +212,6 @@ func rdnsDomain(ip string) string {
 		return host
 	}
 	return domain
-}
-
-var dnsServer string
-
-func init() {
-	conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-	if err != nil || len(conf.Servers) == 0 {
-		return
-	}
-	dnsServer = conf.Servers[0] + ":" + conf.Port
-}
-
-// rdnsSOA returns the nameserver from the SOA (start of authority) reverse-DNS
-// record for ip.
-func rdnsSOA(ip string) (server string, err error) {
-	octets := strings.Split(ip, ".")
-	if len(octets) != 4 {
-		return "", errors.New("invalid IPv4 address")
-	}
-	octets[0], octets[1], octets[2], octets[3] = octets[3], octets[2], octets[1], octets[0]
-
-	m := new(dns.Msg)
-
-	for i := 0; i < 4; i++ {
-		m.SetQuestion(strings.Join(octets[i:], ".")+".in-addr.arpa.", dns.TypeSOA)
-		soa, err := dns.Exchange(m, dnsServer)
-		if err != nil {
-			return "", err
-		}
-		if soa.Rcode != dns.RcodeSuccess || len(soa.Answer) == 0 {
-			continue
-		}
-		trsoa, ok := soa.Answer[0].(*dns.SOA)
-		if !ok {
-			continue
-		}
-		return trsoa.Ns, nil
-	}
-
-	return "", errors.New("SOA not found")
 }
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {

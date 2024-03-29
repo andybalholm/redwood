@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"go.starlark.net/starlark"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -165,8 +167,7 @@ func (c *config) newPerUserProxy(user string, portInfo customPortInfo) (*perUser
 }
 
 func (p *perUserProxy) AllowIP(ip string) {
-	conf := getConfig()
-	user, ok := conf.UserForPort[p.Port]
+	user, ok := getConfig().UserForPort[p.Port]
 	if !ok {
 		return
 	}
@@ -215,10 +216,11 @@ func rdnsDomain(ip string) string {
 }
 
 func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conf := getConfig()
-	configuredUser := conf.UserForPort[p.Port]
+	activeConnections.Add(1)
+	defer activeConnections.Done()
+
+	configuredUser := getConfig().UserForPort[p.Port]
 	handler := proxyHandler{
-		user:      configuredUser,
 		localPort: p.Port,
 	}
 
@@ -228,71 +230,29 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	authCacheLock.RUnlock()
 
 	if cachedUser == configuredUser {
-		handler.ServeHTTP(w, r)
+		handler.ServeHTTPAuthenticated(w, r, host, configuredUser)
 		return
 	}
 
 	// This client's IP address is not pre-authorized for this port, but
 	// maybe it sent credentials and we can authorize it now.
-	// We accept credentials in either the Proxy-Authorization header or
-	// a URL parameter named "a".
 
-	user, pass, ok := ProxyCredentials(r)
-	if ok {
-		switch {
-		case user != configuredUser:
-			logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, fmt.Sprint("Expected username ", configuredUser))
-		case !conf.ValidCredentials(user, pass):
-			logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, user, pass, "", "", r, "Incorrect password")
-		default:
-			logAuthEvent("custom port", "correct", r.RemoteAddr, p.Port, user, "", "", "", r, "Authenticated via credentials in header and custom port")
-			p.AllowIP(host)
-			handler.ServeHTTP(w, r)
-			return
-		}
+	ui := &UserInfo{
+		Request: r,
 	}
+	ui.Authenticate(p)
 
-	if conf.IPToUser[host] == configuredUser {
-		p.AllowIP(host)
-		handler.ServeHTTP(w, r)
+	if ui.AuthenticatedUser != "" && ui.AuthenticatedUser != configuredUser {
+		logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, ui.AuthenticatedUser, "", "", "", r, fmt.Sprint("Expected username ", configuredUser))
+		handler.ServeHTTPAuthenticated(w, r, host, "")
 		return
 	}
 
-	expectedNetwork := false
-	ip := net.ParseIP(host)
-	p.expectedNetLock.RLock()
-	expectedPlatform := p.ClientPlatform
-	for _, nw := range p.expectedIPBlocks {
-		if nw.Contains(ip) {
-			expectedNetwork = true
-			break
-		}
-	}
-	p.expectedNetLock.RUnlock()
-
-	domain := rdnsDomain(host)
-	if !expectedNetwork && domain != "" {
-		p.expectedNetLock.RLock()
-		expectedNetwork = p.expectedDomains[domain]
-		p.expectedNetLock.RUnlock()
+	if ui.AuthenticatedUser != "" {
+		p.AllowIP(host)
 	}
 
-	if expectedNetwork {
-		derivedPlatform := platform(r.Header.Get("User-Agent"))
-		if expectedPlatform != "" && derivedPlatform == expectedPlatform || darwinPlatforms[expectedPlatform] && derivedPlatform == "Darwin" {
-			logAuthEvent("expected network", "correct", host, p.Port, configuredUser, "", derivedPlatform, domain, r, "Authenticated via expected platform and network")
-			p.AllowIP(host)
-			handler.ServeHTTP(w, r)
-			return
-		}
-	}
-
-	// Maybe this is a request where authentication isn't even required according
-	// to the ACLs. Let it through, but don't mark it as
-	// authenticated.
-	// Leave checking for requre-auth ACLs to the main ServeHTTP method.
-	handler.user = ""
-	handler.ServeHTTP(w, r)
+	handler.ServeHTTPAuthenticated(w, r, host, ui.AuthenticatedUser)
 }
 
 var customPorts = make(map[int]*perUserProxy)
@@ -412,3 +372,59 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 // authCache maps from local port and remote IP address to the authenticated username.
 var authCache = map[int]map[string]string{}
 var authCacheLock sync.RWMutex
+
+// String is needed to implement starlark.Value.
+func (p *perUserProxy) String() string {
+	return fmt.Sprintf("CustomPort(%d)", p.Port)
+}
+
+// Type is needed to implement starlark.Value.
+func (p *perUserProxy) Type() string {
+	return "CustomPort"
+}
+
+// Freeze is needed to implement starlark.Value.
+func (p *perUserProxy) Freeze() {}
+
+// Hash is needed to implement starlark.Value.
+func (p *perUserProxy) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: CustomPort")
+}
+
+// Truth is needed to implement starlark.Value.
+func (p *perUserProxy) Truth() starlark.Bool {
+	return starlark.True
+}
+
+var customPortAttrNames = []string{"port", "user", "platform", "expected_networks"}
+
+func (p *perUserProxy) AttrNames() []string {
+	return customPortAttrNames
+}
+
+func (p *perUserProxy) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "port":
+		return starlark.MakeInt(p.Port), nil
+	case "user":
+		return starlark.String(getConfig().UserForPort[p.Port]), nil
+	case "platform":
+		p.expectedNetLock.RLock()
+		defer p.expectedNetLock.RUnlock()
+		return starlark.String(p.ClientPlatform), nil
+	case "expected_networks":
+		p.expectedNetLock.RLock()
+		defer p.expectedNetLock.RUnlock()
+		var networks starlark.Tuple
+		for d := range p.expectedDomains {
+			networks = append(networks, starlark.String(d))
+		}
+		for _, b := range p.expectedIPBlocks {
+			networks = append(networks, starlark.String(b.String()))
+		}
+		return networks, nil
+
+	default:
+		return nil, nil
+	}
+}

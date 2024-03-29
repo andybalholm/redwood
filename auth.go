@@ -4,14 +4,18 @@ import (
 	"bufio"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"go.starlark.net/starlark"
 )
 
 // HTTP proxy authentication.
@@ -223,4 +227,137 @@ func (c *config) loadIPToUser(filename string) error {
 	}
 
 	return s.Err()
+}
+
+// UserInfo represents a user who is attempting to authenticate with the proxy.
+type UserInfo struct {
+	ClientIP          string
+	AuthenticatedUser string
+	Request           *http.Request
+
+	frozen bool
+}
+
+// Authenticate uses the information from u.Request to attempt to authenticate the user.
+// It fills in ClientIP, and (if the authentication is successful) AuthenticatedUser.
+func (u *UserInfo) Authenticate(p *perUserProxy) {
+	u.ClientIP = u.Request.RemoteAddr
+	if host, _, err := net.SplitHostPort(u.ClientIP); err == nil {
+		u.ClientIP = host
+	}
+
+	if u.Request.Header.Get("Proxy-Authorization") != "" {
+		user, pass, ok := ProxyCredentials(u.Request)
+		if ok {
+			if getConfig().ValidCredentials(user, pass) {
+				u.AuthenticatedUser = user
+			} else {
+				logAuthEvent("proxy-auth-header", "invalid", u.Request.RemoteAddr, 0, user, pass, "", "", u.Request, "Incorrect username or password")
+			}
+		} else {
+			logAuthEvent("proxy-auth-header", "invalid", u.Request.RemoteAddr, 0, "", "", "", "", u.Request, "Invalid auth header")
+		}
+	} else if user, ok := getConfig().IPToUser[u.ClientIP]; ok {
+		u.AuthenticatedUser = user
+	}
+
+	if p != nil && u.AuthenticatedUser == "" {
+		configuredUser := getConfig().UserForPort[p.Port]
+		expectedNetwork := false
+		ip := net.ParseIP(u.ClientIP)
+		p.expectedNetLock.RLock()
+		expectedPlatform := p.ClientPlatform
+		for _, nw := range p.expectedIPBlocks {
+			if nw.Contains(ip) {
+				expectedNetwork = true
+				break
+			}
+		}
+		p.expectedNetLock.RUnlock()
+
+		domain := rdnsDomain(u.ClientIP)
+		if !expectedNetwork && domain != "" {
+			p.expectedNetLock.RLock()
+			expectedNetwork = p.expectedDomains[domain]
+			p.expectedNetLock.RUnlock()
+		}
+
+		if expectedNetwork {
+			derivedPlatform := platform(u.Request.Header.Get("User-Agent"))
+			if expectedPlatform != "" && derivedPlatform == expectedPlatform || darwinPlatforms[expectedPlatform] && derivedPlatform == "Darwin" {
+				logAuthEvent("expected network", "correct", u.ClientIP, p.Port, configuredUser, "", derivedPlatform, domain, u.Request, "Authenticated via expected platform and network")
+				u.AuthenticatedUser = configuredUser
+			}
+		}
+	}
+
+	if p == nil {
+		callStarlarkFunctions("authenticate", u, starlark.None)
+	} else {
+		callStarlarkFunctions("authenticate", u, p)
+	}
+}
+
+func (u *UserInfo) String() string {
+	return fmt.Sprintf("UserInfo(%s)", u.Request.RemoteAddr)
+}
+
+func (u *UserInfo) Type() string {
+	return "UserInfo"
+}
+
+func (u *UserInfo) Freeze() {
+	if !u.frozen {
+		u.frozen = true
+	}
+}
+
+func (u *UserInfo) Truth() starlark.Bool {
+	return starlark.True
+}
+
+func (u *UserInfo) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: UserInfo")
+}
+
+var userInfoAttrNames = []string{"authenticated_user", "ip", "user_agent", "platform", "proxy_auth"}
+
+func (u *UserInfo) AttrNames() []string {
+	return userInfoAttrNames
+}
+
+func (u *UserInfo) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "authenticated_user":
+		return starlark.String(u.AuthenticatedUser), nil
+	case "ip":
+		return starlark.String(u.ClientIP), nil
+	case "user_agent":
+		return starlark.String(u.Request.Header.Get("User-Agent")), nil
+	case "platform":
+		return starlark.String(platform(u.Request.Header.Get("User-Agent"))), nil
+	case "proxy_auth":
+		user, pass, ok := ProxyCredentials(u.Request)
+		if ok {
+			return starlark.Tuple{starlark.String(user), starlark.String(pass)}, nil
+		} else {
+			return starlark.None, nil
+		}
+
+	default:
+		return nil, nil
+	}
+}
+
+func (u *UserInfo) SetField(name string, val starlark.Value) error {
+	if u.frozen {
+		return errors.New("can't set a field of a frozen object")
+	}
+
+	switch name {
+	case "authenticated_user":
+		return assignStarlarkString(&u.AuthenticatedUser, val)
+	default:
+		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of UserInfo", name))
+	}
 }

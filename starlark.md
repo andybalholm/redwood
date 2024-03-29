@@ -31,6 +31,41 @@ it will connect to forcesafesearch.google.com instead.
 
 ## Functions You Can Define
 
+### `authenticate`
+
+When Redwood is checking the authentication for a request, it calls the `authenticate` function.
+This happens after the default authentication steps have been performed, 
+and allows the script to de-authenticate a user that would normally have been authenticated,
+or to authenticate a user that normally would not have been authenticated.
+The function has two parameters, a `UserInfo` object and a `CustomPort` object
+(or `None` if the request was not received on a per-user proxy port).
+
+The `UserInfo` object has the following attributes:
+
+- `authenticated_user`: the username that the client has successfully authenticated as,
+  or the empty string if there is no authenticated user.
+  Changing this attribute changes the authentication status of the request.
+
+- `ip`: the client’s IP address
+
+- `user_agent`: the User-Agent header from the request
+
+- `platform`: the operating-system platform implied by the User-Agent header
+
+- `proxy_auth`: a 2-element tuple containing the username and password from
+  the Proxy-Authorization header, or `None` if that header is missing or invalid.
+
+The `CustomPort` object has the following attributes:
+
+- `port`: the port number
+
+- `user`: the username the port is configured for
+
+- `platform`: the operating-system platform specified in the password file
+
+- `expected_networks`: a tuple of strings listing the networks 
+  (domains or IP address blocks) that the user is expected to connect from
+
 ### `ssl_bump`
 
 When Redwood intercepts an HTTPS connection, it calls the `ssl_bump` function.

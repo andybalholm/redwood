@@ -63,36 +63,6 @@ type proxyHandler struct {
 	session *TLSSession
 }
 
-var ip6Loopback = net.ParseIP("::1")
-
-// lanAddress returns whether addr is in one of the LAN address ranges.
-func lanAddress(addr string) bool {
-	ip := net.ParseIP(addr)
-	if ip4 := ip.To4(); ip4 != nil {
-		switch ip4[0] {
-		case 10, 127:
-			return true
-		case 172:
-			return ip4[1]&0xf0 == 16
-		case 192:
-			return ip4[1] == 168
-		}
-		return false
-	}
-
-	// IPv6
-	switch {
-	case ip[0]&0xfe == 0xfc:
-		return true
-	case ip[0] == 0xfe && (ip[1]&0xfc) == 0x80:
-		return true
-	case ip.Equal(ip6Loopback):
-		return true
-	}
-
-	return false
-}
-
 var titleSelector = cascadia.MustCompile("title")
 
 func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -106,34 +76,39 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(r.URL.String()) > 10000 {
-		http.Error(w, "URL too long", http.StatusRequestURITooLong)
-		return
-	}
-
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {
 		client = host
 	}
 
-	authUser := ""
+	// Don't look for authentication if the session is already authenticated,
+	// or if it's already SSLBumped.
+	if h.user != "" || h.TLS {
+		h.ServeHTTPAuthenticated(w, r, client, h.user)
+		return
+	}
 
-	if h.user != "" {
-		authUser = h.user
-	} else if r.Header.Get("Proxy-Authorization") != "" {
-		user, pass, ok := ProxyCredentials(r)
-		if ok {
-			if getConfig().ValidCredentials(user, pass) {
-				authUser = user
-			} else {
-				logAuthEvent("proxy-auth-header", "invalid", r.RemoteAddr, 0, user, pass, "", "", r, "Incorrect username or password")
-			}
-		} else {
-			logAuthEvent("proxy-auth-header", "invalid", r.RemoteAddr, 0, "", "", "", "", r, "Invalid auth header")
-		}
-	} else if u, ok := getConfig().IPToUser[client]; ok {
-		authUser = u
+	ui := &UserInfo{
+		Request: r,
+	}
+	ui.Authenticate(nil)
+
+	h.ServeHTTPAuthenticated(w, r, ui.ClientIP, ui.AuthenticatedUser)
+}
+
+// ServeHTTPAuthenticated performs the part of serving a proxy request that
+// happens after the user is authenticated. (If no user successfully authenticated,
+// authUser may be empty.)
+func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Request, client, authUser string) {
+	user := client
+	if authUser != "" {
+		user = authUser
+	}
+
+	if len(r.URL.String()) > 10000 {
+		http.Error(w, "URL too long", http.StatusRequestURITooLong)
+		return
 	}
 
 	// Reconstruct the URL if it is incomplete (i.e. on a transparent proxy).
@@ -159,11 +134,6 @@ func (h proxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if realHost, ok := getConfig().VirtualHosts[r.Host]; ok {
 		r.Host = realHost
 		r.URL.Host = realHost
-	}
-
-	user := client
-	if authUser != "" {
-		user = authUser
 	}
 
 	// Handle IPv6 hostname without brackets in CONNECT request.

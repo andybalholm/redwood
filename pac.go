@@ -33,7 +33,9 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 				p := customPorts[port]
 				customPortLock.RUnlock()
 				if p != nil {
-					p.AllowIP(clientIP(r))
+					remoteAddr := clientIP((r))
+					p.AllowIP(remoteAddr)
+					logAuthEvent("pac-url-param", "correct", remoteAddr, p.Port, user, "", "", "", r, "Authenticated via query param in PAC URL")
 					proxyHost, _, err := net.SplitHostPort(proxyAddr)
 					if err == nil {
 						proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(p.Port))
@@ -243,13 +245,14 @@ func (p *perUserProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ui.Authenticate(p)
 
 	if ui.AuthenticatedUser != "" && ui.AuthenticatedUser != configuredUser {
-		logAuthEvent("custom port", "invalid", r.RemoteAddr, p.Port, ui.AuthenticatedUser, "", "", "", r, fmt.Sprint("Expected username ", configuredUser))
+		logAuthEvent("custom-port", "invalid", r.RemoteAddr, p.Port, ui.AuthenticatedUser, "", p.ClientPlatform, "", r, fmt.Sprint("Expected username ", configuredUser))
 		handler.ServeHTTPAuthenticated(w, r, host, "")
 		return
 	}
 
 	if ui.AuthenticatedUser != "" {
 		p.AllowIP(host)
+		logAuthEvent("proxy-auth-header", "correct", r.RemoteAddr, p.Port, ui.AuthenticatedUser, "", p.ClientPlatform, "", r, "Authenticated via basic credentials in http auth header")
 	}
 
 	handler.ServeHTTPAuthenticated(w, r, host, ui.AuthenticatedUser)
@@ -366,7 +369,7 @@ func handlePerUserAuthenticate(w http.ResponseWriter, r *http.Request) {
 
 	p.AllowIP(ip)
 	fmt.Fprintf(w, "Added authenticated IP address: (ip=%s, user=%s, port=%d)", ip, user, port)
-	logAuthEvent("api request", "correct", ip, port, user, "", "", "", r, "Authenticated via API call on behalf of device")
+	logAuthEvent("api-request", "correct", ip, port, user, "", "", "", r, "Authenticated via API call on behalf of device")
 }
 
 // authCache maps from local port and remote IP address to the authenticated username.

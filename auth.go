@@ -285,7 +285,7 @@ func (u *UserInfo) Authenticate(p *perUserProxy) {
 		if expectedNetwork {
 			derivedPlatform := platform(u.Request.Header.Get("User-Agent"))
 			if expectedPlatform != "" && derivedPlatform == expectedPlatform || darwinPlatforms[expectedPlatform] && derivedPlatform == "Darwin" {
-				logAuthEvent("expected network", "correct", u.ClientIP, p.Port, configuredUser, "", derivedPlatform, domain, u.Request, "Authenticated via expected platform and network")
+				logAuthEvent("expected-network", "correct", u.ClientIP, p.Port, configuredUser, "", derivedPlatform, domain, u.Request, "Authenticated via expected platform and network")
 				u.AuthenticatedUser = configuredUser
 			}
 		}

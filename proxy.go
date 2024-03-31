@@ -189,7 +189,7 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 
 	if request.Action.Action == "require-auth" {
 		send407(w)
-		logAuthEvent("proxy-auth-header", "missing", r.RemoteAddr, 0, "", "", "", "", r, "Missing required proxy authentication")
+		logAuthEvent("proxy-auth-header", "missing", r.RemoteAddr, h.localPort, "", "", "", "", r, "Missing required proxy authentication")
 		return
 	}
 

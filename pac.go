@@ -34,8 +34,12 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 				customPortLock.RUnlock()
 				if p != nil {
 					remoteAddr := clientIP((r))
-					p.AllowIP(remoteAddr)
-					logAuthEvent("pac-url-param", "correct", remoteAddr, p.Port, user, "", "", "", r, "Authenticated via query param in PAC URL")
+					if remoteAddr == "" {
+						logAuthEvent("pac-url-param", "correct", remoteAddr, p.Port, user, "", "", "", r, "Is this request coming via a proxy that does not set X-Forwarded-For?")
+					} else {
+						p.AllowIP(remoteAddr)
+						logAuthEvent("pac-url-param", "correct", remoteAddr, p.Port, user, "", "", "", r, "Authenticated via query param in PAC URL")
+					}
 					proxyHost, _, err := net.SplitHostPort(proxyAddr)
 					if err == nil {
 						proxyAddr = net.JoinHostPort(proxyHost, strconv.Itoa(p.Port))
@@ -75,7 +79,11 @@ func clientIP(r *http.Request) string {
 	client := r.RemoteAddr
 	host, _, err := net.SplitHostPort(client)
 	if err == nil {
-		return host
+		a, err := netip.ParseAddr(host)
+		if err == nil && !a.IsLoopback() {
+			return host
+		}
+		return ""
 	}
 	return client
 }

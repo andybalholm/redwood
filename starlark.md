@@ -144,6 +144,9 @@ The `Request` object has the following attributes:
 
 - `query`: a dictionary containg the request’s URL query parameters.
 
+- `body`: The request’s body content, as a string. Assigning to body replaces the
+  request’s content.
+
 - `acls`: a set containing the ACL tags that have been assigned to the request. 
   If you modify the set, it can affect the action that Redwood takes.
 

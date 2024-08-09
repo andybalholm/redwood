@@ -951,6 +951,13 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			}
 		}
 		return clients, nil
+	case "body":
+		content, err := io.ReadAll(r.Request.Body)
+		if err != nil {
+			return starlark.None, err
+		}
+		r.Request.Body = io.NopCloser(bytes.NewReader(content))
+		return starlark.String(content), nil
 
 	default:
 		return nil, nil
@@ -988,6 +995,15 @@ func (r *Request) SetField(name string, val starlark.Value) error {
 		return r.setAction(newAction)
 	case "log_data":
 		r.LogData = val
+		return nil
+	case "body":
+		var body string
+		err := assignStarlarkString(&body, val)
+		if err != nil {
+			return err
+		}
+		r.Request.ContentLength = int64(len(body))
+		r.Request.Body = io.NopCloser(strings.NewReader(body))
 		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Request", name))

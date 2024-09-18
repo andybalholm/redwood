@@ -107,6 +107,8 @@ The `TLSSession` object has the following attributes:
 
 - `log_data`: the script can put data here to be included in the access log, encoded as JSON
 
+- `id`: a random ID that is generated for each session
+
 ### `filter_request`
 
 For each HTTP request that Redwood receives, it calls the `filter_request` function.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/md5"
@@ -121,6 +122,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	session := &TLSSession{
 		ServerAddr: serverAddr,
 		User:       authUser,
+		ID:         randomID(),
 	}
 	if r != nil {
 		session.ConnectHeader = r.Header
@@ -432,6 +434,9 @@ type TLSSession struct {
 	// LogData is extra data to be included in log lines.
 	LogData starlark.Value
 
+	// ID is a random ID to track which requests are on the same session.
+	ID string
+
 	scoresAndACLs
 
 	frozen bool
@@ -504,7 +509,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data", "id"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -540,6 +545,8 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return s.LogData, nil
+	case "id":
+		return starlark.String(s.ID), nil
 
 	default:
 		return nil, nil
@@ -978,4 +985,20 @@ func (c *config) addTrustedRoots(certPath string) error {
 		return fmt.Errorf("no certificates found in %s", certPath)
 	}
 	return nil
+}
+
+func randomID() string {
+	r := bufio.NewReader(rand.Reader)
+	b := make([]byte, 0, 12)
+	for len(b) < 12 {
+		c, err := r.ReadByte()
+		if err != nil {
+			panic(err)
+		}
+		// Use alphanumerics, excluding easily-confused characters.
+		if '2' <= c && c <= '9' || 'a' <= c && c <= 'k' || 'm' <= c && c <= 'z' || 'A' <= c && c <= 'H' || 'J' <= c && c <= 'N' || 'P' <= c && c <= 'Z' {
+			b = append(b, c)
+		}
+	}
+	return string(b)
 }

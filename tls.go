@@ -303,6 +303,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		state := serverConn.ConnectionState()
 		serverCert := state.PeerCertificates[0]
 
+		remoteAddr := serverConn.RemoteAddr()
+		if remoteAddr, ok := remoteAddr.(*net.TCPAddr); ok {
+			session.ServerIP = remoteAddr.IP
+		}
+
 		valid := validCert(serverCert, state.PeerCertificates[1:])
 		cert, err = imitateCertificate(serverCert, !valid, session.SNI)
 		if err != nil {
@@ -424,7 +429,7 @@ type TLSSession struct {
 	User       string
 	ClientIP   string
 
-	// SourceIP is the IP address of the network interface to be used fo dial
+	// SourceIP is the IP address of the network interface to be used to dial
 	// the upstream connection.
 	SourceIP net.IP
 
@@ -436,6 +441,10 @@ type TLSSession struct {
 
 	// ID is a random ID to track which requests are on the same session.
 	ID string
+
+	// ServerIP is the IP address of the server. It is only filled in when
+	// the actual connection to the server has been made.
+	ServerIP net.IP
 
 	scoresAndACLs
 
@@ -509,7 +518,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data", "id"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data", "id", "server_ip"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -547,6 +556,8 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return s.LogData, nil
 	case "id":
 		return starlark.String(s.ID), nil
+	case "server_ip":
+		return starlark.String(s.ServerIP.String()), nil
 
 	default:
 		return nil, nil

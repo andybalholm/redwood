@@ -115,6 +115,9 @@ but they can be used in `filter_request` and `filter_response`:
 
 - `server_ip`: the IP address of the server
 
+- `server_certificate`: an object giving access to various properties of the
+  upstream server’s TLS certificate.
+
 ### `filter_request`
 
 For each HTTP request that Redwood receives, it calls the `filter_request` function.

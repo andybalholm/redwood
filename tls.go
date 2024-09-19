@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -307,6 +309,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		if remoteAddr, ok := remoteAddr.(*net.TCPAddr); ok {
 			session.ServerIP = remoteAddr.IP
 		}
+		session.ServerCertificate = &TLSCertificate{serverCert}
 
 		valid := validCert(serverCert, state.PeerCertificates[1:])
 		cert, err = imitateCertificate(serverCert, !valid, session.SNI)
@@ -446,6 +449,8 @@ type TLSSession struct {
 	// the actual connection to the server has been made.
 	ServerIP net.IP
 
+	ServerCertificate *TLSCertificate
+
 	scoresAndACLs
 
 	frozen bool
@@ -518,7 +523,7 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data", "id", "server_ip"}
+var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data", "id", "server_ip", "server_certificate"}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -558,6 +563,11 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return starlark.String(s.ID), nil
 	case "server_ip":
 		return starlark.String(s.ServerIP.String()), nil
+	case "server_certificate":
+		if s.ServerCertificate == nil {
+			return starlark.None, nil
+		}
+		return s.ServerCertificate, nil
 
 	default:
 		return nil, nil
@@ -596,6 +606,47 @@ func (s *TLSSession) SetField(name string, val starlark.Value) error {
 		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of TLSSession", name))
+	}
+}
+
+// A TLSCertificate is a Starlark wrapper for x509.Certificate.
+type TLSCertificate struct {
+	cert *x509.Certificate
+}
+
+func (t *TLSCertificate) String() string {
+	return fmt.Sprintf("TLSCertificate: %s", t.cert.Subject.CommonName)
+}
+
+func (t *TLSCertificate) Type() string {
+	return "TLSCertificate"
+}
+
+func (t *TLSCertificate) Freeze() {}
+
+func (t *TLSCertificate) Truth() starlark.Bool { return true }
+
+func (t *TLSCertificate) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: TLSCertificate")
+}
+
+var tlsCertificateAttrNames = []string{"bytes", "sha1", "sha256"}
+
+func (t *TLSCertificate) AttrNames() []string {
+	return tlsCertificateAttrNames
+}
+
+func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "bytes":
+		return starlark.Bytes(t.cert.Raw), nil
+	case "sha1":
+		return starlark.String(fmt.Sprintf("%x", sha1.Sum(t.cert.Raw))), nil
+	case "sha256":
+		return starlark.String(fmt.Sprintf("%x", sha256.Sum256(t.cert.Raw))), nil
+
+	default:
+		return nil, nil
 	}
 }
 

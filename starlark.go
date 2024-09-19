@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	re "github.com/magnetde/starlark-re"
 	"github.com/miekg/dns"
 	"github.com/qri-io/starlib/bsoup"
 	"github.com/qri-io/starlib/encoding/base64"
@@ -19,7 +20,6 @@ import (
 	"github.com/qri-io/starlib/hash"
 	"github.com/qri-io/starlib/html"
 	"github.com/qri-io/starlib/http"
-	"github.com/qri-io/starlib/re"
 	"go.starlark.net/lib/json"
 	"go.starlark.net/lib/math"
 	starlark_time "go.starlark.net/lib/time"
@@ -39,6 +39,7 @@ func init() {
 	starlark.Universe["json"] = json.Module
 	starlark.Universe["time"] = starlark_time.Module
 	starlark.Universe["math"] = math.Module
+	starlark.Universe["re"] = re.NewModule()
 
 	for name, loader := range starlib {
 		mod, err := loader()
@@ -57,7 +58,6 @@ func init() {
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){
-	"re":     re.LoadModule,
 	"bsoup":  bsoup.LoadModule,
 	"base64": base64.LoadModule,
 	"csv":    csv.LoadModule,

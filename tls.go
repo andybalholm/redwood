@@ -312,6 +312,17 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 		session.ServerCertificate = &TLSCertificate{serverCert}
 
+		session.PossibleActions = []string{"allow", "block"}
+		session.Action = ACLActionRule{}
+		session.Ignored = nil
+
+		callStarlarkFunctions("inspect_server_certificate", session)
+		if session.Action.Action == "block" {
+			logTLS(user, session.ServerAddr, serverName, errors.New("handshake aborted by Starlark script"), false, tlsFingerprint)
+			conn.Close()
+			return
+		}
+
 		valid := validCert(serverCert, state.PeerCertificates[1:])
 		cert, err = imitateCertificate(serverCert, !valid, session.SNI)
 		if err != nil {
@@ -375,7 +386,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	} else {
 		cert, err = fakeCertificate(session.SNI)
 		if err != nil {
-			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error connecting to origin server: %v", err), false, tlsFingerprint)
 			conn.Close()
 			return
 		}

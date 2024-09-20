@@ -109,9 +109,14 @@ The `TLSSession` object has the following attributes:
 
 - `id`: a random ID that is generated for each session
 
-Some attributes are only available after the connection to the upstream server
-has been made. So they are not available in `ssl_bump`, 
-but they can be used in `filter_request` and `filter_response`:
+### `inspect_server_certificate`
+
+When Redwood is acting as man-in-the-middle on an HTTPS connection,
+it calls `inspect_server_certificate` 
+after completing the TLS handshake with the server, 
+but before completing the handshake with the client.
+The parameter for this function is the same `TLSSession` object
+as in `ssl_bump`, but with additional attributes:
 
 - `server_ip`: the IP address of the server
 

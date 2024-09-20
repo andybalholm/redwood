@@ -631,7 +631,7 @@ func (t *TLSCertificate) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSCertificate")
 }
 
-var tlsCertificateAttrNames = []string{"validity", "bytes", "sha1", "sha256", "md5", "subject", "issuer", "dns_names"}
+var tlsCertificateAttrNames = []string{"validity", "version", "signature_algorithm", "public_key_algorithm", "bytes", "sha1", "sha256", "md5", "subject", "issuer", "dns_names"}
 
 func (t *TLSCertificate) AttrNames() []string {
 	return tlsCertificateAttrNames
@@ -644,6 +644,12 @@ func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
 		validity.SetKey(starlark.String("not_before"), starlark_time.Time(t.cert.NotBefore))
 		validity.SetKey(starlark.String("not_after"), starlark_time.Time(t.cert.NotAfter))
 		return validity, nil
+	case "version":
+		return starlark.String(fmt.Sprintf("%d", t.cert.Version)), nil
+	case "signature_algorithm":
+		return starlark.String(t.cert.SignatureAlgorithm.String()), nil
+	case "public_key_algorithm":
+		return starlark.String(t.cert.PublicKeyAlgorithm.String()), nil
 	case "bytes":
 		return starlark.Bytes(t.cert.Raw), nil
 	case "sha1":

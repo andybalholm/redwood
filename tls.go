@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/open-ch/ja3"
+	starlark_time "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 	"golang.org/x/crypto/cryptobyte"
 	"golang.org/x/net/http2"
@@ -630,7 +631,7 @@ func (t *TLSCertificate) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSCertificate")
 }
 
-var tlsCertificateAttrNames = []string{"bytes", "sha1", "sha256", "md5", "subject", "issuer", "dns_names"}
+var tlsCertificateAttrNames = []string{"validity", "bytes", "sha1", "sha256", "md5", "subject", "issuer", "dns_names"}
 
 func (t *TLSCertificate) AttrNames() []string {
 	return tlsCertificateAttrNames
@@ -638,6 +639,11 @@ func (t *TLSCertificate) AttrNames() []string {
 
 func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
 	switch name {
+	case "validity":
+		validity := new(starlark.Dict)
+		validity.SetKey(starlark.String("not_before"), starlark_time.Time(t.cert.NotBefore))
+		validity.SetKey(starlark.String("not_after"), starlark_time.Time(t.cert.NotAfter))
+		return validity, nil
 	case "bytes":
 		return starlark.Bytes(t.cert.Raw), nil
 	case "sha1":

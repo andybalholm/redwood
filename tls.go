@@ -630,7 +630,7 @@ func (t *TLSCertificate) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSCertificate")
 }
 
-var tlsCertificateAttrNames = []string{"bytes", "sha1", "sha256"}
+var tlsCertificateAttrNames = []string{"bytes", "sha1", "sha256", "md5", "subject", "subject_common_name", "subject_organization", "issuer", "issuer_common_name", "issuer_organization", "dns_names"}
 
 func (t *TLSCertificate) AttrNames() []string {
 	return tlsCertificateAttrNames
@@ -644,6 +644,22 @@ func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
 		return starlark.String(fmt.Sprintf("%x", sha1.Sum(t.cert.Raw))), nil
 	case "sha256":
 		return starlark.String(fmt.Sprintf("%x", sha256.Sum256(t.cert.Raw))), nil
+	case "md5":
+		return starlark.String(fmt.Sprintf("%x", md5.Sum(t.cert.Raw))), nil
+	case "subject":
+		return starlark.String(t.cert.Subject.String()), nil
+	case "subject_common_name":
+		return starlark.String(t.cert.Subject.CommonName), nil
+	case "issuer":
+		return starlark.String(t.cert.Issuer.String()), nil
+	case "issuer_common_name":
+		return starlark.String(t.cert.Issuer.CommonName), nil
+	case "dns_names":
+		var names starlark.Tuple
+		for _, name := range t.cert.DNSNames {
+			names = append(names, starlark.String(name))
+		}
+		return names, nil
 
 	default:
 		return nil, nil

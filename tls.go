@@ -645,7 +645,7 @@ func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
 		validity.SetKey(starlark.String("not_after"), starlark_time.Time(t.cert.NotAfter))
 		return validity, nil
 	case "version":
-		return starlark.String(fmt.Sprintf("%d", t.cert.Version)), nil
+		return starlark.MakeInt(t.cert.Version), nil
 	case "signature_algorithm":
 		return starlark.String(t.cert.SignatureAlgorithm.String()), nil
 	case "public_key_algorithm":

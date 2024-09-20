@@ -630,7 +630,7 @@ func (t *TLSCertificate) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSCertificate")
 }
 
-var tlsCertificateAttrNames = []string{"bytes", "sha1", "sha256", "md5", "subject", "subject_common_name", "subject_organization", "issuer", "issuer_common_name", "issuer_organization", "dns_names"}
+var tlsCertificateAttrNames = []string{"bytes", "sha1", "sha256", "md5", "subject", "issuer", "dns_names"}
 
 func (t *TLSCertificate) AttrNames() []string {
 	return tlsCertificateAttrNames
@@ -647,13 +647,9 @@ func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
 	case "md5":
 		return starlark.String(fmt.Sprintf("%x", md5.Sum(t.cert.Raw))), nil
 	case "subject":
-		return starlark.String(t.cert.Subject.String()), nil
-	case "subject_common_name":
-		return starlark.String(t.cert.Subject.CommonName), nil
+		return pkixNameToDict(t.cert.Subject), nil
 	case "issuer":
-		return starlark.String(t.cert.Issuer.String()), nil
-	case "issuer_common_name":
-		return starlark.String(t.cert.Issuer.CommonName), nil
+		return pkixNameToDict(t.cert.Issuer), nil
 	case "dns_names":
 		var names starlark.Tuple
 		for _, name := range t.cert.DNSNames {
@@ -664,6 +660,39 @@ func (t *TLSCertificate) Attr(name string) (starlark.Value, error) {
 	default:
 		return nil, nil
 	}
+}
+
+func pkixNameToDict(name pkix.Name) *starlark.Dict {
+	result := new(starlark.Dict)
+	result.SetKey(starlark.String("distinguished_name"), starlark.String(name.String()))
+	if len(name.Country) > 0 {
+		result.SetKey(starlark.String("country"), starlark.String(name.Country[0]))
+	}
+	if len(name.Organization) > 0 {
+		result.SetKey(starlark.String("organization"), starlark.String(name.Organization[0]))
+	}
+	if len(name.OrganizationalUnit) > 0 {
+		result.SetKey(starlark.String("organizational_unit"), starlark.String(name.OrganizationalUnit[0]))
+	}
+	if len(name.Locality) > 0 {
+		result.SetKey(starlark.String("locality"), starlark.String(name.Locality[0]))
+	}
+	if len(name.Province) > 0 {
+		result.SetKey(starlark.String("province"), starlark.String(name.Province[0]))
+	}
+	if len(name.StreetAddress) > 0 {
+		result.SetKey(starlark.String("street_address"), starlark.String(name.StreetAddress[0]))
+	}
+	if len(name.PostalCode) > 0 {
+		result.SetKey(starlark.String("postal_code"), starlark.String(name.PostalCode[0]))
+	}
+	if name.SerialNumber != "" {
+		result.SetKey(starlark.String("serial_number"), starlark.String(name.SerialNumber))
+	}
+	if name.CommonName != "" {
+		result.SetKey(starlark.String("common_name"), starlark.String(name.CommonName))
+	}
+	return result
 }
 
 var errCertMismatch = errors.New("server certificate changed between original connection and redial")

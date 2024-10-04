@@ -128,6 +128,12 @@ func formatStarlarkError(err error) string {
 }
 
 func logStarlarkError(err error) {
+	if starlarkLog.csv == nil {
+		// The log isn't set up (probably in test mode).
+		// Print to Stdout instead.
+		fmt.Println(err)
+		return
+	}
 	starlarkLog.Log([]string{time.Now().Format("2006-01-02 15:04:05.000000"), "error", formatStarlarkError(err)})
 }
 

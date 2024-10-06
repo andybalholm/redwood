@@ -194,6 +194,9 @@ The `Response` object has the following attributes:
 - `body`: The response’s body content, as a string. Assigning to body replaces the
   response’s content. If the body is larger than `max-content-scan-size`, `body` will be `None`.
 
+- `html`: A `SoupNode` containing the parsed HTML content of the response,
+   or `None` if the content is not HTML or the content is larger than `max-content-scan-size`.
+
 - `header`: a dictionary containing the response’s HTTP headers.
 
 - `acls`: a set containing the ACL tags that have been assigned to the response.

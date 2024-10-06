@@ -28,9 +28,11 @@ import (
 	"github.com/andybalholm/cascadia"
 	"github.com/andybalholm/dhash"
 	"github.com/baruwa-enterprise/clamd"
+	"github.com/dustmop/soup"
 	"github.com/golang/gddo/httputil"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
+	"github.com/qri-io/starlib/bsoup"
 	"go.starlark.net/starlark"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
@@ -498,15 +500,14 @@ func doPhraseScan(response *Response) error {
 		conf := getConfig()
 		contentType := response.Response.Header.Get("Content-Type")
 		_, cs, _ := charset.DetermineEncoding(content, contentType)
-		var doc *html.Node
 		modified := false
 		if strings.Contains(contentType, "html") {
 			if conf.LogTitle {
-				doc, err = parseHTML(content, cs)
+				response.ParsedHTML, err = parseHTML(content, cs)
 				if err != nil {
 					log.Printf("Error parsing HTML from %s: %s", response.Request.Request.URL, err)
 				} else {
-					t := titleSelector.MatchFirst(doc)
+					t := titleSelector.MatchFirst(response.ParsedHTML)
 					if t != nil {
 						if titleText := t.FirstChild; titleText != nil && titleText.Type == html.TextNode {
 							response.PageTitle = strings.Replace(strings.TrimSpace(titleText.Data), "\n", " ", -1)
@@ -515,7 +516,7 @@ func doPhraseScan(response *Response) error {
 				}
 			}
 
-			modified = conf.pruneContent(response.Request.Request.URL, &content, cs, &doc)
+			modified = conf.pruneContent(response.Request.Request.URL, &content, cs, &response.ParsedHTML)
 			if modified {
 				cs = "utf-8"
 			}
@@ -530,21 +531,21 @@ func doPhraseScan(response *Response) error {
 					aclsWithCategories[name] = true
 				}
 			}
-			modifiedAfterScan := conf.doFilteredPruning(response.Request.Request.URL, content, cs, aclsWithCategories, &doc)
+			modifiedAfterScan := conf.doFilteredPruning(response.Request.Request.URL, content, cs, aclsWithCategories, &response.ParsedHTML)
 
 			censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
 			if censorRule.Action == "censor-words" {
-				if doc == nil {
-					doc, _ = parseHTML(content, cs)
+				if response.ParsedHTML == nil {
+					response.ParsedHTML, _ = parseHTML(content, cs)
 				}
-				if censorHTML(doc, conf.CensoredWords) {
+				if censorHTML(response.ParsedHTML, conf.CensoredWords) {
 					modifiedAfterScan = true
 				}
 			}
 
 			if modifiedAfterScan {
 				b := new(bytes.Buffer)
-				if err := html.Render(b, doc); err != nil {
+				if err := html.Render(b, response.ParsedHTML); err != nil {
 					log.Printf("Error rendering modified content from %s: %v", response.Request.Request.URL, err)
 				} else {
 					content = b.Bytes()
@@ -1026,6 +1027,8 @@ type Response struct {
 	// It is filled in by doPhraseScan.
 	PageTitle string
 
+	ParsedHTML *html.Node
+
 	clamResponses []*clamd.Response
 	clamChan      chan []*clamd.Response
 
@@ -1064,7 +1067,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data", "html"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1103,6 +1106,36 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return r.LogData, nil
+	case "html":
+		if r.ParsedHTML == nil {
+			contentType := r.Response.Header.Get("Content-Type")
+			if strings.Contains(contentType, "html") {
+				content, err := r.Content(getConfig().MaxContentScanSize)
+				if err == nil {
+					_, cs, _ := charset.DetermineEncoding(content, contentType)
+					r.ParsedHTML, err = parseHTML(content, cs)
+				}
+			}
+		}
+
+		n := r.ParsedHTML
+		for n != nil && n.Type != html.ElementNode {
+			switch n.Type {
+			case html.DocumentNode:
+				n = n.FirstChild
+			case html.DoctypeNode, html.CommentNode:
+				n = n.NextSibling
+			default:
+				return starlark.None, nil
+			}
+		}
+		if n == nil {
+			return starlark.None, nil
+		}
+
+		root := soup.Root{n, n.Data, nil}
+		sn := bsoup.NewSoupNode(&root)
+		return sn, nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil

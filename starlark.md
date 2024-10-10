@@ -246,6 +246,9 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
 - `urlparse`: parses a URL from a string to a named tuple,
   largely compatible with Python’s `urllib.parse.urlparse`.
 
+- `parse_qs`: parses a URL query string, to a dict of tuples,
+  largely compatible with Python’s `urllib.parse.parse_qs`.
+
 ### Caches
 
 Redwood provides a `Cache` type that scripts can use to temporarily store the results of 

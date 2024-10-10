@@ -58,6 +58,7 @@ func init() {
 	starlark.Universe["lookup_host"] = starlark.NewBuiltin("lookup_host", lookupHostStarlark)
 	starlark.Universe["lookup_addr"] = starlark.NewBuiltin("lookup_addr", lookupAddrStarlark)
 	starlark.Universe["urlparse"] = starlark.NewBuiltin("urlparse", urlparse)
+	starlark.Universe["parse_qs"] = starlark.NewBuiltin("parse_qs", parseQS)
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){
@@ -715,4 +716,25 @@ func urlparse(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple
 		starlark.String(parsed.RawQuery),
 		starlark.String(parsed.Fragment),
 	}}, nil
+}
+
+func parseQS(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var queryString string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &queryString); err != nil {
+		return nil, err
+	}
+
+	parsed, _ := url.ParseQuery(queryString)
+	// Ignore errors like the Python original does.
+
+	d := starlark.NewDict(len(parsed))
+	for k, values := range parsed {
+		t := make(starlark.Tuple, len(values))
+		for i, v := range values {
+			t[i] = starlark.String(v)
+		}
+		d.SetKey(starlark.String(k), t)
+	}
+
+	return d, nil
 }

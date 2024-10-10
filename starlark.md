@@ -243,6 +243,9 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
   or specify a specific DNS server to use (`lookup_addr("8.8.8.8", "208.67.222.123")`).
   The trailing dot that is normally returned by a reverse DNS query is stripped off.
 
+- `urlparse`: parses a URL from a string to a named tuple,
+  largely compatible with Python’s `urllib.parse.urlparse`.
+
 ### Caches
 
 Redwood provides a `Cache` type that scripts can use to temporarily store the results of 

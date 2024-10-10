@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +57,7 @@ func init() {
 
 	starlark.Universe["lookup_host"] = starlark.NewBuiltin("lookup_host", lookupHostStarlark)
 	starlark.Universe["lookup_addr"] = starlark.NewBuiltin("lookup_addr", lookupAddrStarlark)
+	starlark.Universe["urlparse"] = starlark.NewBuiltin("urlparse", urlparse)
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){
@@ -633,4 +636,83 @@ func (d *SyncDict) Attr(name string) (starlark.Value, error) {
 	default:
 		return nil, nil
 	}
+}
+
+type urlParseResult struct {
+	starlark.Tuple
+}
+
+func (u urlParseResult) Type() string {
+	return "ParseResult"
+}
+
+func (u urlParseResult) AttrNames() []string {
+	return []string{"scheme", "netloc", "path", "params", "query", "fragment", "hostname", "port"}
+}
+
+func (u urlParseResult) Attr(name string) (starlark.Value, error) {
+	switch name {
+	default:
+		return nil, nil
+
+	case "scheme":
+		return u.Tuple[0], nil
+	case "netloc":
+		return u.Tuple[1], nil
+	case "path":
+		return u.Tuple[2], nil
+	case "params":
+		return u.Tuple[3], nil
+	case "query":
+		return u.Tuple[4], nil
+	case "fragment":
+		return u.Tuple[5], nil
+
+	case "hostname":
+		netloc := string(u.Tuple[1].(starlark.String))
+		if netloc == "" {
+			return starlark.None, nil
+		}
+		host, _, err := net.SplitHostPort(netloc)
+		if err != nil {
+			return starlark.String(netloc), nil
+		}
+		return starlark.String(host), nil
+
+	case "port":
+		netloc := string(u.Tuple[1].(starlark.String))
+		if netloc == "" {
+			return starlark.None, nil
+		}
+		_, port, err := net.SplitHostPort(netloc)
+		if err != nil {
+			return starlark.None, nil
+		}
+		p, err := strconv.Atoi(port)
+		if err != nil {
+			return nil, err
+		}
+		return starlark.MakeInt(p), nil
+	}
+}
+
+func urlparse(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var urlString string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &urlString); err != nil {
+		return nil, err
+	}
+
+	parsed, err := url.Parse(urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	return urlParseResult{starlark.Tuple{
+		starlark.String(parsed.Scheme),
+		starlark.String(parsed.Host),
+		starlark.String(parsed.Path),
+		starlark.String(""),
+		starlark.String(parsed.RawQuery),
+		starlark.String(parsed.Fragment),
+	}}, nil
 }

@@ -276,3 +276,12 @@ A `Cache` has the following methods:
   or because the entry has expired or been replaced).
 
 - `del(key)`: removes an entry from the cache.
+
+### Log Files
+
+Redwood provides a `CSVLog` type that scripts can use to write data to CSV log files.
+To open a log file, call `CSVLog(path)`.
+A `CSVLog` has one method:
+
+- `log`: converts its arguments to strings, and writes them as a line in the log file.
+  It adds a column a the start of the line with the current date and time.

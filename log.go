@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"mime"
@@ -23,19 +24,21 @@ import (
 	"go.starlark.net/starlark"
 )
 
-// recording pages filtered to access log
-
 var (
 	accessLog   CSVLog
 	tlsLog      CSVLog
 	contentLog  CSVLog
 	starlarkLog CSVLog
 	authLog     CSVLog
+
+	customLogs    = map[string]*CSVLog{}
+	customLogLock sync.Mutex
 )
 
 type CSVLog struct {
 	lock sync.Mutex
 	file *os.File
+	path string
 	csv  *csv.Writer
 }
 
@@ -45,6 +48,7 @@ func (l *CSVLog) Open(filename string) {
 	if l.file != nil && l.file != os.Stdout {
 		l.file.Close()
 		l.file = nil
+		l.path = ""
 	}
 
 	if filename != "" {
@@ -53,6 +57,7 @@ func (l *CSVLog) Open(filename string) {
 			log.Printf("Could not open log file (%s): %s\n Sending log messages to standard output instead.", filename, err)
 		} else {
 			l.file = logfile
+			l.path = filename
 		}
 	}
 	if l.file == nil {
@@ -269,3 +274,68 @@ func logAuthEvent(
 	authLog.Log(toStrings(time.Now().Format("2006-01-02 15:04:05.000000"), status, authType, address, port, user, pwd, platform, network, ua, url, message))
 }
 
+func (l *CSVLog) String() string {
+	return fmt.Sprintf("CSVLog(%q)", l.path)
+}
+
+func (l *CSVLog) Type() string {
+	return "CSVLog"
+}
+
+func (l *CSVLog) Freeze() {}
+
+func (l *CSVLog) Truth() starlark.Bool { return true }
+
+func (l *CSVLog) Hash() (uint32, error) {
+	return 0, errors.New("unhashable type: CSVLog")
+}
+
+func (l *CSVLog) AttrNames() []string {
+	return []string{"log"}
+}
+
+func (l *CSVLog) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "log":
+		return starlark.NewBuiltin("log", l.logStarlark), nil
+
+	default:
+		return nil, nil
+	}
+}
+
+func (l *CSVLog) logStarlark(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	strings := make([]string, len(args)+1)
+	strings[0] = time.Now().Format("2006-01-02 15:04:05.000000")
+
+	for i, v := range args {
+		if s, ok := v.(starlark.String); ok {
+			strings[i+1] = string(s)
+		} else {
+			strings[i+1] = v.String()
+		}
+	}
+
+	l.Log(strings)
+	return starlark.None, nil
+}
+
+func customCSVLog(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var path string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &path); err != nil {
+		return nil, err
+	}
+
+	customLogLock.Lock()
+	defer customLogLock.Unlock()
+
+	l, ok := customLogs[path]
+	if ok {
+		return l, nil
+	}
+
+	l = new(CSVLog)
+	l.Open(path)
+	customLogs[path] = l
+	return l, nil
+}

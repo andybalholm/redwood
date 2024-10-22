@@ -62,6 +62,7 @@ func init() {
 	starlark.Universe["parse_qs"] = starlark.NewBuiltin("parse_qs", parseQS)
 	starlark.Universe["publicsuffix"] = starlark.NewBuiltin("publicsuffix", publicsuffixStarlark)
 	starlark.Universe["privatesuffix"] = starlark.NewBuiltin("privatesuffix", privatesuffix)
+	starlark.Universe["CSVLog"] = starlark.NewBuiltin("CSVLog", customCSVLog)
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){

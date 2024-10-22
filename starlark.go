@@ -29,6 +29,7 @@ import (
 	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+	"golang.org/x/net/publicsuffix"
 )
 
 func init() {
@@ -59,6 +60,8 @@ func init() {
 	starlark.Universe["lookup_addr"] = starlark.NewBuiltin("lookup_addr", lookupAddrStarlark)
 	starlark.Universe["urlparse"] = starlark.NewBuiltin("urlparse", urlparse)
 	starlark.Universe["parse_qs"] = starlark.NewBuiltin("parse_qs", parseQS)
+	starlark.Universe["publicsuffix"] = starlark.NewBuiltin("publicsuffix", publicsuffixStarlark)
+	starlark.Universe["privatesuffix"] = starlark.NewBuiltin("privatesuffix", privatesuffix)
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){
@@ -737,4 +740,28 @@ func parseQS(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple,
 	}
 
 	return d, nil
+}
+
+func publicsuffixStarlark(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var hostname string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &hostname); err != nil {
+		return nil, err
+	}
+
+	suffix, _ := publicsuffix.PublicSuffix(hostname)
+	return starlark.String(suffix), nil
+}
+
+func privatesuffix(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var hostname string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &hostname); err != nil {
+		return nil, err
+	}
+
+	suffix, err := publicsuffix.EffectiveTLDPlusOne(hostname)
+	if err != nil {
+		return starlark.None, nil
+	}
+
+	return starlark.String(suffix), nil
 }

@@ -249,6 +249,10 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
 - `parse_qs`: parses a URL query string, to a dict of tuples,
   largely compatible with Python’s `urllib.parse.parse_qs`.
 
+- `publicsuffix`: returns the public suffix of a domain
+
+- `privatesuffix`: returns one more label than the public suffix
+
 ### Caches
 
 Redwood provides a `Cache` type that scripts can use to temporarily store the results of 

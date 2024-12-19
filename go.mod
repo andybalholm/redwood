@@ -18,7 +18,7 @@ require (
 	go.starlark.net v0.0.0-20240411212711-9b43f0afd521
 	golang.org/x/crypto v0.31.0
 	golang.org/x/image v0.18.0
-	golang.org/x/net v0.30.0
+	golang.org/x/net v0.33.0
 	golang.org/x/text v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
 )

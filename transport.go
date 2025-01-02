@@ -261,3 +261,22 @@ func (FTPTransport) RoundTrip(req *http.Request) (resp *http.Response, err error
 
 	return resp, nil
 }
+
+// A RetryTransport wraps an http.RoundTripper to automatically retry
+// failed requests.
+type RetryTransport struct {
+	transport http.RoundTripper
+}
+
+func (t *RetryTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	if requestIsReplayable(req) {
+		for range 3 {
+			resp, err = t.transport.RoundTrip(req)
+			if err == nil || !shouldRedialForError(err) {
+				return resp, err
+			}
+			logVerbose("redial", "retrying request for %v", req.URL)
+		}
+	}
+	return t.transport.RoundTrip(req)
+}

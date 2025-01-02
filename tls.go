@@ -373,7 +373,9 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 				},
 				TLSClientConfig:            d.Config,
 				StrictMaxConcurrentStreams: true,
+				ReadIdleTimeout:            58 * time.Second,
 			}
+			rt = &RetryTransport{transport: rt}
 		} else {
 			rt = &connTransport{
 				Conn: serverConn,

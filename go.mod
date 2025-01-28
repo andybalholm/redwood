@@ -8,8 +8,10 @@ require (
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/dop251/goja v0.0.0-20240220182346-e401ed450204
 	github.com/dop251/goja_nodejs v0.0.0-20240418154818-2aae10d4cbcf
+	github.com/dustmop/soup v1.1.2-0.20190516214245-38228baa104e
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
 	github.com/klauspost/compress v1.17.8
+	github.com/magnetde/starlark-re v0.1.1
 	github.com/miekg/dns v1.1.59
 	github.com/open-ch/ja3 v1.0.1
 	github.com/qri-io/starlib v0.5.0
@@ -30,12 +32,10 @@ require (
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/dustmop/soup v1.1.2-0.20190516214245-38228baa104e // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
-	github.com/golang/glog v1.2.1 // indirect
+	github.com/golang/glog v1.2.4 // indirect
 	github.com/google/pprof v0.0.0-20240416155748-26353dc0451f // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
-	github.com/magnetde/starlark-re v0.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect

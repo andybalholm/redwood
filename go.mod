@@ -32,7 +32,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dustmop/soup v1.1.2-0.20190516214245-38228baa104e // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
-	github.com/golang/glog v1.2.1 // indirect
+	github.com/golang/glog v1.2.4 // indirect
 	github.com/google/pprof v0.0.0-20240416155748-26353dc0451f // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/magnetde/starlark-re v0.1.1 // indirect

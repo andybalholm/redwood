@@ -287,6 +287,29 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	serverConnConfig := &tls.Config{
 		ServerName:         session.SNI,
 		InsecureSkipVerify: true,
+		CurvePreferences: []tls.CurveID{
+			tls.X25519,
+			tls.CurveP256,
+			tls.CurveP384,
+		},
+		Renegotiation: tls.RenegotiateOnceAsClient,
+		CipherSuites: []uint16{
+			tls.TLS_AES_128_GCM_SHA256,
+			tls.TLS_AES_256_GCM_SHA384,
+			tls.TLS_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+		},
 	}
 	clientSupportsHTTP2 := false
 	if clientHelloInfo != nil {
@@ -333,17 +356,21 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
 
+		serverConnConfig.InsecureSkipVerify = false
+		if _, err := serverCert.Verify(x509.VerifyOptions{Intermediates: certPoolWith(state.PeerCertificates[1:])}); err != nil {
+			// The certificate is not valid with the default roots, so we need to
+			// specify custom roots.
+			serverConnConfig.RootCAs = certPoolWith(serverConn.ConnectionState().PeerCertificates)
+		}
+
 		d := &tls.Dialer{
 			NetDialer: dialer,
-			Config: &tls.Config{
-				ServerName: session.SNI,
-				RootCAs:    certPoolWith(serverConn.ConnectionState().PeerCertificates),
-			},
+			Config:    serverConnConfig,
 		}
 		if !valid {
-			d.Config.InsecureSkipVerify = true
+			serverConnConfig.InsecureSkipVerify = true
 			originalCert := serverConn.ConnectionState().PeerCertificates[0]
-			d.Config.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			serverConnConfig.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 				cert, err := x509.ParseCertificate(rawCerts[0])
 				if err != nil {
 					return err
@@ -356,7 +383,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 
 		if http2Support {
-			d.Config.NextProtos = []string{"h2"}
+			serverConnConfig.NextProtos = []string{"h2"}
 
 			var once sync.Once
 			rt = &http2.Transport{
@@ -371,9 +398,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 					logVerbose("redial", "Redialing HTTP/2 connection to %s (%s)", session.SNI, session.ServerAddr)
 					return d.Dial("tcp", session.ServerAddr)
 				},
-				TLSClientConfig:            d.Config,
+				TLSClientConfig:            serverConnConfig,
 				StrictMaxConcurrentStreams: true,
 				ReadIdleTimeout:            58 * time.Second,
+				MaxDecoderHeaderTableSize:  65536,
+				MaxHeaderListSize:          262144,
+				MaxReadFrameSize:           16384,
 			}
 			rt = &RetryTransport{transport: rt}
 		} else {

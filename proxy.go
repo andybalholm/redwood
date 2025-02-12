@@ -701,7 +701,7 @@ func (hc *hijackedConn) Read(b []byte) (int, error) {
 func newHijackedConn(w http.ResponseWriter) (*hijackedConn, error) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		return nil, errors.New("connection doesn't support hijacking")
+		return nil, fmt.Errorf("connection (%T) doesn't support hijacking", w)
 	}
 	conn, bufrw, err := hj.Hijack()
 	if err != nil {

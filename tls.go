@@ -406,12 +406,8 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		session:        session,
 	}
 	tlsConfig := &tls.Config{
-		Certificates:             []tls.Certificate{cert, getConfig().TLSCert},
-		PreferServerCipherSuites: true,
-		CurvePreferences: []tls.CurveID{
-			tls.CurveP256,
-			tls.X25519, // Go 1.8 only
-		},
+		Certificates: []tls.Certificate{cert, getConfig().TLSCert},
+		MinVersion:   tls.VersionTLS10,
 	}
 
 	http2Downstream := getConfig().HTTP2Downstream && http2Support

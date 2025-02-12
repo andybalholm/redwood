@@ -284,32 +284,23 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		},
 	}
 
+	curves := clientHelloInfo.SupportedCurves
+	hasMLKEM := false
+	for _, c := range curves {
+		if c == tls.X25519MLKEM768 {
+			hasMLKEM = true
+		}
+	}
+	if !hasMLKEM {
+		curves = append(curves, tls.X25519MLKEM768)
+	}
+
 	serverConnConfig := &tls.Config{
 		ServerName:         session.SNI,
 		InsecureSkipVerify: true,
-		CurvePreferences: []tls.CurveID{
-			tls.X25519,
-			tls.CurveP256,
-			tls.CurveP384,
-		},
-		Renegotiation: tls.RenegotiateOnceAsClient,
-		CipherSuites: []uint16{
-			tls.TLS_AES_128_GCM_SHA256,
-			tls.TLS_AES_256_GCM_SHA384,
-			tls.TLS_CHACHA20_POLY1305_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-		},
+		CurvePreferences:   curves,
+		Renegotiation:      tls.RenegotiateOnceAsClient,
+		CipherSuites:       clientHelloInfo.CipherSuites,
 	}
 	clientSupportsHTTP2 := false
 	if clientHelloInfo != nil {
@@ -354,7 +345,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		}
 
-		http2Support = state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
+		http2Support = state.NegotiatedProtocol == "h2"
 
 		serverConnConfig.InsecureSkipVerify = false
 		if _, err := serverCert.Verify(x509.VerifyOptions{Intermediates: certPoolWith(state.PeerCertificates[1:])}); err != nil {
@@ -1036,7 +1027,7 @@ func readClientHello(conn net.Conn) (hello []byte, err error) {
 
 // parseClientHello parses some useful information out of a ClientHello message.
 // It returns a ClientHelloInfo with only the following fields filled in:
-// ServerName and SupportedProtocols.
+// CipherSuites, ServerName, SupportedCurves and SupportedProtocols.
 func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 	// The implementation of this function is based on crypto/tls.clientHelloMsg.unmarshal
 	var info tls.ClientHelloInfo
@@ -1055,6 +1046,16 @@ func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 	var cipherSuites cryptobyte.String
 	if !s.ReadUint16LengthPrefixed(&cipherSuites) {
 		return nil, errors.New("bad cipher suites")
+	}
+	for !cipherSuites.Empty() {
+		var suite uint16
+		if !cipherSuites.ReadUint16(&suite) {
+			return nil, errors.New("odd number of bytes in cipher suites")
+		}
+		if suite == 0x00ff /* scsvRenegotiation */ {
+			continue
+		}
+		info.CipherSuites = append(info.CipherSuites, suite)
 	}
 
 	var compressionMethods cryptobyte.String
@@ -1101,6 +1102,19 @@ func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 				if strings.HasSuffix(info.ServerName, ".") {
 					return nil, errors.New("server name ends with dot")
 				}
+			}
+
+		case 10: // supported curves
+			var curves cryptobyte.String
+			if !extData.ReadUint16LengthPrefixed(&curves) || curves.Empty() {
+				return nil, errors.New("bad curves list")
+			}
+			for !curves.Empty() {
+				var curve uint16
+				if !curves.ReadUint16(&curve) {
+					return nil, errors.New("odd number of bytes in supported curves")
+				}
+				info.SupportedCurves = append(info.SupportedCurves, tls.CurveID(curve))
 			}
 
 		case 16: // ALPN

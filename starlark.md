@@ -109,6 +109,10 @@ The `TLSSession` object has the following attributes:
 
 - `id`: a random ID that is generated for each session
 
+- `ja3_string`: the un-hashed JA3 fingerprint of the TLS client hello message
+
+- `ja3_hash`: the MD5 hash of `ja3_string`
+
 ### `inspect_server_certificate`
 
 When Redwood is acting as man-in-the-middle on an HTTPS connection,

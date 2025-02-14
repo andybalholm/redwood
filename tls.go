@@ -216,6 +216,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		ctx := cr.Context()
 		ctx = context.WithValue(ctx, tlsFingerprintKey{}, tlsFingerprint)
 		cr = cr.WithContext(ctx)
+		session.JA3 = j
 	}
 
 	var tally map[rule]int
@@ -476,6 +477,8 @@ type TLSSession struct {
 	// ID is a random ID to track which requests are on the same session.
 	ID string
 
+	JA3 *ja3.JA3
+
 	// ServerIP is the IP address of the server. It is only filled in when
 	// the actual connection to the server has been made.
 	ServerIP net.IP
@@ -554,7 +557,25 @@ func (s *TLSSession) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: TLSSession")
 }
 
-var tlsSessionAttrNames = []string{"sni", "server_addr", "user", "client_ip", "acls", "scores", "source_ip", "action", "possible_actions", "header", "misc", "log_data", "id", "server_ip", "server_certificate"}
+var tlsSessionAttrNames = []string{
+	"sni",
+	"server_addr",
+	"user",
+	"client_ip",
+	"acls",
+	"scores",
+	"source_ip",
+	"action",
+	"possible_actions",
+	"header",
+	"misc",
+	"log_data",
+	"id",
+	"ja3_string",
+	"ja3_hash",
+	"server_ip",
+	"server_certificate",
+}
 
 func (s *TLSSession) AttrNames() []string {
 	return tlsSessionAttrNames
@@ -592,6 +613,16 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 		return s.LogData, nil
 	case "id":
 		return starlark.String(s.ID), nil
+	case "ja3_string":
+		if s.JA3 == nil {
+			return starlark.None, nil
+		}
+		return starlark.String(s.JA3.GetJA3String()), nil
+	case "ja3_hash":
+		if s.JA3 == nil {
+			return starlark.None, nil
+		}
+		return starlark.String(s.JA3.GetJA3Hash()), nil
 	case "server_ip":
 		return starlark.String(s.ServerIP.String()), nil
 	case "server_certificate":

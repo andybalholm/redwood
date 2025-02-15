@@ -296,12 +296,19 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		curves = append(curves, tls.X25519MLKEM768)
 	}
 
+	ciphers := make([]uint16, 0, len(clientHelloInfo.CipherSuites))
+	for _, c := range clientHelloInfo.CipherSuites {
+		if !strings.Contains(tls.CipherSuiteName(c), "3DES") {
+			ciphers = append(ciphers, c)
+		}
+	}
+
 	serverConnConfig := &tls.Config{
 		ServerName:         session.SNI,
 		InsecureSkipVerify: true,
 		CurvePreferences:   curves,
 		Renegotiation:      tls.RenegotiateOnceAsClient,
-		CipherSuites:       clientHelloInfo.CipherSuites,
+		CipherSuites:       ciphers,
 	}
 	clientSupportsHTTP2 := false
 	if clientHelloInfo != nil {

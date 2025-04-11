@@ -1067,7 +1067,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data", "html"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data", "html", "title"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1092,6 +1092,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return starlark.String(content), nil
+	case "title":
+		return starlark.String(r.PageTitle), nil
 	case "action":
 		ar, _ := r.currentAction()
 		return starlark.String(ar.Action), nil
@@ -1179,6 +1181,8 @@ func (r *Response) SetField(name string, val starlark.Value) error {
 	case "log_data":
 		r.LogData = val
 		return nil
+	case "title":
+		return assignStarlarkString(&r.PageTitle, val)
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Response", name))
 	}

@@ -402,7 +402,7 @@ func (s *StringIntDict) SetKey(k, v starlark.Value) error {
 	return nil
 }
 
-var stringIntDictAttrNames = []string{"get", "pop"}
+var stringIntDictAttrNames = []string{"get", "pop", "clear"}
 
 func (s *StringIntDict) AttrNames() []string {
 	return stringIntDictAttrNames
@@ -412,6 +412,8 @@ func (s *StringIntDict) Attr(name string) (starlark.Value, error) {
 	switch name {
 	case "get", "pop":
 		return starlark.NewBuiltin(name, stringIntDictGet).BindReceiver(s), nil
+	case "clear":
+		return starlark.NewBuiltin(name, stringIntDictClear).BindReceiver(s), nil
 	default:
 		return nil, nil
 	}
@@ -450,6 +452,15 @@ func stringIntDictGet(thread *starlark.Thread, fn *starlark.Builtin, args starla
 		delete(s.data, key)
 	}
 	return starlark.MakeInt(v), nil
+}
+
+func stringIntDictClear(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	s := fn.Receiver().(*StringIntDict)
+	if s.frozen {
+		return nil, errors.New("can't modify a frozen StringIntDict")
+	}
+	clear(s.data)
+	return starlark.None, nil
 }
 
 func (s *StringIntDict) Items() (result []starlark.Tuple) {

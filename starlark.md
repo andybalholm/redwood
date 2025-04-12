@@ -201,6 +201,10 @@ The `Response` object has the following attributes:
 - `html`: A `SoupNode` containing the parsed HTML content of the response,
    or `None` if the content is not HTML or the content is larger than `max-content-scan-size`.
 
+- `selectolax_html`: An `HTMLNode` (with an interface based on Selectolax’s `LexborNode` class),
+  containing the parsed HTML content of the response,
+  or `None` if the content is not HTML or the content is larger than `max-content-scan-size`.
+
 - `title`: The content of the page’s `title` element. Assigning to this attribute changes
   the title that will be logged in the access log.
 

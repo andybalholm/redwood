@@ -1067,7 +1067,7 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data", "html", "title"}
+var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data", "html", "selectolax_html", "title"}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1108,7 +1108,7 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return r.LogData, nil
-	case "html":
+	case "html", "selectolax_html":
 		if r.ParsedHTML == nil {
 			contentType := r.Response.Header.Get("Content-Type")
 			if strings.Contains(contentType, "html") {
@@ -1120,24 +1120,34 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 			}
 		}
 
-		n := r.ParsedHTML
-		for n != nil && n.Type != html.ElementNode {
-			switch n.Type {
-			case html.DocumentNode:
-				n = n.FirstChild
-			case html.DoctypeNode, html.CommentNode:
-				n = n.NextSibling
-			default:
+		if name == "html" {
+			n := r.ParsedHTML
+			for n != nil && n.Type != html.ElementNode {
+				switch n.Type {
+				case html.DocumentNode:
+					n = n.FirstChild
+				case html.DoctypeNode, html.CommentNode:
+					n = n.NextSibling
+				default:
+					return starlark.None, nil
+				}
+			}
+			if n == nil {
 				return starlark.None, nil
 			}
-		}
-		if n == nil {
-			return starlark.None, nil
+
+			root := soup.Root{n, n.Data, nil}
+			sn := bsoup.NewSoupNode(&root)
+			return sn, nil
 		}
 
-		root := soup.Root{n, n.Data, nil}
-		sn := bsoup.NewSoupNode(&root)
-		return sn, nil
+		if r.ParsedHTML == nil {
+			return starlark.None, nil
+		}
+		return &HTMLNode{
+			node:   r.ParsedHTML,
+			frozen: r.frozen,
+		}, nil
 
 	case "thumbnail":
 		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil
@@ -1171,6 +1181,7 @@ func (r *Response) SetField(name string, val starlark.Value) error {
 			return err
 		}
 		r.SetContent([]byte(body), r.Response.Header.Get("Content-Type"))
+		r.ParsedHTML = nil
 		return nil
 	case "action":
 		var newAction string

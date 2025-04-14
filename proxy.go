@@ -1085,6 +1085,7 @@ var responseAttrNames = []string{
 	"thumbnail",
 	"classify_text",
 	"reclassify",
+	"choose_action",
 }
 
 func (r *Response) AttrNames() []string {
@@ -1173,6 +1174,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin(name, responseClassifyText).BindReceiver(r), nil
 	case "reclassify":
 		return starlark.NewBuiltin(name, responseReclassify).BindReceiver(r), nil
+	case "choose_action":
+		return starlark.NewBuiltin(name, responseChooseAction).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -1403,6 +1406,19 @@ func responseReclassify(thread *starlark.Thread, fn *starlark.Builtin, args star
 	r := fn.Receiver().(*Response)
 
 	return starlark.None, classifyResponse(r)
+}
+
+func responseChooseAction(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Response)
+
+	var scores *StringIntDict
+	threshold := 1
+	if err := starlark.UnpackArgs(fn.Name(), args, kwargs, "scores", &scores, "threshold?", &threshold); err != nil {
+		return nil, err
+	}
+
+	action, _ := getConfig().ChooseACLCategoryAction(r.ACLs.data, scores.data, threshold, "allow", "block")
+	return starlark.String(action.Action), nil
 }
 
 // A HeaderDict wraps an http.Header to make it act like a Starlark dictionary.

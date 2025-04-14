@@ -225,7 +225,7 @@ The `Response` object has the following attributes:
 
 - `log_data`: the script can put data here to be included in the access log, encoded as JSON
 
-Other methods of `Response`:
+Methods of `Response`:
 
 - `thumbnail(500)`: returns a JPEG thumbnail of the response, no more than 500 pixels in width and height.
   If no thumbnail is available (either because the response body is not a supported image format,
@@ -235,6 +235,10 @@ Other methods of `Response`:
 - `classify_text(txt)`: does a phrase scan on `txt` and returns a dictionary of category scores
   like the one returned by `response.Scores`. The argument can be a string, a `SoupNode`, or an
   `HTMLNode`.
+
+- `choose_action(scores, threshold=1)`: returns the action that would be taken on this response
+  if it had the specified category scores and the threshold were set to `threshold`.
+  This is useful for doing partial-page filtering.
 
 - `reclassify()`: recalculates the category scores for this response (e.g. after assigning a new body).
 

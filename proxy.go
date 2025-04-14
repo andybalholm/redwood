@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"maps"
 	"math"
 	"net"
 	"net/http"
@@ -344,62 +345,37 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 		Response: resp,
 		LogData:  request.LogData,
 	}
-	response.Scores = request.Scores
-	response.Tally = make(map[rule]int)
-	for k, v := range request.Tally {
-		response.Tally[k] = v
+	if err := classifyResponse(response); err != nil {
+		showErrorPage(w, r, err)
+		return
 	}
 
-	var scanAction ACLActionRule
 	{
 		conf := getConfig()
-		respACLs := conf.ACLs.responseACLs(resp)
-		response.ACLs.data = unionACLSets(request.ACLs.data, respACLs)
-
 		headerRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "disable-proxy-headers")
 		if headerRule.Action != "disable-proxy-headers" {
 			viaHosts := resp.Header["Via"]
 			viaHosts = append(viaHosts, strings.TrimPrefix(resp.Proto, "HTTP/")+" Redwood")
 			resp.Header.Set("Via", strings.Join(viaHosts, ", "))
 		}
+	}
 
-		var possibleActions []string
-		if r.Method != "HEAD" {
-			possibleActions = append(possibleActions, "hash-image", "phrase-scan")
-			if conf.ClamAV != nil {
-				possibleActions = append(possibleActions, "virus-scan")
+	if conf := getConfig(); conf.ClamAV != nil {
+		virusAction, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "virus-scan")
+		conf = nil
+
+		if virusAction.Action == "virus-scan" {
+			if err := doVirusScan(response); err != nil {
+				showErrorPage(w, r, err)
+				return
+			}
+			if response.Action.Action == "block" {
+				showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action, response.LogData)
+				logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses(), response.LogData)
+				return
 			}
 		}
-
-		scanAction, _ = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, possibleActions...)
 	}
-
-	switch scanAction.Action {
-	case "phrase-scan":
-		if err := doPhraseScan(response); err != nil {
-			showErrorPage(w, r, err)
-			return
-		}
-
-	case "hash-image":
-		if err := doImageHash(response); err != nil {
-			showErrorPage(w, r, err)
-			return
-		}
-
-	case "virus-scan":
-		if err := doVirusScan(response); err != nil {
-			showErrorPage(w, r, err)
-			return
-		}
-		if response.Action.Action == "block" {
-			showBlockPage(w, r, resp, user, response.Tally, response.Scores.data, response.Action, response.LogData)
-			logAccess(r, resp, response.Response.ContentLength, false, user, response.Tally, response.Scores.data, response.Action, "", nil, response.ClamdResponses(), response.LogData)
-			return
-		}
-	}
-
-	response.Scores.data = getConfig().categoryScores(response.Tally)
 
 	contentRule, _ := getConfig().ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, 1, "log-content")
 	if contentRule.Action == "log-content" {
@@ -440,6 +416,41 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 	}
 
 	logAccess(r, resp, n, response.Modified, user, response.Tally, response.Scores.data, response.Action, response.PageTitle, response.Ignored, response.ClamdResponses(), response.LogData)
+}
+
+func classifyResponse(response *Response) error {
+	response.Scores = response.Request.Scores
+	response.Tally = make(map[rule]int)
+	maps.Copy(response.Tally, response.Request.Tally)
+
+	var scanAction ACLActionRule
+	{
+		conf := getConfig()
+		respACLs := conf.ACLs.responseACLs(response.Response)
+		response.ACLs.data = unionACLSets(response.Request.ACLs.data, respACLs)
+
+		var possibleActions []string
+		if response.Request.Request.Method != "HEAD" {
+			possibleActions = append(possibleActions, "hash-image", "phrase-scan")
+		}
+
+		scanAction, _ = conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, possibleActions...)
+	}
+
+	switch scanAction.Action {
+	case "phrase-scan":
+		if err := doPhraseScan(response); err != nil {
+			return err
+		}
+
+	case "hash-image":
+		if err := doImageHash(response); err != nil {
+			return err
+		}
+	}
+
+	response.Scores.data = getConfig().categoryScores(response.Tally)
+	return nil
 }
 
 func filterRequest(req *Request, checkAuth bool) {
@@ -1073,6 +1084,7 @@ var responseAttrNames = []string{
 	"html", "selectolax_html", "title",
 	"thumbnail",
 	"classify_text",
+	"reclassify",
 }
 
 func (r *Response) AttrNames() []string {
@@ -1159,6 +1171,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin(name, responseGetThumbnail).BindReceiver(r), nil
 	case "classify_text":
 		return starlark.NewBuiltin(name, responseClassifyText).BindReceiver(r), nil
+	case "reclassify":
+		return starlark.NewBuiltin(name, responseReclassify).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -1383,6 +1397,12 @@ func responseClassifyText(thread *starlark.Thread, fn *starlark.Builtin, args st
 	conf.scanContent(content, contentType, "utf-8", tally)
 	scores := conf.categoryScores(tally)
 	return &StringIntDict{data: scores}, nil
+}
+
+func responseReclassify(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	r := fn.Receiver().(*Response)
+
+	return starlark.None, classifyResponse(r)
 }
 
 // A HeaderDict wraps an http.Header to make it act like a Starlark dictionary.

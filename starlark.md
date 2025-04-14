@@ -236,6 +236,8 @@ Other methods of `Response`:
   like the one returned by `response.Scores`. The argument can be a string, a `SoupNode`, or an
   `HTMLNode`.
 
+- `reclassify()`: recalculates the category scores for this response (e.g. after assigning a new body).
+
 ## Language and Library Notes
 
 The Go implementation of Starlark has several features that are not present in the Java version.

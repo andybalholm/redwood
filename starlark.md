@@ -232,6 +232,10 @@ Other methods of `Response`:
   or because the body is too large), `thumbnail` returns `None`.
   The default size is 1000 pixels.
 
+- `classify_text(txt)`: does a phrase scan on `txt` and returns a dictionary of category scores
+  like the one returned by `response.Scores`. The argument can be a string, a `SoupNode`, or an
+  `HTMLNode`.
+
 ## Language and Library Notes
 
 The Go implementation of Starlark has several features that are not present in the Java version.

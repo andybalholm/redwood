@@ -1067,7 +1067,13 @@ func (r *Response) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Response")
 }
 
-var responseAttrNames = []string{"request", "header", "acls", "scores", "status", "body", "thumbnail", "action", "possible_actions", "misc", "log_data", "html", "selectolax_html", "title"}
+var responseAttrNames = []string{
+	"request", "header", "acls", "scores", "status", "body",
+	"action", "possible_actions", "misc", "log_data",
+	"html", "selectolax_html", "title",
+	"thumbnail",
+	"classify_text",
+}
 
 func (r *Response) AttrNames() []string {
 	return responseAttrNames
@@ -1150,7 +1156,9 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		}, nil
 
 	case "thumbnail":
-		return starlark.NewBuiltin("thumbnail", responseGetThumbnail).BindReceiver(r), nil
+		return starlark.NewBuiltin(name, responseGetThumbnail).BindReceiver(r), nil
+	case "classify_text":
+		return starlark.NewBuiltin(name, responseClassifyText).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -1335,6 +1343,46 @@ func responseGetThumbnail(thread *starlark.Thread, fn *starlark.Builtin, args st
 	}
 
 	return starlark.String(thumbnail), nil
+}
+
+func responseClassifyText(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var arg starlark.Value
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &arg); err != nil {
+		return nil, err
+	}
+
+	var content []byte
+	var contentType string
+	switch arg := arg.(type) {
+	case starlark.String:
+		content = []byte(arg)
+		contentType = "text/plain"
+	case starlark.Bytes:
+		content = []byte(arg)
+		contentType = "text/plain"
+	case *bsoup.SoupNode:
+		buf := new(bytes.Buffer)
+		if err := html.Render(buf, arg.Pointer); err != nil {
+			return nil, err
+		}
+		content = buf.Bytes()
+		contentType = "text/html"
+	case *HTMLNode:
+		buf := new(bytes.Buffer)
+		if err := html.Render(buf, arg.node); err != nil {
+			return nil, err
+		}
+		content = buf.Bytes()
+		contentType = "text/html"
+	default:
+		return nil, fmt.Errorf("unsupported type for classify_text: %s", arg.Type())
+	}
+
+	tally := map[rule]int{}
+	conf := getConfig()
+	conf.scanContent(content, contentType, "utf-8", tally)
+	scores := conf.categoryScores(tally)
+	return &StringIntDict{data: scores}, nil
 }
 
 // A HeaderDict wraps an http.Header to make it act like a Starlark dictionary.

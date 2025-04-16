@@ -16,10 +16,10 @@ require (
 	github.com/remogatto/ftpget v0.0.0-20120222025949-5c3c8286a3b0
 	github.com/zeebo/xxh3 v1.0.2
 	go.starlark.net v0.0.0-20240411212711-9b43f0afd521
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.37.0
 	golang.org/x/image v0.18.0
-	golang.org/x/net v0.33.0
-	golang.org/x/text v0.21.0
+	golang.org/x/net v0.39.0
+	golang.org/x/text v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -38,8 +38,8 @@ require (
 	github.com/magnetde/starlark-re v0.1.1
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

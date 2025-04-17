@@ -384,6 +384,12 @@ func (s *StringIntDict) Get(k starlark.Value) (v starlark.Value, found bool, err
 }
 
 func (s *StringIntDict) SetKey(k, v starlark.Value) error {
+	if s.frozen {
+		return errors.New("can't modify a frozen StringIntDict")
+	}
+	if s.itercount > 0 {
+		return errors.New("can't modify a StringIntDict during iteration")
+	}
 	ks, ok := k.(starlark.String)
 	if !ok {
 		return fmt.Errorf("keys for StringIntDict must be String, not %s", k.Type())
@@ -458,6 +464,9 @@ func stringIntDictClear(thread *starlark.Thread, fn *starlark.Builtin, args star
 	s := fn.Receiver().(*StringIntDict)
 	if s.frozen {
 		return nil, errors.New("can't modify a frozen StringIntDict")
+	}
+	if s.itercount > 0 {
+		return nil, errors.New("can't modify a StringIntDict during iteration")
 	}
 	clear(s.data)
 	return starlark.None, nil

@@ -231,9 +231,9 @@ func (a *AttrDict) SetKey(k, v starlark.Value) error {
 		return fmt.Errorf("values for AttrDict must be String, not %s", v.Type())
 	}
 
-	for _, attr := range a.node.Attr {
+	for i, attr := range a.node.Attr {
 		if attr.Key == string(ks) {
-			attr.Val = string(vs)
+			a.node.Attr[i].Val = string(vs)
 			return nil
 		}
 	}
@@ -246,6 +246,10 @@ func (a *AttrDict) SetKey(k, v starlark.Value) error {
 }
 
 var attrDictAttrNames = []string{"get", "pop", "clear"}
+
+func (a *AttrDict) AttrNames() []string {
+	return attrDictAttrNames
+}
 
 func (a *AttrDict) Attr(name string) (starlark.Value, error) {
 	switch name {

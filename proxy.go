@@ -1084,6 +1084,7 @@ var responseAttrNames = []string{
 	"html", "selectolax_html", "title",
 	"thumbnail",
 	"classify_text",
+	"classify_url",
 	"reclassify",
 	"choose_action",
 }
@@ -1172,6 +1173,8 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin(name, responseGetThumbnail).BindReceiver(r), nil
 	case "classify_text":
 		return starlark.NewBuiltin(name, responseClassifyText).BindReceiver(r), nil
+	case "classify_url":
+		return starlark.NewBuiltin(name, responseClassifyURL).BindReceiver(r), nil
 	case "reclassify":
 		return starlark.NewBuiltin(name, responseReclassify).BindReceiver(r), nil
 	case "choose_action":
@@ -1399,6 +1402,21 @@ func responseClassifyText(thread *starlark.Thread, fn *starlark.Builtin, args st
 	conf := getConfig()
 	conf.scanContent(content, contentType, "utf-8", tally)
 	scores := conf.categoryScores(tally)
+	return &StringIntDict{data: scores}, nil
+}
+
+func responseClassifyURL(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var u string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &u); err != nil {
+		return nil, err
+	}
+
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return nil, err
+	}
+	tally := getConfig().URLRules.MatchingRules(parsed)
+	scores := getConfig().categoryScores(tally)
 	return &StringIntDict{data: scores}, nil
 }
 

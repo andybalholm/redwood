@@ -236,6 +236,9 @@ Methods of `Response`:
   like the one returned by `response.Scores`. The argument can be a string, a `SoupNode`, or an
   `HTMLNode`.
 
+- `classify_url(u)`: classifies a URL according to domain matching and domain regular-expression rules,
+  and returns a dictionary of category scores.
+
 - `choose_action(scores, threshold=1)`: returns the action that would be taken on this response
   if it had the specified category scores and the threshold were set to `threshold`.
   This is useful for doing partial-page filtering.

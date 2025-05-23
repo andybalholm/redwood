@@ -87,6 +87,8 @@ The `TLSSession` object has the following attributes:
 - `source_ip`: the address of the network interface that should be used for the connection to the origin server.
   This is blank by default, but you can set it to control what network interface will 
   be used to connect to the origin server.
+  If it is set to a tuple or list of addresses, they will be tried in order,
+  in "happy eyeballs" fashion, until one connects successfully.
 
 - `acls`: a set containing the ACL tags that have been assigned to the request. 
   If you modify the set, it can affect the action that Redwood takes.

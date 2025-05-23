@@ -235,7 +235,7 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 		}
 		fmt.Fprint(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
 		logAccess(r, nil, 0, false, user, request.Tally, request.Scores.data, request.Action, "", request.Ignored, nil, request.LogData)
-		connectDirect(conn, r.URL.Host, nil, dialer)
+		connectDirect(r.Context(), conn, r.URL.Host, nil, dialer)
 		return
 	}
 

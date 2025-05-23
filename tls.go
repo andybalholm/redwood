@@ -63,11 +63,11 @@ func (c *config) loadCertificate() {
 
 // connectDirect connects to serverAddr and copies data between it and conn.
 // extraData is sent to the server first.
-func connectDirect(conn net.Conn, serverAddr string, extraData []byte, dialer *net.Dialer) (uploaded, downloaded int64) {
+func connectDirect(ctx context.Context, conn net.Conn, serverAddr string, extraData []byte, dialer Dialer) (uploaded, downloaded int64) {
 	activeConnections.Add(1)
 	defer activeConnections.Done()
 
-	serverConn, err := dialer.Dial("tcp", serverAddr)
+	serverConn, err := dialer.DialContext(ctx, "tcp", serverAddr)
 	if err != nil {
 		log.Printf("error with pass-through of SSL connection to %s: %s", serverAddr, err)
 		conn.Close()
@@ -108,6 +108,11 @@ type tlsFingerprintKey struct{}
 // trying to connect to. user is the username to use for logging; authUser is
 // the authenticated user, if any; r is the CONNECT request, if any.
 func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) {
+	ctx := context.Background()
+	if r != nil {
+		ctx = r.Context()
+	}
+
 	defer func() {
 		if err := recover(); err != nil {
 			buf := make([]byte, 4096)
@@ -245,15 +250,20 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	callStarlarkFunctions("ssl_bump", session)
 
-	dialer := &net.Dialer{
+	var dialer Dialer = &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
-		DualStack: true,
 	}
-	if session.SourceIP != nil {
-		dialer.LocalAddr = &net.TCPAddr{
-			IP: session.SourceIP,
+	if len(session.SourceIP) > 0 {
+		dialers := make([]Dialer, len(session.SourceIP))
+		for i, ip := range session.SourceIP {
+			dialers[i] = &net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				LocalAddr: &net.TCPAddr{IP: ip},
+			}
 		}
+		dialer = &MultiDialer{Dialers: dialers}
 	}
 
 	session.chooseAction()
@@ -262,7 +272,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	switch session.Action.Action {
 	case "allow", "":
-		upload, download := connectDirect(conn, session.ServerAddr, clientHello, dialer)
+		upload, download := connectDirect(ctx, conn, session.ServerAddr, clientHello, dialer)
 		logAccess(cr, nil, upload+download, false, user, tally, scores, session.Action, "", session.Ignored, nil, session.LogData)
 		return
 	case "block":
@@ -322,10 +332,10 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		serverConnConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 
-	serverConn, err := tls.DialWithDialer(dialer, "tcp", session.ServerAddr, serverConnConfig)
+	serverConn, err := TLSDialer(dialer, serverConnConfig).DialContext(ctx, "tcp", session.ServerAddr)
 	if err == nil {
 		defer serverConn.Close()
-		state := serverConn.ConnectionState()
+		state := serverConn.(*tls.Conn).ConnectionState()
 		serverCert := state.PeerCertificates[0]
 
 		remoteAddr := serverConn.RemoteAddr()
@@ -349,7 +359,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		cert, err = imitateCertificate(serverCert, !valid, session.SNI)
 		if err != nil {
 			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
-			connectDirect(conn, session.ServerAddr, clientHello, dialer)
+			connectDirect(ctx, conn, session.ServerAddr, clientHello, dialer)
 			return
 		}
 
@@ -359,16 +369,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		if _, err := serverCert.Verify(x509.VerifyOptions{Intermediates: certPoolWith(state.PeerCertificates[1:])}); err != nil {
 			// The certificate is not valid with the default roots, so we need to
 			// specify custom roots.
-			serverConnConfig.RootCAs = certPoolWith(serverConn.ConnectionState().PeerCertificates)
+			serverConnConfig.RootCAs = certPoolWith(state.PeerCertificates)
 		}
 
-		d := &tls.Dialer{
-			NetDialer: dialer,
-			Config:    serverConnConfig,
-		}
+		d := TLSDialer(dialer, serverConnConfig)
 		if !valid {
 			serverConnConfig.InsecureSkipVerify = true
-			originalCert := serverConn.ConnectionState().PeerCertificates[0]
+			originalCert := state.PeerCertificates[0]
 			serverConnConfig.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 				cert, err := x509.ParseCertificate(rawCerts[0])
 				if err != nil {
@@ -386,7 +393,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 			var once sync.Once
 			rt = &http2.Transport{
-				DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
 					var c net.Conn
 					once.Do(func() {
 						c = serverConn
@@ -395,7 +402,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 						return c, nil
 					}
 					logVerbose("redial", "Redialing HTTP/2 connection to %s (%s)", session.SNI, session.ServerAddr)
-					return d.Dial("tcp", session.ServerAddr)
+					return d.DialContext(ctx, "tcp", session.ServerAddr)
 				},
 				TLSClientConfig:            serverConnConfig,
 				StrictMaxConcurrentStreams: true,
@@ -473,7 +480,7 @@ type TLSSession struct {
 
 	// SourceIP is the IP address of the network interface to be used to dial
 	// the upstream connection.
-	SourceIP net.IP
+	SourceIP []net.IP
 
 	// ConnectHeader is the header from the CONNECT request, if any.
 	ConnectHeader http.Header
@@ -599,7 +606,18 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 	case "client_ip":
 		return starlark.String(s.ClientIP), nil
 	case "source_ip":
-		return starlark.String(s.SourceIP.String()), nil
+		switch len(s.SourceIP) {
+		case 0:
+			return starlark.None, nil
+		case 1:
+			return starlark.String(s.SourceIP[0].String()), nil
+		default:
+			var result starlark.Tuple
+			for _, ip := range s.SourceIP {
+				result = append(result, starlark.String(ip.String()))
+			}
+			return result, nil
+		}
 	case "acls":
 		return &s.ACLs, nil
 	case "scores":
@@ -654,15 +672,30 @@ func (s *TLSSession) SetField(name string, val starlark.Value) error {
 	case "server_addr":
 		return assignStarlarkString(&s.ServerAddr, val)
 	case "source_ip":
-		var ip string
-		if err := assignStarlarkString(&ip, val); err != nil {
-			return err
+		if val == starlark.None {
+			s.SourceIP = nil
+			return nil
 		}
-		parsed := net.ParseIP(ip)
-		if parsed == nil {
-			return fmt.Errorf("%q is not a valid IP address", ip)
+		if _, ok := val.(starlark.String); ok {
+			val = starlark.Tuple{val}
 		}
-		s.SourceIP = parsed
+		ips, ok := val.(starlark.Indexable)
+		if !ok {
+			return fmt.Errorf("expected String, Tuple, or List, got %s", val.Type())
+		}
+		source := make([]net.IP, ips.Len())
+		for i := range ips.Len() {
+			var ip string
+			if err := assignStarlarkString(&ip, ips.Index(i)); err != nil {
+				return err
+			}
+			parsed := net.ParseIP(ip)
+			if parsed == nil {
+				return fmt.Errorf("%q is not a valid IP address", ip)
+			}
+			source[i] = parsed
+		}
+		s.SourceIP = source
 		return nil
 	case "action":
 		var newAction string
@@ -1211,4 +1244,84 @@ func randomID() string {
 		}
 	}
 	return string(b)
+}
+
+type Dialer interface {
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// A MultiDialer tries Dialers in order, with "happy eyeballs"-style fallback.
+type MultiDialer struct {
+	Dialers []Dialer
+}
+
+func (md *MultiDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	if len(md.Dialers) == 1 {
+		return md.Dialers[0].DialContext(ctx, network, addr)
+	}
+
+	connChan := make(chan net.Conn, len(md.Dialers))
+	errChan := make(chan error, len(md.Dialers))
+
+	// Create another context that can be used to cancel pending dial operations.
+	innerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	dial := func(d Dialer) {
+		conn, err := d.DialContext(innerCtx, network, addr)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		connChan <- conn
+	}
+	errorCount := 0
+
+	go dial(md.Dialers[0])
+	i := 1
+
+	for {
+		select {
+		case conn := <-connChan:
+			return conn, nil
+		case err := <-errChan:
+			errorCount++
+			if errorCount >= len(md.Dialers) {
+				return nil, err
+			}
+			if i < len(md.Dialers) {
+				go dial(md.Dialers[i])
+				i++
+			}
+		case <-time.After(300 * time.Millisecond):
+			if i < len(md.Dialers) {
+				go dial(md.Dialers[i])
+				i++
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+}
+
+// TLSDialer returns a Dialer that uses d to make TLS connections. d must be a
+// *net.Dialer or a MultiDialer containing *net.Dialers.
+func TLSDialer(d Dialer, config *tls.Config) Dialer {
+	switch d := d.(type) {
+	case *net.Dialer:
+		return &tls.Dialer{
+			NetDialer: d,
+			Config:    config,
+		}
+
+	case *MultiDialer:
+		wrapped := make([]Dialer, len(d.Dialers))
+		for i, inner := range d.Dialers {
+			wrapped[i] = TLSDialer(inner, config)
+		}
+		return &MultiDialer{Dialers: wrapped}
+
+	default:
+		panic(fmt.Errorf("unsupported Dialer: %T", d))
+	}
 }

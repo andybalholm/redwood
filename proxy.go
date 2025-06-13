@@ -13,7 +13,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"io/ioutil"
 	"log"
 	"maps"
 	"math"
@@ -667,7 +666,7 @@ func doVirusScan(response *Response) error {
 		response.Response.Body = pr
 		go func() {
 			cr, _ := clam.ScanReader(response.Request.Request.Context(), tr)
-			io.Copy(ioutil.Discard, tr)
+			io.Copy(io.Discard, tr)
 			pw.Close()
 			response.clamChan <- cr
 		}()
@@ -1241,7 +1240,7 @@ func (resp *Response) Content(maxLen int) ([]byte, error) {
 		R: resp.Response.Body,
 		N: int64(maxLen),
 	}
-	content, err := ioutil.ReadAll(lr)
+	content, err := io.ReadAll(lr)
 
 	// Servers that use broken chunked Transfer-Encoding can give us unexpected EOFs,
 	// even if we got all the content.
@@ -1272,19 +1271,12 @@ func (resp *Response) Content(maxLen int) ([]byte, error) {
 		case "deflate":
 			decompressor = flate.NewReader(br)
 		case "gzip":
-			decompressor, err = gzip.NewReader(br)
-			if err != nil {
-				log.Printf("Error creating gzip.Reader for %v: %v", resp.Request.Request.URL, err)
-				// At this point, decompressor is io.Reader(*gzip.Reader(nil)),
-				// but it needs to be just io.Reader(nil), or we won't catch that it's nil
-				// later on.
-				decompressor = nil
-			}
+			decompressor = &gzipReader{R: br}
 		default:
 			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, resp.Request.Request.URL)
 		}
 		if decompressor != nil {
-			decompressed, err := ioutil.ReadAll(decompressor)
+			decompressed, err := io.ReadAll(decompressor)
 			if err != nil {
 				log.Printf("Error decompressing response body from %v: %v", resp.Request.Request.URL, err)
 			} else {
@@ -1294,6 +1286,39 @@ func (resp *Response) Content(maxLen int) ([]byte, error) {
 	}
 
 	return content, nil
+}
+
+// gzipReader is a wrapper for gzip.Reader that handles multistream files,
+// but doesn't return an error if a gzip stream is followed by non-gzip data.
+// (It just logs the extra data, and otherwise ignores it.)
+type gzipReader struct {
+	R  *bytes.Reader
+	gz *gzip.Reader
+}
+
+func (g *gzipReader) Read(p []byte) (n int, err error) {
+	if g.gz == nil {
+		g.gz, err = gzip.NewReader(g.R)
+		if err != nil {
+			return 0, err
+		}
+		g.gz.Multistream(false)
+	}
+
+	n, err = g.gz.Read(p)
+	if err == io.EOF && g.R.Len() > 0 {
+		peek := make([]byte, 16)
+		peekLen, _ := g.R.ReadAt(peek, g.R.Size()-int64(g.R.Len()))
+		peek = peek[:peekLen]
+		if !bytes.HasPrefix(peek, []byte{0x1f, 0x8b, 0x08}) {
+			log.Printf("Found non-gzip data after gzip stream, starting with %q", peek)
+			return n, err
+		}
+		err = g.gz.Reset(g.R)
+		g.gz.Multistream(false)
+	}
+
+	return n, err
 }
 
 // SetContent replaces the request body with the provided content, and sets

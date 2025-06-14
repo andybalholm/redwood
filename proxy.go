@@ -32,6 +32,7 @@ import (
 	"github.com/golang/gddo/httputil"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 	"github.com/qri-io/starlib/bsoup"
 	"go.starlark.net/starlark"
 	"golang.org/x/image/draw"
@@ -267,7 +268,7 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 	filteredEncodings := make([]header.AcceptSpec, 0, len(acceptEncoding))
 	for _, a := range acceptEncoding {
 		switch a.Value {
-		case "br", "gzip", "deflate":
+		case "br", "gzip", "deflate", "zstd":
 			filteredEncodings = append(filteredEncodings, a)
 		}
 	}
@@ -1272,6 +1273,12 @@ func (resp *Response) Content(maxLen int) ([]byte, error) {
 			decompressor = flate.NewReader(br)
 		case "gzip":
 			decompressor = &gzipReader{R: br}
+		case "zstd":
+			decompressor, err = zstd.NewReader(br)
+			if err != nil {
+				log.Printf("Error creating zstd.Decoder for %v: %v", resp.Request.Request.URL, err)
+				decompressor = nil
+			}
 		default:
 			log.Printf("Unrecognized Content-Encoding (%q) at %v", ce, resp.Request.Request.URL)
 		}

@@ -495,7 +495,10 @@ func lookupHostStarlark(thread *starlark.Thread, fn *starlark.Builtin, args star
 	} else {
 		result, err = lookupHost(host, server)
 	}
-	return starlark.String(result), err
+	if err != nil {
+		return starlark.None, nil
+	}
+	return starlark.String(result), nil
 }
 
 func lookupAddrStarlark(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

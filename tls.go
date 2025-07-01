@@ -4,6 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
@@ -356,7 +359,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		}
 
 		valid := validCert(serverCert, state.PeerCertificates[1:])
-		cert, err = imitateCertificate(serverCert, !valid, session.SNI)
+		cert, err = imitateCertificate(serverCert, !valid, clientHelloInfo)
 		if err != nil {
 			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
 			connectDirect(ctx, conn, session.ServerAddr, clientHello, dialer)
@@ -864,10 +867,20 @@ func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
+var ellipticKey *ecdsa.PrivateKey
+
+func init() {
+	var err error
+	ellipticKey, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		panic(fmt.Errorf("generating elliptic curve private key key: %w", err))
+	}
+}
+
 // imitateCertificate returns a new TLS certificate that has most of the same
 // data as serverCert but is signed by Redwood's root certificate, or
 // self-signed.
-func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, sni string) (cert tls.Certificate, err error) {
+func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, helloInfo *tls.ClientHelloInfo) (cert tls.Certificate, err error) {
 	conf := getConfig()
 	// Use a hash of the real certificate (plus some other things) as the serial number.
 	h := md5.New()
@@ -875,8 +888,26 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, sni strin
 	for _, c := range conf.TLSCert.Certificate {
 		h.Write(c)
 	}
+	var sni string
+	supportsElliptic := false
+	if helloInfo != nil {
+		sni = helloInfo.ServerName
+		for _, scheme := range helloInfo.SignatureSchemes {
+			if scheme == tls.ECDSAWithP384AndSHA384 {
+				supportsElliptic = true
+			}
+		}
+	}
 	if sni != "" {
 		io.WriteString(h, sni)
+	}
+
+	var privateKey crypto.PrivateKey = conf.TLSCert.PrivateKey
+	var publicKey crypto.PublicKey = conf.ParsedTLSCert.PublicKey
+	if supportsElliptic {
+		privateKey = ellipticKey
+		publicKey = ellipticKey.Public()
+		fmt.Fprintln(h, ellipticKey.X, ellipticKey.Y)
 	}
 
 	template := &x509.Certificate{
@@ -904,9 +935,9 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, sni strin
 
 	var newCertBytes []byte
 	if selfSigned {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, conf.ParsedTLSCert.PublicKey, conf.TLSCert.PrivateKey)
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
 	} else {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, conf.ParsedTLSCert.PublicKey, conf.TLSCert.PrivateKey)
+		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, publicKey, conf.TLSCert.PrivateKey)
 	}
 	if err != nil {
 		return tls.Certificate{}, err
@@ -914,7 +945,7 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, sni strin
 
 	newCert := tls.Certificate{
 		Certificate: [][]byte{newCertBytes},
-		PrivateKey:  conf.TLSCert.PrivateKey,
+		PrivateKey:  privateKey,
 	}
 
 	if !selfSigned {
@@ -1098,7 +1129,8 @@ func readClientHello(conn net.Conn) (hello []byte, err error) {
 
 // parseClientHello parses some useful information out of a ClientHello message.
 // It returns a ClientHelloInfo with only the following fields filled in:
-// CipherSuites, ServerName, SupportedCurves and SupportedProtocols.
+// CipherSuites, ServerName, SupportedCurves, SupportedProtocols, and
+// SignatureSchemes.
 func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 	// The implementation of this function is based on crypto/tls.clientHelloMsg.unmarshal
 	var info tls.ClientHelloInfo
@@ -1199,6 +1231,20 @@ func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 					return nil, errors.New("bad ALPN protocol list entry")
 				}
 				info.SupportedProtos = append(info.SupportedProtos, string(proto))
+			}
+
+		case 13: // signature algorithms
+			var sigAndAlgs cryptobyte.String
+			if !extData.ReadUint16LengthPrefixed(&sigAndAlgs) || sigAndAlgs.Empty() {
+				return nil, errors.New("bad signature algorithm list")
+			}
+			for !sigAndAlgs.Empty() {
+				var sigAndAlg uint16
+				if !sigAndAlgs.ReadUint16(&sigAndAlg) {
+					return nil, errors.New("bad signature algorithm list entry")
+				}
+				info.SignatureSchemes = append(
+					info.SignatureSchemes, tls.SignatureScheme(sigAndAlg))
 			}
 
 		default:

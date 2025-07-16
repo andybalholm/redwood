@@ -6,8 +6,6 @@ require (
 	github.com/andybalholm/dhash v1.0.0
 	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/dgraph-io/ristretto v0.2.0
-	github.com/dop251/goja v0.0.0-20250309171923-bcd7cc6bf64c
-	github.com/dop251/goja_nodejs v0.0.0-20250409162600-f7acab6894b0
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
 	github.com/klauspost/compress v1.18.0
 	github.com/miekg/dns v1.1.65
@@ -31,8 +29,6 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dustmop/soup v1.1.2-0.20190516214245-38228baa104e
-	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
-	github.com/google/pprof v0.0.0-20250418163039-24c5476c6587 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/magnetde/starlark-re v0.1.2
 	github.com/pkg/errors v0.9.1 // indirect

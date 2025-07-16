@@ -185,8 +185,6 @@ func loadConfiguration() (*config, error) {
 	c.newActiveFlag("password-file", "", "path to file of usernames and passwords", c.readPasswordFile)
 	c.flags.StringVar(&c.PIDFile, "pidfile", "", "path of file to store process ID")
 	c.newActiveFlag("query-changes", "", "path to config file for modifying URL query strings", c.loadQueryConfig)
-	c.newActiveFlag("request-acl-script", "", "script to assign ACLs to requests", c.loadRequestACLScript)
-	c.newActiveFlag("response-acl-script", "", "script to assign ACLs to response", c.loadResponseACLScript)
 	c.flags.StringVar(&c.StarlarkLog, "starlark-log", "", "path to Starlark script log file")
 	c.flags.StringVar(&c.StaticFilesDir, "static-files-dir", "", "path to static files for built-in web server")
 	c.flags.StringVar(&c.TestURL, "test", "", "URL to test instead of running proxy server")

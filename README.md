@@ -790,33 +790,4 @@ Scripting
 
 To further customize its behavior,
 Redwood lets you define scripts that are run at various points as it processes a request.
-The original JavaScript scripting is described below.
-The newer Starlark scripting is described in the file starlark.md.
-
-For more specialized rules than the ones that are supported by normal ACLs,
-you can write scripts (in JavaScript) that assign ACLs to requests.
-For example, suppose you want to block the sites that OpenDNS classifies
-as adult or phishing sites,
-but you want to have your own block page instead of the one OpenDNS provides.
-You could put a script like this in `/etc/redwood/opendns.js`:
-
-```js
-var openDNSResult = lookupHost(request.URL.Host, "208.67.222.123");
-
-if (openDNSResult == "146.112.61.106") {
-	addACL("opendns-adult");
-} else if (openDNSResult == "146.112.61.108") {
-	addACL("opendns-phishing");
-}
-```
-
-Put the following line in `redwood.conf`:
-
-    request-acl-script /etc/redwood/opendns.js
-
-And in your ACL configuration file:
-
-    block opendns-adult
-    block opendns-phishing
-
-
+Starlark scripting is described in the file starlark.md.

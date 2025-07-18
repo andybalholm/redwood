@@ -6,7 +6,6 @@ require (
 	github.com/andybalholm/dhash v1.0.0
 	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/dgraph-io/ristretto v0.2.0
-	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
 	github.com/klauspost/compress v1.18.0
 	github.com/miekg/dns v1.1.65
 	github.com/open-ch/ja3 v1.0.1

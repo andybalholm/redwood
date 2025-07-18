@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgraph-io/ristretto"
+	"github.com/maypok86/otter/v2"
 	starlark_time "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
 )
@@ -18,19 +18,19 @@ func init() {
 var (
 	// caches provides a collection of named caches for Starlark scripts to
 	// store data in.
-	caches = make(map[string]*ristretto.Cache)
+	caches = make(map[string]*otter.Cache[string, starlark.Value])
 
 	cacheLock sync.RWMutex
 )
 
 // getCache gets or creates a cache with the specified name, and sets its capacity.
-func getCache(name string, capacity int64) *ristretto.Cache {
+func getCache(name string, capacity int) *otter.Cache[string, starlark.Value] {
 	cacheLock.RLock()
 	c, ok := caches[name]
 	cacheLock.RUnlock()
 
 	if ok {
-		c.UpdateMaxCost(capacity)
+		c.SetMaximum(uint64(capacity))
 		return c
 	}
 
@@ -41,18 +41,13 @@ func getCache(name string, capacity int64) *ristretto.Cache {
 	// If so, we don't want to create another one.
 	c, ok = caches[name]
 	if ok {
-		c.UpdateMaxCost(capacity)
+		c.SetMaximum(uint64(capacity))
 		return c
 	}
 
-	c, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: capacity * 10,
-		MaxCost:     capacity,
-		BufferItems: 64,
+	c = otter.Must(&otter.Options[string, starlark.Value]{
+		MaximumSize: capacity,
 	})
-	if err != nil {
-		panic(err)
-	}
 
 	caches[name] = c
 	return c
@@ -60,7 +55,7 @@ func getCache(name string, capacity int64) *ristretto.Cache {
 
 func newCache(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var name string
-	var capacity int64
+	var capacity int
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 2, &name, &capacity); err != nil {
 		return nil, err
 	}
@@ -75,7 +70,7 @@ func newCache(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple
 // A Cache is a Starlark wrapper for a ristretto.Cache.
 type Cache struct {
 	name  string
-	cache *ristretto.Cache
+	cache *otter.Cache[string, starlark.Value]
 }
 
 func (c *Cache) String() string {
@@ -86,9 +81,7 @@ func (c *Cache) Type() string {
 	return "Cache"
 }
 
-func (c *Cache) Freeze() {
-	return
-}
+func (c *Cache) Freeze() {}
 
 func (c *Cache) Truth() starlark.Bool {
 	return true
@@ -126,7 +119,7 @@ func cacheDel(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple
 		return nil, err
 	}
 
-	c.cache.Del(key)
+	c.cache.Invalidate(key)
 	return starlark.None, nil
 }
 
@@ -138,11 +131,11 @@ func cacheGet(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple
 		return nil, err
 	}
 
-	val, ok := c.cache.Get(key)
+	val, ok := c.cache.GetIfPresent(key)
 	if !ok {
 		return starlark.None, nil
 	}
-	return val.(starlark.Value), nil
+	return val, nil
 }
 
 func cacheSet(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -157,6 +150,9 @@ func cacheSet(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple
 
 	val.Freeze()
 
-	c.cache.SetWithTTL(key, val, 1, time.Duration(ttl))
+	c.cache.Set(key, val)
+	if ttl != 0 {
+		c.cache.SetExpiresAfter(key, time.Duration(ttl))
+	}
 	return starlark.None, nil
 }

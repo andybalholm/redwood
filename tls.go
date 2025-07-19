@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maypok86/otter/v2"
 	"github.com/open-ch/ja3"
 	starlark_time "go.starlark.net/lib/time"
 	"go.starlark.net/starlark"
@@ -877,12 +878,19 @@ func init() {
 	}
 }
 
+var certCache = otter.Must(&otter.Options[[16]byte, tls.Certificate]{
+	MaximumSize: 10000,
+})
+
 // imitateCertificate returns a new TLS certificate that has most of the same
 // data as serverCert but is signed by Redwood's root certificate, or
 // self-signed.
 func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, helloInfo *tls.ClientHelloInfo) (cert tls.Certificate, err error) {
 	conf := getConfig()
-	// Use a hash of the real certificate (plus some other things) as the serial number.
+
+	// Collect and hash a bunch of data about the "ingredients" for the certificate
+	// we'll be generating. The hash will be used as a cache key, and as the
+	// serial number of the certificate.
 	h := md5.New()
 	h.Write(serverCert.Raw)
 	for _, c := range conf.TLSCert.Certificate {
@@ -901,6 +909,9 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, helloInfo
 	if sni != "" {
 		io.WriteString(h, sni)
 	}
+	if selfSigned {
+		io.WriteString(h, "self-signed")
+	}
 
 	var privateKey crypto.PrivateKey = conf.TLSCert.PrivateKey
 	var publicKey crypto.PublicKey = conf.ParsedTLSCert.PublicKey
@@ -910,48 +921,55 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, helloInfo
 		fmt.Fprintln(h, ellipticKey.X, ellipticKey.Y)
 	}
 
-	template := &x509.Certificate{
-		SerialNumber:                big.NewInt(0).SetBytes(h.Sum(nil)),
-		Subject:                     serverCert.Subject,
-		NotBefore:                   serverCert.NotBefore,
-		NotAfter:                    serverCert.NotAfter,
-		KeyUsage:                    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:                 serverCert.ExtKeyUsage,
-		UnknownExtKeyUsage:          serverCert.UnknownExtKeyUsage,
-		BasicConstraintsValid:       false,
-		SubjectKeyId:                nil,
-		DNSNames:                    serverCert.DNSNames,
-		PermittedDNSDomainsCritical: serverCert.PermittedDNSDomainsCritical,
-		PermittedDNSDomains:         serverCert.PermittedDNSDomains,
-		SignatureAlgorithm:          x509.UnknownSignatureAlgorithm,
+	var key [16]byte
+	h.Sum(key[:0])
+
+	generate := func(ctx context.Context, key [16]byte) (tls.Certificate, error) {
+		template := &x509.Certificate{
+			SerialNumber:                big.NewInt(0).SetBytes(key[:]),
+			Subject:                     serverCert.Subject,
+			NotBefore:                   serverCert.NotBefore,
+			NotAfter:                    serverCert.NotAfter,
+			KeyUsage:                    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+			ExtKeyUsage:                 serverCert.ExtKeyUsage,
+			UnknownExtKeyUsage:          serverCert.UnknownExtKeyUsage,
+			BasicConstraintsValid:       false,
+			SubjectKeyId:                nil,
+			DNSNames:                    serverCert.DNSNames,
+			PermittedDNSDomainsCritical: serverCert.PermittedDNSDomainsCritical,
+			PermittedDNSDomains:         serverCert.PermittedDNSDomains,
+			SignatureAlgorithm:          x509.UnknownSignatureAlgorithm,
+		}
+
+		// If sni is not blank, make a certificate that covers only that domain,
+		// instead of all the domains covered by the original certificate.
+		if sni != "" {
+			template.DNSNames = []string{sni}
+			template.Subject.CommonName = sni
+		}
+
+		var newCertBytes []byte
+		if selfSigned {
+			newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+		} else {
+			newCertBytes, err = x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, publicKey, conf.TLSCert.PrivateKey)
+		}
+		if err != nil {
+			return tls.Certificate{}, err
+		}
+
+		newCert := tls.Certificate{
+			Certificate: [][]byte{newCertBytes},
+			PrivateKey:  privateKey,
+		}
+
+		if !selfSigned {
+			newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
+		}
+		return newCert, nil
 	}
 
-	// If sni is not blank, make a certificate that covers only that domain,
-	// instead of all the domains covered by the original certificate.
-	if sni != "" {
-		template.DNSNames = []string{sni}
-		template.Subject.CommonName = sni
-	}
-
-	var newCertBytes []byte
-	if selfSigned {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
-	} else {
-		newCertBytes, err = x509.CreateCertificate(rand.Reader, template, conf.ParsedTLSCert, publicKey, conf.TLSCert.PrivateKey)
-	}
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	newCert := tls.Certificate{
-		Certificate: [][]byte{newCertBytes},
-		PrivateKey:  privateKey,
-	}
-
-	if !selfSigned {
-		newCert.Certificate = append(newCert.Certificate, conf.TLSCert.Certificate...)
-	}
-	return newCert, nil
+	return certCache.Get(context.Background(), key, otter.LoaderFunc[[16]byte, tls.Certificate](generate))
 }
 
 // fakeCertificate returns a fabricated certificate for the server identified by sni.

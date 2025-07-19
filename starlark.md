@@ -184,6 +184,15 @@ The `Request` object has the following attributes:
 
 - `log_data`: the script can put data here to be included in the access log, encoded as JSON
 
+Methods of `Request`:
+
+- `classify_text(txt)`: does a phrase scan on `txt` and returns a dictionary of category scores
+  like the one returned by `response.Scores`. The argument can be a string, a `SoupNode`, or an
+  `HTMLNode`.
+
+- `classify_url(u)`: classifies a URL according to domain matching and domain regular-expression rules,
+  and returns a dictionary of category scores.
+
 ### `filter_response`
 
 For each HTTP response that Redwood receives, it calls the `filter_response` function.

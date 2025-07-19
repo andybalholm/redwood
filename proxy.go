@@ -899,7 +899,14 @@ func (r *Request) Hash() (uint32, error) {
 	return 0, errors.New("unhashable type: Request")
 }
 
-var requestAttrNames = []string{"url", "method", "host", "path", "user", "expected_user", "local_port", "query", "header", "client_ip", "acls", "scores", "action", "possible_actions", "session", "misc", "log_data", "authenticated_clients"}
+var requestAttrNames = []string{
+	"url", "method", "host", "path", "user", "expected_user", "local_port",
+	"query", "header", "client_ip",
+	"acls", "scores", "action", "possible_actions",
+	"session", "misc", "log_data",
+	"authenticated_clients",
+	"classify_text", "classify_url",
+}
 
 func (r *Request) AttrNames() []string {
 	return requestAttrNames
@@ -968,6 +975,10 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		}
 		r.Request.Body = io.NopCloser(bytes.NewReader(content))
 		return starlark.String(content), nil
+	case "classify_text":
+		return starlark.NewBuiltin(name, classifyText).BindReceiver(r), nil
+	case "classify_url":
+		return starlark.NewBuiltin(name, classifyURL).BindReceiver(r), nil
 
 	default:
 		return nil, nil
@@ -1170,9 +1181,9 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 	case "thumbnail":
 		return starlark.NewBuiltin(name, responseGetThumbnail).BindReceiver(r), nil
 	case "classify_text":
-		return starlark.NewBuiltin(name, responseClassifyText).BindReceiver(r), nil
+		return starlark.NewBuiltin(name, classifyText).BindReceiver(r), nil
 	case "classify_url":
-		return starlark.NewBuiltin(name, responseClassifyURL).BindReceiver(r), nil
+		return starlark.NewBuiltin(name, classifyURL).BindReceiver(r), nil
 	case "reclassify":
 		return starlark.NewBuiltin(name, responseReclassify).BindReceiver(r), nil
 	case "choose_action":
@@ -1395,7 +1406,7 @@ func responseGetThumbnail(thread *starlark.Thread, fn *starlark.Builtin, args st
 	return starlark.String(thumbnail), nil
 }
 
-func responseClassifyText(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func classifyText(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var arg starlark.Value
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &arg); err != nil {
 		return nil, err
@@ -1435,7 +1446,7 @@ func responseClassifyText(thread *starlark.Thread, fn *starlark.Builtin, args st
 	return &StringIntDict{data: scores}, nil
 }
 
-func responseClassifyURL(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func classifyURL(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var u string
 	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &u); err != nil {
 		return nil, err

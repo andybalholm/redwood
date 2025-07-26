@@ -285,6 +285,8 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
 - `parse_qs`: parses a URL query string, to a dict of tuples,
   largely compatible with Python’s `urllib.parse.parse_qs`.
 
+- `urlencode`: encodes a URL query string. It is the inverse of `parse_qs`.
+
 - `publicsuffix`: returns the public suffix of a domain
 
 - `privatesuffix`: returns one more label than the public suffix

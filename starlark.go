@@ -60,6 +60,7 @@ func init() {
 	starlark.Universe["lookup_addr"] = starlark.NewBuiltin("lookup_addr", lookupAddrStarlark)
 	starlark.Universe["urlparse"] = starlark.NewBuiltin("urlparse", urlparse)
 	starlark.Universe["parse_qs"] = starlark.NewBuiltin("parse_qs", parseQS)
+	starlark.Universe["urlencode"] = starlark.NewBuiltin("urlencode", urlencode)
 	starlark.Universe["publicsuffix"] = starlark.NewBuiltin("publicsuffix", publicsuffixStarlark)
 	starlark.Universe["privatesuffix"] = starlark.NewBuiltin("privatesuffix", privatesuffix)
 	starlark.Universe["CSVLog"] = starlark.NewBuiltin("CSVLog", customCSVLog)
@@ -801,6 +802,64 @@ func parseQS(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple,
 	}
 
 	return d, nil
+}
+
+func urlencode(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var q starlark.Value
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &q); err != nil {
+		return nil, err
+	}
+
+	query := make(url.Values)
+
+	switch q := q.(type) {
+	case starlark.IterableMapping:
+		for k, v := range starlark.Entries(q) {
+			key, ok := k.(starlark.String)
+			if !ok {
+				return nil, fmt.Errorf("got %s, want string", k.Type())
+			}
+			switch v := v.(type) {
+			case starlark.String:
+				query.Add(string(key), string(v))
+			case starlark.Iterable:
+				for val := range starlark.Elements(v) {
+					valStr, ok := val.(starlark.String)
+					if !ok {
+						return nil, fmt.Errorf("got %s, want string", val.Type())
+					}
+					query.Add(string(key), string(valStr))
+				}
+			default:
+				return nil, fmt.Errorf("got %s, want tuple or string", v.Type())
+			}
+		}
+
+	case starlark.Sequence:
+		for pair := range starlark.Elements(q) {
+			p, ok := pair.(starlark.Tuple)
+			if !ok {
+				return nil, fmt.Errorf("got %s, want tuple", pair.Type())
+			}
+			if len(p) != 2 {
+				return nil, fmt.Errorf("got %d elements, want 2", len(p))
+			}
+			k, ok := p[0].(starlark.String)
+			if !ok {
+				return nil, fmt.Errorf("got %s, want string", p[0].Type())
+			}
+			v, ok := p[1].(starlark.String)
+			if !ok {
+				return nil, fmt.Errorf("got %s, want string", p[1].Type())
+			}
+			query.Add(string(k), string(v))
+		}
+
+	default:
+		return nil, fmt.Errorf("got %s, want mapping or sequence", q.Type())
+	}
+
+	return starlark.String(query.Encode()), nil
 }
 
 func publicsuffixStarlark(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {

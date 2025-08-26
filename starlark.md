@@ -97,6 +97,13 @@ The `TLSSession` object has the following attributes:
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
 
+- `rules`: a dictionary of the rules that matched this request (the keys),
+  and the number of times each rule matched (the values).
+
+- `score_analysis`: an analysis of how much each rule contributed to each category’s score.
+  It is a dictionary with a key for each category. The values are dictionaries with a key for
+  each rule. The values of *those* dictionaries are dictionaries containing a "Count" and a "Score".
+
 - `action`: a string indicating what action Redwood will take for the connection.
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
@@ -176,6 +183,13 @@ The `Request` object has the following attributes:
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
 
+- `rules`: a dictionary of the rules that matched this request (the keys),
+  and the number of times each rule matched (the values).
+
+- `score_analysis`: an analysis of how much each rule contributed to each category’s score.
+  It is a dictionary with a key for each category. The values are dictionaries with a key for
+  each rule. The values of *those* dictionaries are dictionaries containing a "Count" and a "Score".
+
 - `action`: a string indicating what action Redwood will take for the request.
 
 - `possible_actions`: a tuple of strings, listing the values that may be assigned to `action`.
@@ -227,6 +241,13 @@ The `Response` object has the following attributes:
 - `scores`: a dictionary containing the category scores that have been assigned to the response.
   (The keys are strings, and the values are integers.)
   If you modify the dictionary, it can affect the action that Redwood takes.
+
+- `rules`: a dictionary of the rules that matched this request (the keys),
+  and the number of times each rule matched (the values).
+
+- `score_analysis`: an analysis of how much each rule contributed to each category’s score.
+  It is a dictionary with a key for each category. The values are dictionaries with a key for
+  each rule. The values of *those* dictionaries are dictionaries containing a "Count" and a "Score".
 
 - `action`: a string indicating what action Redwood will take for the request.
 

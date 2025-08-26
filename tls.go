@@ -548,6 +548,34 @@ func (s *scoresAndACLs) setAction(newAction string) error {
 	return fmt.Errorf("can't set action to %q; expected one of %q", newAction, s.PossibleActions)
 }
 
+func (s *scoresAndACLs) starlarkTally() *starlark.Dict {
+	rules := starlark.NewDict(len(s.Tally))
+	for r, n := range s.Tally {
+		rules.SetKey(starlark.String(r.String()), starlark.MakeInt(n))
+	}
+	return rules
+}
+
+func (s *scoresAndACLs) scoreAnalysis() *starlark.Dict {
+	conf := getConfig()
+	sa := new(starlark.Dict)
+	for _, c := range conf.Categories {
+		rs := make(map[string]ruleScore)
+		c.score(s.Tally, conf, rs)
+		if len(rs) > 0 {
+			rsDict := starlark.NewDict(len(rs))
+			for k, v := range rs {
+				score := starlark.NewDict(2)
+				score.SetKey(starlark.String("Count"), starlark.MakeInt(v.Count))
+				score.SetKey(starlark.String("Score"), starlark.MakeInt(v.Score))
+				rsDict.SetKey(starlark.String(k), score)
+			}
+			sa.SetKey(starlark.String(c.name), rsDict)
+		}
+	}
+	return sa
+}
+
 func (s *TLSSession) String() string {
 	return fmt.Sprintf("TLSSession(%q, %q)", s.SNI, s.ServerAddr)
 }
@@ -582,6 +610,8 @@ var tlsSessionAttrNames = []string{
 	"client_ip",
 	"acls",
 	"scores",
+	"rules",
+	"score_analysis",
 	"source_ip",
 	"action",
 	"possible_actions",
@@ -659,6 +689,10 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return s.ServerCertificate, nil
+	case "rules":
+		return s.starlarkTally(), nil
+	case "score_analysis":
+		return s.scoreAnalysis(), nil
 
 	default:
 		return nil, nil

@@ -903,6 +903,7 @@ var requestAttrNames = []string{
 	"url", "method", "host", "path", "user", "expected_user", "local_port",
 	"query", "header", "client_ip",
 	"acls", "scores", "action", "possible_actions",
+	"rules", "score_analysis",
 	"session", "misc", "log_data",
 	"authenticated_clients",
 	"classify_text", "classify_url",
@@ -979,6 +980,10 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin(name, classifyText).BindReceiver(r), nil
 	case "classify_url":
 		return starlark.NewBuiltin(name, classifyURL).BindReceiver(r), nil
+	case "rules":
+		return r.starlarkTally(), nil
+	case "score_analysis":
+		return r.scoreAnalysis(), nil
 
 	default:
 		return nil, nil
@@ -1089,6 +1094,7 @@ func (r *Response) Hash() (uint32, error) {
 
 var responseAttrNames = []string{
 	"request", "header", "acls", "scores", "status", "body",
+	"rules", "score_analysis",
 	"action", "possible_actions", "misc", "log_data",
 	"html", "selectolax_html", "title",
 	"thumbnail",
@@ -1188,6 +1194,10 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		return starlark.NewBuiltin(name, responseReclassify).BindReceiver(r), nil
 	case "choose_action":
 		return starlark.NewBuiltin(name, responseChooseAction).BindReceiver(r), nil
+	case "rules":
+		return r.starlarkTally(), nil
+	case "score_analysis":
+		return r.scoreAnalysis(), nil
 
 	default:
 		return nil, nil

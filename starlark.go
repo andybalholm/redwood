@@ -26,19 +26,20 @@ import (
 	"go.starlark.net/lib/math"
 	starlark_time "go.starlark.net/lib/time"
 	"go.starlark.net/repl"
-	"go.starlark.net/resolve"
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	"golang.org/x/net/publicsuffix"
 )
 
-func init() {
-	// Enable some Starlark language features that are specific to the Go implementation.
-	resolve.AllowSet = true
-	resolve.AllowLambda = true
-	resolve.AllowRecursion = true
-	resolve.AllowGlobalReassign = true
+var starlarkOptions = &syntax.FileOptions{
+	Set:             true,
+	While:           true,
+	TopLevelControl: true,
+	GlobalReassign:  true,
+	Recursion:       true,
+}
 
+func init() {
 	starlark.Universe["json"] = json.Module
 	starlark.Universe["time"] = starlark_time.Module
 	starlark.Universe["math"] = math.Module
@@ -64,6 +65,7 @@ func init() {
 	starlark.Universe["publicsuffix"] = starlark.NewBuiltin("publicsuffix", publicsuffixStarlark)
 	starlark.Universe["privatesuffix"] = starlark.NewBuiltin("privatesuffix", privatesuffix)
 	starlark.Universe["CSVLog"] = starlark.NewBuiltin("CSVLog", customCSVLog)
+	starlark.Universe["NoErrors"] = starlark.NewBuiltin("NoErrors", newNoErrors)
 }
 
 var starlib = map[string]func() (starlark.StringDict, error){
@@ -98,10 +100,10 @@ func (c *config) loadStarlarkScripts() {
 	}
 
 	thread := newStarlarkThread()
-	thread.Load = repl.MakeLoad()
+	thread.Load = repl.MakeLoadOptions(starlarkOptions)
 
 	for _, script := range c.StarlarkScripts {
-		defs, err := starlark.ExecFile(thread, script, nil, nil)
+		defs, err := starlark.ExecFileOptions(starlarkOptions, thread, script, nil, nil)
 		if err != nil {
 			log.Printf("Error loading starlark script %s:\n%s", script, formatStarlarkError(err))
 			continue
@@ -884,4 +886,56 @@ func privatesuffix(thread *starlark.Thread, fn *starlark.Builtin, args starlark.
 	}
 
 	return starlark.String(suffix), nil
+}
+
+// noErrors wraps a Starlark function to keep errors from crashing the script.
+// If the function returns an error, the wrapper will just return None.
+type noErrors struct {
+	f      starlark.Callable
+	frozen bool
+}
+
+func (n *noErrors) String() string {
+	return n.f.String()
+}
+
+func (n *noErrors) Type() string {
+	return "NoErrors"
+}
+
+func (n *noErrors) Freeze() {
+	if n.frozen {
+		return
+	}
+	n.f.Freeze()
+	n.frozen = true
+}
+
+func (n *noErrors) Truth() starlark.Bool {
+	return true
+}
+
+func (n *noErrors) Hash() (uint32, error) {
+	return n.f.Hash()
+}
+
+func (n *noErrors) Name() string {
+	return n.f.Name()
+}
+
+func (n *noErrors) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	result, err := starlark.Call(thread, n.f, args, kwargs)
+	if err != nil {
+		return starlark.None, nil
+	}
+	return result, nil
+}
+
+func newNoErrors(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var f starlark.Callable
+	err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 1, &f)
+	if err != nil {
+		return nil, err
+	}
+	return &noErrors{f: f}, nil
 }

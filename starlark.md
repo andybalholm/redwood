@@ -312,6 +312,9 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
 
 - `privatesuffix`: returns one more label than the public suffix
 
+- `NoErrors`: wraps a function so that errors won’t crash the script.
+  When the wrapped function has an error, the wrapper just returns `None`.
+
 ### Caches
 
 Redwood provides a `Cache` type that scripts can use to temporarily store the results of 

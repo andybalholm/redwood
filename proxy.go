@@ -975,6 +975,20 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			return starlark.None, err
 		}
 		r.Request.Body = io.NopCloser(bytes.NewReader(content))
+		switch r.Request.Header.Get("Content-Encoding") {
+		case "gzip":
+			gr := &gzipReader{R: bytes.NewReader(content)}
+			decompressed, err := io.ReadAll(gr)
+			if err == nil {
+				content = decompressed
+			}
+		case "br":
+			br := brotli.NewReader(bytes.NewReader(content))
+			decompressed, err := io.ReadAll(br)
+			if err == nil {
+				content = decompressed
+			}
+		}
 		return starlark.String(content), nil
 	case "classify_text":
 		return starlark.NewBuiltin(name, classifyText).BindReceiver(r), nil

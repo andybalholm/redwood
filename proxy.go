@@ -976,21 +976,36 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		}
 		content, err := io.ReadAll(r.Request.Body)
 		if err != nil {
-			return starlark.None, err
+			log.Printf("Error reading request body to %v: %v", r.Request.URL, err)
+			return starlark.None, nil
 		}
 		r.Request.Body = io.NopCloser(bytes.NewReader(content))
-		switch r.Request.Header.Get("Content-Encoding") {
-		case "gzip":
-			gr := &gzipReader{R: bytes.NewReader(content)}
-			decompressed, err := io.ReadAll(gr)
-			if err == nil {
-				content = decompressed
+		if ce := r.Request.Header.Get("Content-Encoding"); ce != "" && len(content) > 0 {
+			br := bytes.NewReader(content)
+			var decompressor io.Reader
+			switch ce {
+			case "br":
+				decompressor = brotli.NewReader(br)
+			case "deflate":
+				decompressor = flate.NewReader(br)
+			case "gzip":
+				decompressor = &gzipReader{R: br}
+			case "zstd":
+				decompressor, err = zstd.NewReader(br)
+				if err != nil {
+					log.Printf("Error creating zstd.Decoder for request body to %v: %v", r.Request.URL, err)
+					decompressor = nil
+				}
+			default:
+				log.Printf("Unrecognized Content-Encoding (%q) for request body to %v", ce, r.Request.URL)
 			}
-		case "br":
-			br := brotli.NewReader(bytes.NewReader(content))
-			decompressed, err := io.ReadAll(br)
-			if err == nil {
-				content = decompressed
+			if decompressor != nil {
+				decompressed, err := io.ReadAll(decompressor)
+				if err != nil {
+					log.Printf("Error decompressing request body to %v: %v", r.Request.URL, err)
+					return starlark.None, nil
+				}
+				return starlark.String(decompressed), nil
 			}
 		}
 		body := starlark.String(content)

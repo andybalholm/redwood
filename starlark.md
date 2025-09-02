@@ -308,6 +308,10 @@ goes to a CSV log file specified with the `starlark-log` configuration option.
 
 - `urlencode`: encodes a URL query string. It is the inverse of `parse_qs`.
 
+- `parse_multipart_form(data, boundary)`: parses a `multipart/form-data`
+  body from a POST request. The result is the same structure as `parse_qs`
+  returns.
+
 - `publicsuffix`: returns the public suffix of a domain
 
 - `privatesuffix`: returns one more label than the public suffix

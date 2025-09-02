@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
 	"net"
 	"net/url"
 	"sort"
@@ -61,6 +63,7 @@ func init() {
 	starlark.Universe["lookup_addr"] = starlark.NewBuiltin("lookup_addr", lookupAddrStarlark)
 	starlark.Universe["urlparse"] = starlark.NewBuiltin("urlparse", urlparse)
 	starlark.Universe["parse_qs"] = starlark.NewBuiltin("parse_qs", parseQS)
+	starlark.Universe["parse_multipart_form"] = starlark.NewBuiltin("parse_multipart_form", parseMultipartForm)
 	starlark.Universe["urlencode"] = starlark.NewBuiltin("urlencode", urlencode)
 	starlark.Universe["publicsuffix"] = starlark.NewBuiltin("publicsuffix", publicsuffixStarlark)
 	starlark.Universe["privatesuffix"] = starlark.NewBuiltin("privatesuffix", privatesuffix)
@@ -799,6 +802,49 @@ func parseQS(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple,
 		t := make(starlark.Tuple, len(values))
 		for i, v := range values {
 			t[i] = starlark.String(v)
+		}
+		d.SetKey(starlark.String(k), t)
+	}
+
+	return d, nil
+}
+
+func parseMultipartForm(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var data, boundary string
+	if err := starlark.UnpackPositionalArgs(fn.Name(), args, kwargs, 2, &data, &boundary); err != nil {
+		return nil, err
+	}
+
+	mr := multipart.NewReader(strings.NewReader(data), boundary)
+	f, err := mr.ReadForm(int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	defer f.RemoveAll()
+
+	d := starlark.NewDict(len(f.Value) + len(f.File))
+
+	for k, values := range f.Value {
+		t := make(starlark.Tuple, len(values))
+		for i, v := range values {
+			t[i] = starlark.String(v)
+		}
+		d.SetKey(starlark.String(k), t)
+	}
+
+	for k, files := range f.File {
+		t := make(starlark.Tuple, len(files))
+		for i, fh := range files {
+			openedFile, err := fh.Open()
+			if err != nil {
+				return nil, err
+			}
+			content, err := io.ReadAll(openedFile)
+			if err != nil {
+				return nil, err
+			}
+			openedFile.Close()
+			t[i] = starlark.String(content)
 		}
 		d.SetKey(starlark.String(k), t)
 	}

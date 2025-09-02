@@ -869,6 +869,7 @@ type Request struct {
 	frozen      bool
 	misc        starlark.Dict
 	hostChanged bool
+	body        starlark.String
 }
 
 func (r *Request) String() string {
@@ -970,6 +971,9 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 		}
 		return clients, nil
 	case "body":
+		if r.body != "" {
+			return r.body, nil
+		}
 		content, err := io.ReadAll(r.Request.Body)
 		if err != nil {
 			return starlark.None, err
@@ -989,7 +993,11 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 				content = decompressed
 			}
 		}
-		return starlark.String(content), nil
+		body := starlark.String(content)
+		if !r.frozen {
+			r.body = body
+		}
+		return body, nil
 	case "classify_text":
 		return starlark.NewBuiltin(name, classifyText).BindReceiver(r), nil
 	case "classify_url":
@@ -1043,7 +1051,9 @@ func (r *Request) SetField(name string, val starlark.Value) error {
 			return err
 		}
 		r.Request.ContentLength = int64(len(body))
+		r.Request.Header.Del("Content-Encoding")
 		r.Request.Body = io.NopCloser(strings.NewReader(body))
+		r.body = starlark.String(body)
 		return nil
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of Request", name))
@@ -1067,6 +1077,7 @@ type Response struct {
 	PageTitle string
 
 	ParsedHTML *html.Node
+	body       starlark.String
 
 	clamResponses []*clamd.Response
 	clamChan      chan []*clamd.Response
@@ -1133,6 +1144,9 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 	case "status":
 		return starlark.MakeInt(r.Response.StatusCode), nil
 	case "body":
+		if r.body != "" {
+			return r.body, nil
+		}
 		content, err := r.Content(getConfig().MaxContentScanSize)
 		if err != nil {
 			return starlark.None, err
@@ -1140,7 +1154,11 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 		if content == nil {
 			return starlark.None, nil
 		}
-		return starlark.String(content), nil
+		body := starlark.String(content)
+		if !r.frozen {
+			r.body = body
+		}
+		return body, nil
 	case "title":
 		return starlark.String(r.PageTitle), nil
 	case "action":
@@ -1243,6 +1261,7 @@ func (r *Response) SetField(name string, val starlark.Value) error {
 		}
 		r.SetContent([]byte(body), r.Response.Header.Get("Content-Type"))
 		r.ParsedHTML = nil
+		r.body = starlark.String(body)
 		return nil
 	case "action":
 		var newAction string

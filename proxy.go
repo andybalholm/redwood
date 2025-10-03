@@ -107,7 +107,7 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 		user = authUser
 	}
 
-	if len(r.URL.String()) > 10000 {
+	if len(r.URL.String()) > 100000 {
 		http.Error(w, "URL too long", http.StatusRequestURITooLong)
 		return
 	}

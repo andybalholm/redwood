@@ -122,6 +122,8 @@ The `TLSSession` object has the following attributes:
 
 - `ja3_hash`: the MD5 hash of `ja3_string`
 
+- `ja4_fingerprint`: the client TLS fingerprint based on ClientHello attributes.
+
 ### `inspect_server_certificate`
 
 When Redwood is acting as man-in-the-middle on an HTTPS connection,

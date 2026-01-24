@@ -36,7 +36,7 @@ type ACLDefinitions struct {
 	UserIPs           IPMap
 	UserNames         map[string][]string
 	ServerIPs         IPMap
-	JA3Fingerprints   map[string][]string
+	TLSFingerprints   map[string][]string
 
 	// ExternalDeviceGroups is a cache of the device groups returned by the
 	// authenticator-api endpoint.
@@ -90,14 +90,13 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 			a.ContentTypes[ct] = append(a.ContentTypes[ct], acl)
 		}
 
-	case "ja3":
-		if a.JA3Fingerprints == nil {
-			a.JA3Fingerprints = make(map[string][]string)
+	case "fingerprint":
+		if a.TLSFingerprints == nil {
+			a.TLSFingerprints = make(map[string][]string)
 		}
-		for _, ja3 := range args {
-			a.JA3Fingerprints[ja3] = append(a.JA3Fingerprints[ja3], acl)
+		for _, fp := range args {
+			a.TLSFingerprints[fp] = append(a.TLSFingerprints[fp], acl)
 		}
-
 	case "method":
 		if a.Methods == nil {
 			a.Methods = make(map[string][]string)
@@ -401,8 +400,8 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 		}
 	}
 
-	if tlsFingerprint, ok := r.Context().Value(tlsFingerprintKey{}).(string); ok {
-		for _, acl := range a.JA3Fingerprints[tlsFingerprint] {
+	if j4Fingerprint, ok := r.Context().Value(ja4FingerprintKey{}).(string); ok {
+		for _, acl := range a.TLSFingerprints[j4Fingerprint] {
 			acls[acl] = true
 		}
 	}

@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/exaring/ja4plus"
 	"github.com/maypok86/otter/v2"
 	"github.com/open-ch/ja3"
 	starlark_time "go.starlark.net/lib/time"
@@ -105,7 +106,7 @@ func connectDirect(ctx context.Context, conn net.Conn, serverAddr string, extraD
 	return uploaded, downloaded
 }
 
-type tlsFingerprintKey struct{}
+type ja4FingerprintKey struct{}
 
 // SSLBump performs a man-in-the-middle attack on conn, to filter the HTTPS
 // traffic. serverAddr is the address (host:port) of the server the client was
@@ -170,7 +171,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		}
 	}
-	clientHelloInfo, err := parseClientHello(clientHello)
+	clientHelloInfo, err := parseClientHello(clientHello, conn)
 
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
@@ -216,16 +217,21 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		RemoteAddr: conn.RemoteAddr().String(),
 	}
 
-	var tlsFingerprint string
 	j, err := ja3.ComputeJA3FromSegment(clientHello)
 	if err != nil {
-		log.Printf("Error generating TLS fingerprint: %v", err)
+		log.Printf("Error generating JA3 TLS fingerprint: %v", err)
 	} else {
-		tlsFingerprint = j.GetJA3Hash()
-		ctx := cr.Context()
-		ctx = context.WithValue(ctx, tlsFingerprintKey{}, tlsFingerprint)
-		cr = cr.WithContext(ctx)
 		session.JA3 = j
+	}
+
+	ja4Fingerprint := ja4plus.JA4(clientHelloInfo)
+	if strings.HasSuffix(ja4Fingerprint, "000000") {
+		log.Printf("Unable to generate precise JA4 TLS fingerprint: %v", ja4Fingerprint)
+	} else {
+		session.ja4Fingerprint = ja4Fingerprint
+		ctx := cr.Context()
+		ctx = context.WithValue(ctx, ja4FingerprintKey{}, ja4Fingerprint)
+		cr = cr.WithContext(ctx)
 	}
 
 	var tally map[rule]int
@@ -354,7 +360,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 		callStarlarkFunctions("inspect_server_certificate", session)
 		if session.Action.Action == "block" {
-			logTLS(user, session.ServerAddr, serverName, errors.New("handshake aborted by Starlark script"), false, tlsFingerprint)
+			logTLS(user, session.ServerAddr, serverName, errors.New("handshake aborted by Starlark script"), false, session.ja4Fingerprint)
 			conn.Close()
 			return
 		}
@@ -362,7 +368,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		valid := validCert(serverCert, state.PeerCertificates[1:])
 		cert, err = imitateCertificate(serverCert, !valid, clientHelloInfo)
 		if err != nil {
-			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, tlsFingerprint)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, session.ja4Fingerprint)
 			connectDirect(ctx, conn, session.ServerAddr, clientHello, dialer)
 			return
 		}
@@ -428,7 +434,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	} else {
 		cert, err = fakeCertificate(session.SNI)
 		if err != nil {
-			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error connecting to origin server: %v", err), false, tlsFingerprint)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error connecting to origin server: %v", err), false, session.ja4Fingerprint)
 			conn.Close()
 			return
 		}
@@ -437,13 +443,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	session.Freeze()
 	server.Handler = &proxyHandler{
-		TLS:            true,
-		tlsFingerprint: tlsFingerprint,
-		connectPort:    port,
-		user:           authUser,
-		localPort:      localPort,
-		rt:             rt,
-		session:        session,
+		TLS:         true,
+		connectPort: port,
+		user:        authUser,
+		localPort:   localPort,
+		rt:          rt,
+		session:     session,
 	}
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert, getConfig().TLSCert},
@@ -458,12 +463,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, tlsConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, tlsFingerprint)
+		logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, session.ja4Fingerprint)
 		conn.Close()
 		return
 	}
 
-	logTLS(user, session.ServerAddr, serverName, nil, false, tlsFingerprint)
+	logTLS(user, session.ServerAddr, serverName, nil, false, session.ja4Fingerprint)
 
 	if http2Downstream {
 		http2.ConfigureServer(server, nil)
@@ -496,6 +501,8 @@ type TLSSession struct {
 	ID string
 
 	JA3 *ja3.JA3
+
+	ja4Fingerprint string
 
 	// ServerIP is the IP address of the server. It is only filled in when
 	// the actual connection to the server has been made.
@@ -621,6 +628,7 @@ var tlsSessionAttrNames = []string{
 	"id",
 	"ja3_string",
 	"ja3_hash",
+	"ja4_fingerprint",
 	"server_ip",
 	"server_certificate",
 }
@@ -682,6 +690,8 @@ func (s *TLSSession) Attr(name string) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 		return starlark.String(s.JA3.GetJA3Hash()), nil
+	case "ja4_fingerprint":
+		return starlark.String(s.ja4Fingerprint), nil
 	case "server_ip":
 		return starlark.String(s.ServerIP.String()), nil
 	case "server_certificate":
@@ -1181,11 +1191,12 @@ func readClientHello(conn net.Conn) (hello []byte, err error) {
 
 // parseClientHello parses some useful information out of a ClientHello message.
 // It returns a ClientHelloInfo with only the following fields filled in:
-// CipherSuites, ServerName, SupportedCurves, SupportedProtocols, and
-// SignatureSchemes.
-func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
+// CipherSuites, ServerName, SupportedCurves, SupportedProtos, SupportedVersions,
+// Extensions, Conn, and SignatureSchemes.
+func parseClientHello(data []byte, conn net.Conn) (*tls.ClientHelloInfo, error) {
 	// The implementation of this function is based on crypto/tls.clientHelloMsg.unmarshal
 	var info tls.ClientHelloInfo
+	info.Conn = conn
 	s := cryptobyte.String(data)
 
 	// Skip message type, length, version, and random.
@@ -1234,6 +1245,7 @@ func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 		if !extensions.ReadUint16(&extension) || !extensions.ReadUint16LengthPrefixed(&extData) {
 			return nil, errors.New("bad extension")
 		}
+		info.Extensions = append(info.Extensions, extension)
 
 		switch extension {
 		case 0: // server name
@@ -1297,6 +1309,19 @@ func parseClientHello(data []byte) (*tls.ClientHelloInfo, error) {
 				}
 				info.SignatureSchemes = append(
 					info.SignatureSchemes, tls.SignatureScheme(sigAndAlg))
+			}
+
+		case 43: // supported versions
+			var versList cryptobyte.String
+			if !extData.ReadUint8LengthPrefixed(&versList) || versList.Empty() {
+				return nil, errors.New("no supported tls versions")
+			}
+			for !versList.Empty() {
+				var vers uint16
+				if !versList.ReadUint16(&vers) {
+					return nil, errors.New("bad tls version")
+				}
+				info.SupportedVersions = append(info.SupportedVersions, vers)
 			}
 
 		default:

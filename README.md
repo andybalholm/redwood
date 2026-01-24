@@ -299,6 +299,13 @@ The following attributes are available:
 
 		acl images content-type image/*
 
+- fingerprint
+
+    (CONNECT request only) 
+    The [client JA4 fingerprint](https://blog.foxio.io/ja4+-network-fingerprinting)
+    based on the TLS session's ClientHello attributes, sorted so that clients such 
+    as Chromium-based browsers generate a consistent fingerprint.
+
 - http-status
 
     (response only) The response's HTTP status code.

@@ -21,6 +21,8 @@ require (
 
 require github.com/maypok86/otter/v2 v2.2.0
 
+require github.com/exaring/ja4plus v0.0.3
+
 require (
 	github.com/PuerkitoBio/goquery v1.10.3 // indirect
 	github.com/andybalholm/go-bit v1.0.1 // indirect

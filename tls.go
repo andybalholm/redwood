@@ -171,7 +171,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		}
 	}
-	clientHelloInfo, err := parseClientHello(clientHello, conn)
+	clientHelloInfo, chi_err := parseClientHello(clientHello, conn)
 
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
@@ -219,20 +219,20 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	j, err := ja3.ComputeJA3FromSegment(clientHello)
 	if err != nil {
-		log.Printf("Error generating JA3 TLS fingerprint: %v", err)
+		log.Printf("Error generating JA3 TLS fingerprint for server %v: %v", serverName, err)
 	} else {
 		session.JA3 = j
 	}
 
-	ja4Fingerprint := ja4plus.JA4(clientHelloInfo)
-	if strings.HasSuffix(ja4Fingerprint, "000000") {
-		log.Printf("Unable to generate precise JA4 TLS fingerprint: %v", ja4Fingerprint)
+	ja4Fingerprint := ""
+	if chi_err != nil {
+		log.Printf("Error generating JA4 TLS fingerprint for server %v: %v", serverName, chi_err)
 	} else {
-		session.ja4Fingerprint = ja4Fingerprint
-		ctx := cr.Context()
-		ctx = context.WithValue(ctx, ja4FingerprintKey{}, ja4Fingerprint)
-		cr = cr.WithContext(ctx)
+		ja4Fingerprint = ja4plus.JA4(clientHelloInfo)
 	}
+	session.ja4Fingerprint = ja4Fingerprint
+	ctx = context.WithValue(ctx, ja4FingerprintKey{}, ja4Fingerprint)
+	cr = cr.WithContext(ctx)
 
 	var tally map[rule]int
 	var scores map[string]int
@@ -360,7 +360,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 		callStarlarkFunctions("inspect_server_certificate", session)
 		if session.Action.Action == "block" {
-			logTLS(user, session.ServerAddr, serverName, errors.New("handshake aborted by Starlark script"), false, session.ja4Fingerprint)
+			logTLS(user, session.ServerAddr, serverName, errors.New("handshake aborted by Starlark script"), false, ja4Fingerprint)
 			conn.Close()
 			return
 		}
@@ -368,7 +368,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 		valid := validCert(serverCert, state.PeerCertificates[1:])
 		cert, err = imitateCertificate(serverCert, !valid, clientHelloInfo)
 		if err != nil {
-			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, session.ja4Fingerprint)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error generating certificate: %v", err), false, ja4Fingerprint)
 			connectDirect(ctx, conn, session.ServerAddr, clientHello, dialer)
 			return
 		}
@@ -434,7 +434,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	} else {
 		cert, err = fakeCertificate(session.SNI)
 		if err != nil {
-			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error connecting to origin server: %v", err), false, session.ja4Fingerprint)
+			logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error connecting to origin server: %v", err), false, ja4Fingerprint)
 			conn.Close()
 			return
 		}
@@ -443,12 +443,13 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 
 	session.Freeze()
 	server.Handler = &proxyHandler{
-		TLS:         true,
-		connectPort: port,
-		user:        authUser,
-		localPort:   localPort,
-		rt:          rt,
-		session:     session,
+		TLS:            true,
+		ja4Fingerprint: ja4Fingerprint,
+		connectPort:    port,
+		user:           authUser,
+		localPort:      localPort,
+		rt:             rt,
+		session:        session,
 	}
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{cert, getConfig().TLSCert},
@@ -463,12 +464,12 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	tlsConn := tls.Server(&insertingConn{conn, clientHello}, tlsConfig)
 	err = tlsConn.Handshake()
 	if err != nil {
-		logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, session.ja4Fingerprint)
+		logTLS(user, session.ServerAddr, serverName, fmt.Errorf("error in handshake with client: %v", err), false, ja4Fingerprint)
 		conn.Close()
 		return
 	}
 
-	logTLS(user, session.ServerAddr, serverName, nil, false, session.ja4Fingerprint)
+	logTLS(user, session.ServerAddr, serverName, nil, false, ja4Fingerprint)
 
 	if http2Downstream {
 		http2.ConfigureServer(server, nil)

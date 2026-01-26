@@ -43,6 +43,9 @@ type proxyHandler struct {
 	// TLS is whether this is an HTTPS connection.
 	TLS bool
 
+	// ja4Fingerprint is the JA4 TLS fingerprint of the client (if available).
+	ja4Fingerprint string
+
 	// connectPort is the server port that was specified in a CONNECT request.
 	connectPort string
 
@@ -170,8 +173,8 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.session.ja4Fingerprint != "" {
-		r = r.WithContext(context.WithValue(r.Context(), ja4FingerprintKey{}, h.session.ja4Fingerprint))
+	if h.ja4Fingerprint != "" {
+		r = r.WithContext(context.WithValue(r.Context(), ja4FingerprintKey{}, h.ja4Fingerprint))
 	}
 
 	request := &Request{

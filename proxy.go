@@ -545,10 +545,14 @@ func doPhraseScan(response *Response) error {
 			censorRule, _ := conf.ChooseACLCategoryAction(response.ACLs.data, response.Scores.data, conf.Threshold, "censor-words")
 			if censorRule.Action == "censor-words" {
 				if response.ParsedHTML == nil {
-					response.ParsedHTML, _ = parseHTML(content, cs)
+					response.ParsedHTML, err = parseHTML(content, cs)
 				}
-				if censorHTML(response.ParsedHTML, conf.CensoredWords) {
-					modifiedAfterScan = true
+				if err != nil {
+					log.Printf("Error parsing HTML: %v", err)
+				} else {
+					if censorHTML(response.ParsedHTML, conf.CensoredWords) {
+						modifiedAfterScan = true
+					}
 				}
 			}
 

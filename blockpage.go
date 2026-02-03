@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -151,7 +152,9 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 
 		blockReq, err := http.NewRequestWithContext(r.Context(), "POST", c.BlockpageURL, bytes.NewReader(data))
 		if err != nil {
-			log.Printf("Error fetching blockpage from %s: %v", c.BlockpageURL, err)
+			if !errors.Is(err, context.Canceled) {
+				log.Printf("Error fetching blockpage from %s: %v", c.BlockpageURL, err)
+			}
 			http.Error(w, "", http.StatusForbidden)
 			return
 		}
@@ -159,7 +162,9 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 
 		blockResp, err := transportWithExtraRootCerts.RoundTrip(blockReq)
 		if err != nil {
-			log.Printf("Error fetching blockpage from %s: %v", c.BlockpageURL, err)
+			if !errors.Is(err, context.Canceled) {
+				log.Printf("Error fetching blockpage from %s: %v", c.BlockpageURL, err)
+			}
 			http.Error(w, "", http.StatusForbidden)
 			return
 		}

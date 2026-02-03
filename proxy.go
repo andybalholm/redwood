@@ -331,7 +331,9 @@ func (h proxyHandler) ServeHTTPAuthenticated(w http.ResponseWriter, r *http.Requ
 	if resp.Header.Get("Content-Type") == "" && resp.Header.Get("Content-Encoding") == "gzip" && r.Method != "HEAD" {
 		gzr, err := gzip.NewReader(resp.Body)
 		if err != nil {
-			log.Printf("Error creating gzip reader for %v: %v", r.URL, err)
+			if !errors.Is(err, context.Canceled) {
+				log.Printf("Error creating gzip reader for %v: %v", r.URL, err)
+			}
 		} else {
 			resp.Body = gzr
 			resp.Header.Del("Content-Encoding")
@@ -502,7 +504,7 @@ func filterRequest(req *Request, checkAuth bool) {
 
 func doPhraseScan(response *Response) error {
 	content, err := response.Content(getConfig().MaxContentScanSize)
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	if content != nil {
@@ -575,7 +577,7 @@ func doPhraseScan(response *Response) error {
 
 func doImageHash(response *Response) error {
 	content, err := response.Content(getConfig().MaxContentScanSize)
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	if content != nil {
@@ -604,7 +606,7 @@ func doImageHash(response *Response) error {
 func (resp *Response) Thumbnail(maxSize int) []byte {
 	if resp.image == nil {
 		content, err := resp.Content(getConfig().MaxContentScanSize)
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			log.Printf("Error downloading image from %v to make thumbnail: %v", resp.Request.Request.URL, err)
 		}
 		if content == nil {
@@ -640,7 +642,7 @@ func (resp *Response) Thumbnail(maxSize int) []byte {
 
 func doVirusScan(response *Response) error {
 	content, err := response.Content(getConfig().MaxContentScanSize)
-	if err != nil {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	clam := getConfig().ClamAV
@@ -997,7 +999,9 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			case "zstd":
 				decompressor, err = zstd.NewReader(br)
 				if err != nil {
-					log.Printf("Error creating zstd.Decoder for request body to %v: %v", r.Request.URL, err)
+					if !errors.Is(err, context.Canceled) {
+						log.Printf("Error creating zstd.Decoder for request body to %v: %v", r.Request.URL, err)
+					}
 					decompressor = nil
 				}
 			default:
@@ -1006,7 +1010,9 @@ func (r *Request) Attr(name string) (starlark.Value, error) {
 			if decompressor != nil {
 				decompressed, err := io.ReadAll(decompressor)
 				if err != nil {
-					log.Printf("Error decompressing request body to %v: %v", r.Request.URL, err)
+					if !errors.Is(err, context.Canceled) {
+						log.Printf("Error decompressing request body to %v: %v", r.Request.URL, err)
+					}
 					return starlark.None, nil
 				}
 				return starlark.String(decompressed), nil
@@ -1167,7 +1173,7 @@ func (r *Response) Attr(name string) (starlark.Value, error) {
 			return r.body, nil
 		}
 		content, err := r.Content(getConfig().MaxContentScanSize)
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			return starlark.None, err
 		}
 		if content == nil {
@@ -1347,7 +1353,9 @@ func (resp *Response) Content(maxLen int) ([]byte, error) {
 		case "zstd":
 			decompressor, err = zstd.NewReader(br)
 			if err != nil {
-				log.Printf("Error creating zstd.Decoder for %v: %v", resp.Request.Request.URL, err)
+				if !errors.Is(err, context.Canceled) {
+					log.Printf("Error creating zstd.Decoder for %v: %v", resp.Request.Request.URL, err)
+				}
 				decompressor = nil
 			}
 		default:

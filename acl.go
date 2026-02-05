@@ -424,7 +424,8 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 
 		if n > 0 {
 			ct, _, _ = mime.ParseMediaType(http.DetectContentType(preview))
-			log.Printf("Detected Content-Type as %q for %v", ct, resp.Request.URL)
+			// Disable to reduce noise - leaving the line here to facilitate future debugging.
+			// log.Printf("Detected Content-Type as %q for %v", ct, resp.Request.URL)
 			if resp.Header["Content-Type"] == nil {
 				resp.Header.Set("Content-Type", ct)
 			}

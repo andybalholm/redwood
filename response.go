@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/textproto"
@@ -41,11 +42,11 @@ func ReadResponse(r *bufio.Reader, req *http.Request) (*http.Response, error) {
 		}
 		return nil, err
 	}
-	if i := strings.IndexByte(line, ' '); i == -1 {
+	if before, after, ok := strings.Cut(line, " "); !ok {
 		return nil, badStringError("malformed HTTP response", line)
 	} else {
-		resp.Proto = line[:i]
-		resp.Status = strings.TrimLeft(line[i+1:], " ")
+		resp.Proto = before
+		resp.Status = strings.TrimLeft(after, " ")
 	}
 	statusCode := resp.Status
 	if i := strings.IndexByte(resp.Status, ' '); i != -1 {
@@ -84,8 +85,11 @@ func ReadResponse(r *bufio.Reader, req *http.Request) (*http.Response, error) {
 }
 
 // RFC 7234, section 5.4: Should treat
+//
 //	Pragma: no-cache
+//
 // like
+//
 //	Cache-Control: no-cache
 func fixPragmaCacheControl(header http.Header) {
 	if hp, ok := header["Pragma"]; ok && len(hp) > 0 && hp[0] == "no-cache" {
@@ -98,7 +102,7 @@ func fixPragmaCacheControl(header http.Header) {
 func badStringError(what, val string) error { return fmt.Errorf("%s %q", what, val) }
 
 // msg is *Request or *Response.
-func readTransfer(msg interface{}, r *bufio.Reader) (err error) {
+func readTransfer(msg any, r *bufio.Reader) (err error) {
 	t := &transferReader{RequestMethod: "GET"}
 
 	// Unify input
@@ -469,7 +473,7 @@ func noResponseBodyExpected(requestMethod string) bool {
 // and then reads the trailer if necessary.
 type body struct {
 	src          io.Reader
-	hdr          interface{}   // non-nil (Response or Request) value means read trailer
+	hdr          any           // non-nil (Response or Request) value means read trailer
 	r            *bufio.Reader // underlying wire-format reader for the trailer
 	closing      bool          // is the connection to be closed after reading body?
 	doEarlyClose bool          // whether Close should stop early
@@ -608,9 +612,7 @@ func mergeSetHeader(dst *http.Header, src http.Header) {
 		*dst = src
 		return
 	}
-	for k, vv := range src {
-		(*dst)[k] = vv
-	}
+	maps.Copy((*dst), src)
 }
 
 // unreadDataSizeLocked returns the number of bytes of unread input.
@@ -708,7 +710,7 @@ func foreachHeaderElement(v string, fn func(string)) {
 		fn(v)
 		return
 	}
-	for _, f := range strings.Split(v, ",") {
+	for f := range strings.SplitSeq(v, ",") {
 		if f = textproto.TrimString(f); f != "" {
 			fn(f)
 		}

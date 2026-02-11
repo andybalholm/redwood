@@ -127,7 +127,7 @@ func showBlockPage(w http.ResponseWriter, r *http.Request, resp *http.Response, 
 			}
 		}
 
-		d := map[string]interface{}{
+		d := map[string]any{
 			"url":            r.URL.String(),
 			"rule":           rule,
 			"user":           user,
@@ -224,7 +224,7 @@ func (c *config) loadErrorPage(path string) error {
 func showErrorPage(w http.ResponseWriter, r *http.Request, pageError error) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	c := getConfig()
-	d := map[string]interface{}{
+	d := map[string]any{
 		"url":   r.URL.String(),
 		"error": pageError.Error(),
 	}

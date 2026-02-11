@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -271,8 +272,8 @@ func loadURLList(c *category, filename string, multiplier float64) {
 		}
 
 		u := line
-		if strings.HasSuffix(u, "/") {
-			u = strings.TrimSuffix(u, "/")
+		if before, ok := strings.CutSuffix(u, "/"); ok {
+			u = before
 		}
 		u = strings.ToLower(u)
 
@@ -335,9 +336,7 @@ func (cf *config) collectRules() {
 		for r, _ := range c.weights {
 			cf.addRule(r)
 		}
-		for filename, filter := range c.urlLists {
-			cf.URLRules.urlLists[filename] = filter
-		}
+		maps.Copy(cf.URLRules.urlLists, c.urlLists)
 		c.urlLists = nil // to allow duplicates to be garbage-collected
 	}
 	cf.ContentPhraseList.findFallbackNodes(0, nil)

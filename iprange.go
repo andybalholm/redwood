@@ -42,19 +42,19 @@ func ParseIPRange(s string) (r IPRange, err error) {
 	}
 	err = nil
 
-	dash := strings.Index(s, "-")
-	if dash == -1 {
+	before, after, ok := strings.Cut(s, "-")
+	if !ok {
 		err = fmt.Errorf("%q is not a valid IP address range", s)
 		return
 	}
 
-	r.first = net.ParseIP(s[:dash])
+	r.first = net.ParseIP(before)
 	if r.first == nil {
 		err = fmt.Errorf("%q does not begin with a valid IP address", s)
 		return
 	}
 
-	last := s[dash+1:]
+	last := after
 	r.last = net.ParseIP(last)
 	if r.last != nil {
 		return

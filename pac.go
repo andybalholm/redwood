@@ -67,7 +67,7 @@ func handlePACFile(w http.ResponseWriter, r *http.Request) {
 // from the X-Forwarded-For headers, or the address from r.RemoteAddr.
 func clientIP(r *http.Request) string {
 	for _, xff := range r.Header.Values("X-Forwarded-For") {
-		for _, addr := range strings.Split(xff, ",") {
+		for addr := range strings.SplitSeq(xff, ",") {
 			addr = strings.TrimSpace(addr)
 			a, err := netip.ParseAddr(addr)
 			if err == nil && !a.IsLoopback() && !a.IsPrivate() {

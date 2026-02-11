@@ -219,7 +219,7 @@ func logContent(u *url.URL, content []byte, scores map[string]int) {
 }
 
 // toStrings converts its arguments into a slice of strings.
-func toStrings(a ...interface{}) []string {
+func toStrings(a ...any) []string {
 	result := make([]string, len(a))
 	for i, x := range a {
 		result[i] = fmt.Sprint(x)
@@ -250,7 +250,7 @@ func listTally(tally map[string]int) string {
 
 // logVerbose logs a message with log.Printf, but only if the --verbose flag
 // is turned on for the category.
-func logVerbose(messageCategory string, format string, v ...interface{}) {
+func logVerbose(messageCategory string, format string, v ...any) {
 	if getConfig().Verbose[messageCategory] {
 		log.Printf(format, v...)
 	}

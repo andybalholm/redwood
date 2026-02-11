@@ -121,8 +121,8 @@ func parseSimpleRule(s string) (r simpleRule, leftover string, err error) {
 		}
 		r.content = strings.ToLower(r.content)
 	default:
-		if strings.HasPrefix(s, "urllist ") {
-			s = strings.TrimPrefix(s, "urllist ")
+		if after, ok := strings.CutPrefix(s, "urllist "); ok {
+			s = after
 			var filename string
 			filename, s, _ = strings.Cut(s, " ")
 			return simpleRule{

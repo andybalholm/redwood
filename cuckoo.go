@@ -72,7 +72,7 @@ func (f *CuckooFilter) Insert(s string) bool {
 	if f.rand.Intn(2) == 1 {
 		i = i2
 	}
-	for k := 0; k < 500; k++ {
+	for range 500 {
 		j := f.rand.Intn(4)
 		f.buckets[i][j], fp = fp, f.buckets[i][j]
 		i = f.altIndex(fp, i)

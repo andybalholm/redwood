@@ -119,12 +119,12 @@ func decodeBase64Credentials(auth string) (user, pass string, ok bool) {
 	}
 	auth = string(buf[:n])
 
-	colon := strings.Index(auth, ":")
-	if colon == -1 {
+	before, after, ok0 := strings.Cut(auth, ":")
+	if !ok0 {
 		return "", "", false
 	}
 
-	return auth[:colon], auth[colon+1:], true
+	return before, after, true
 }
 
 // ValidCredentials returns whether user and password are a valid combination.

@@ -762,8 +762,8 @@ func (h proxyHandler) makeWebsocketConnection(w http.ResponseWriter, r *http.Req
 	// Some servers are very particular about the
 	// capitalization of the special WebSocket headers.
 	for k, v := range r.Header {
-		if strings.HasPrefix(k, "Sec-Websocket-") {
-			newKey := "Sec-WebSocket-" + strings.TrimPrefix(k, "Sec-Websocket-")
+		if after, ok := strings.CutPrefix(k, "Sec-Websocket-"); ok {
+			newKey := "Sec-WebSocket-" + after
 			delete(r.Header, k)
 			r.Header[newKey] = v
 		}
@@ -815,7 +815,7 @@ var hopByHop = []string{
 func removeHopByHopHeaders(h http.Header) {
 	toRemove := hopByHop
 	if c := h.Get("Connection"); c != "" {
-		for _, key := range strings.Split(c, ",") {
+		for key := range strings.SplitSeq(c, ",") {
 			toRemove = append(toRemove, strings.TrimSpace(key))
 		}
 	}
@@ -2011,7 +2011,7 @@ func init() {
 	// token      = 1*<any CHAR except CTLs or separators>
 	// qdtext     = <any TEXT except <">>
 
-	for c := 0; c < 256; c++ {
+	for c := range 256 {
 		var t octetType
 		isCtl := c <= 31 || c == 127
 		isChar := 0 <= c && c <= 127

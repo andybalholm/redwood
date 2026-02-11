@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"io/ioutil"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -125,9 +126,7 @@ func runURLTest(u string) {
 	fmt.Println()
 
 	tally := make(map[rule]int)
-	for k, v := range request.Tally {
-		tally[k] = v
-	}
+	maps.Copy(tally, request.Tally)
 
 	contentType := resp.Header.Get("Content-Type")
 

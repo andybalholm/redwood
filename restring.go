@@ -9,6 +9,7 @@ package main
 
 import (
 	"regexp/syntax"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -428,12 +429,7 @@ func (s stringSet) have() bool {
 
 // contains reports whether s contains str.
 func (s stringSet) contains(str string) bool {
-	for _, ss := range s {
-		if ss == str {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, str)
 }
 
 type byPrefix []string

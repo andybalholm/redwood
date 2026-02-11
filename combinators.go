@@ -13,8 +13,8 @@ type parser[T any] func(input string) (value T, rest string, err error)
 func tag(t string) parser[string] {
 	return func(input string) (string, string, error) {
 		s := strings.TrimLeft(input, " \t\r\n\f")
-		if strings.HasPrefix(s, t) {
-			return t, strings.TrimPrefix(s, t), nil
+		if after, ok := strings.CutPrefix(s, t); ok {
+			return t, after, nil
 		} else {
 			return "", input, fmt.Errorf("not found: %q", t)
 		}
@@ -25,8 +25,8 @@ func anyTag(tags ...string) parser[string] {
 	return func(input string) (string, string, error) {
 		s := strings.TrimLeft(input, " \t\r\n\f")
 		for _, t := range tags {
-			if strings.HasPrefix(s, t) {
-				return t, strings.TrimPrefix(s, t), nil
+			if after, ok := strings.CutPrefix(s, t); ok {
+				return t, after, nil
 			}
 		}
 		return "", input, fmt.Errorf("not found: %q", tags)

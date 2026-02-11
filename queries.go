@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/url"
 	"os"
 	"strings"
@@ -55,9 +56,7 @@ func (c *config) loadQueryConfig(filename string) error {
 		c.QueryMatcher.AddRule(r)
 		if changes, ok := c.QueryChanges[r]; ok {
 			// Merge the new values into the old ones.
-			for k, v := range values {
-				changes[k] = v
-			}
+			maps.Copy(changes, values)
 			c.QueryChanges[r] = changes
 		} else {
 			c.QueryChanges[r] = values
@@ -79,9 +78,7 @@ func (c *config) changeQuery(URL *url.URL) (changed bool) {
 
 	for urlRule := range matches {
 		newValues := c.QueryChanges[urlRule]
-		for k, v := range newValues {
-			values[k] = v
-		}
+		maps.Copy(values, newValues)
 	}
 
 	URL.RawQuery = values.Encode()

@@ -191,7 +191,7 @@ func handleClassifyText(w http.ResponseWriter, r *http.Request) {
 }
 
 // ServeJSON converts v to JSON and sends it on w.
-func ServeJSON(w http.ResponseWriter, r *http.Request, v interface{}) {
+func ServeJSON(w http.ResponseWriter, r *http.Request, v any) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		http.Error(w, err.Error(), 500)

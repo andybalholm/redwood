@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -544,14 +545,12 @@ func (s *scoresAndACLs) chooseAction() {
 }
 
 func (s *scoresAndACLs) setAction(newAction string) error {
-	for _, a := range s.PossibleActions {
-		if newAction == a {
-			s.Action = ACLActionRule{
-				Action: newAction,
-				Needed: []string{"starlark"},
-			}
-			return nil
+	if slices.Contains(s.PossibleActions, newAction) {
+		s.Action = ACLActionRule{
+			Action: newAction,
+			Needed: []string{"starlark"},
 		}
+		return nil
 	}
 	return fmt.Errorf("can't set action to %q; expected one of %q", newAction, s.PossibleActions)
 }

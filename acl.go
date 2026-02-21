@@ -27,6 +27,7 @@ import (
 type ACLDefinitions struct {
 	ConnectPorts      map[int][]string
 	ContentTypes      map[string][]string
+	HeaderValues      map[string]map[string][]string
 	Methods           map[string][]string
 	Referers          map[rule][]string
 	RefererCategories map[string][]string
@@ -97,6 +98,21 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 		for _, fp := range args {
 			a.TLSFingerprints[fp] = append(a.TLSFingerprints[fp], acl)
 		}
+
+	case "header-value":
+		if len(args) < 2 {
+			return fmt.Errorf("Invalid header ACL. Format as <header-name> <value>. %q", args)
+		}
+		if a.HeaderValues == nil {
+			a.HeaderValues = make(map[string]map[string][]string)
+		}
+		chk := http.CanonicalHeaderKey(args[0])
+		if a.HeaderValues[chk] == nil {
+			a.HeaderValues[chk] = make(map[string][]string)
+		}
+		hv := strings.ToLower(strings.Join(args[1:], " "))
+		a.HeaderValues[chk][hv] = append(a.HeaderValues[chk][hv], acl)
+
 	case "method":
 		if a.Methods == nil {
 			a.Methods = make(map[string][]string)
@@ -349,6 +365,14 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 		}
 	}
 
+	for headerName, headerACLs := range a.HeaderValues {
+		if rhv := r.Header.Get(headerName); rhv != "" {
+			for _, acl := range headerACLs[strings.ToLower(rhv)] {
+				acls[acl] = true
+			}
+		}
+	}
+
 	if a.URLs != nil {
 		for match := range a.URLs.MatchingRules(r.URL) {
 			for _, acl := range a.URLTags[match] {
@@ -448,6 +472,14 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 		generic := ct[:slash+1] + "*"
 		for _, acl := range a.ContentTypes[generic] {
 			acls[acl] = true
+		}
+	}
+
+	for headerName, headerACLs := range a.HeaderValues {
+		if rhv := resp.Header.Get(headerName); rhv != "" {
+			for _, acl := range headerACLs[strings.ToLower(rhv)] {
+				acls[acl] = true
+			}
 		}
 	}
 

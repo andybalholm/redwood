@@ -306,6 +306,17 @@ The following attributes are available:
     based on the TLS session's ClientHello attributes, sorted so that clients such 
     as Chromium-based browsers generate a consistent fingerprint.
 
+- header-value
+
+    Performs a case-insensitive match of the entire value of the specified header.
+    (If there are multiple words after the header name, they are treated as one
+    value with spaces, not as multiple values.)
+
+        acl images header-value Content-Type image/jpeg
+        acl images header-value Content-Type image/png
+        acl images header-value Content-Type image/x-icon
+
+
 - http-status
 
     (response only) The response's HTTP status code.

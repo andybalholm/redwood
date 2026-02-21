@@ -306,6 +306,11 @@ The following attributes are available:
     based on the TLS session's ClientHello attributes, sorted so that clients such 
     as Chromium-based browsers generate a consistent fingerprint.
 
+- header-name
+
+   Check if a header name is present in the Request or Response.
+   The header value is not checked.
+
 - header-value
 
     Performs a case-insensitive match of the entire value of the specified header.

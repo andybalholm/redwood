@@ -27,6 +27,7 @@ import (
 type ACLDefinitions struct {
 	ConnectPorts      map[int][]string
 	ContentTypes      map[string][]string
+	HeaderNames       map[string][]string
 	HeaderValues      map[string]map[string][]string
 	Methods           map[string][]string
 	Referers          map[rule][]string
@@ -97,6 +98,15 @@ func (a *ACLDefinitions) AddRule(acl string, newRule []string) error {
 		}
 		for _, fp := range args {
 			a.TLSFingerprints[fp] = append(a.TLSFingerprints[fp], acl)
+		}
+
+	case "header-name":
+		if a.HeaderNames == nil {
+			a.HeaderNames = make(map[string][]string)
+		}
+		for _, hn := range args {
+			chk := http.CanonicalHeaderKey(hn)
+			a.HeaderNames[chk] = append(a.HeaderNames[chk], acl)
 		}
 
 	case "header-value":
@@ -365,6 +375,14 @@ func (a *ACLDefinitions) requestACLs(r *http.Request, user string) map[string]bo
 		}
 	}
 
+	for headerName, headerACLs := range a.HeaderNames {
+		if _, ok := r.Header[headerName]; ok {
+			for _, acl := range headerACLs {
+				acls[acl] = true
+			}
+		}
+	}
+
 	for headerName, headerACLs := range a.HeaderValues {
 		if rhv := r.Header.Get(headerName); rhv != "" {
 			for _, acl := range headerACLs[strings.ToLower(rhv)] {
@@ -472,6 +490,14 @@ func (a *ACLDefinitions) responseACLs(resp *http.Response) map[string]bool {
 		generic := ct[:slash+1] + "*"
 		for _, acl := range a.ContentTypes[generic] {
 			acls[acl] = true
+		}
+	}
+
+	for headerName, headerACLs := range a.HeaderNames {
+		if _, ok := resp.Header[headerName]; ok {
+			for _, acl := range headerACLs {
+				acls[acl] = true
+			}
 		}
 	}
 

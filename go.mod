@@ -1,7 +1,7 @@
 module github.com/andybalholm/redwood
 
 require (
-	github.com/andybalholm/brotli v1.1.1
+	github.com/andybalholm/brotli v1.2.1
 	github.com/andybalholm/cascadia v1.3.3
 	github.com/andybalholm/dhash v1.0.0
 	github.com/baruwa-enterprise/clamd v1.0.1

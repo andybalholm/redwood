@@ -17,7 +17,6 @@ import (
 	"time"
 
 	ftp "github.com/remogatto/ftpget"
-	"golang.org/x/net/http2"
 )
 
 var dialer = &net.Dialer{
@@ -33,8 +32,6 @@ var httpTransport = &http.Transport{
 	ExpectContinueTimeout: 1 * time.Second,
 	DisableKeepAlives:     true,
 }
-
-var http2Transport = &http2.Transport{}
 
 func dialWithExtraRootCerts(network, addr string) (net.Conn, error) {
 	// Dial a TLS connection, and make sure it is valid against either the system default

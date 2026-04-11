@@ -54,6 +54,12 @@ func runTransparentServer(addr string) error {
 
 		go func() {
 			user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			authUser := ""
+
+			if mappedUser, ok := getConfig().IPToUser[user]; ok {
+				user = mappedUser
+				authUser = mappedUser
+			}
 
 			serverAddr, err := realServerAddress(conn)
 			if err != nil || isLocalAddress(serverAddr) {
@@ -64,7 +70,7 @@ func runTransparentServer(addr string) error {
 				return
 			}
 
-			SSLBump(conn, serverAddr.String(), user, "", nil)
+			SSLBump(conn, serverAddr.String(), user, authUser, nil)
 		}()
 	}
 

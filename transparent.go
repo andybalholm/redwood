@@ -56,9 +56,9 @@ func runTransparentServer(addr string) error {
 			user, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 			authUser := ""
 
-			if mappedUser, ok := getConfig().IPToUser[user]; ok {
-				user = mappedUser
-				authUser = mappedUser
+			if mappedUser, ok := getConfig().IPToUser.Load(user); ok {
+				user = mappedUser.(string)
+				authUser = mappedUser.(string)
 			}
 
 			serverAddr, err := realServerAddress(conn)

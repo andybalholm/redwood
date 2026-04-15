@@ -97,7 +97,7 @@ type config struct {
 	CustomPorts    map[string]customPortInfo
 	UserForPort    map[int]string
 	PACTemplate    string
-	IPToUser       map[string]string
+	IPToUser       sync.Map
 	AuthLog        string
 
 	AccessLog     string
@@ -148,7 +148,7 @@ func loadConfiguration() (*config, error) {
 		Passwords:            map[string]string{},
 		CustomPorts:          map[string]customPortInfo{},
 		UserForPort:          map[int]string{},
-		IPToUser:             map[string]string{},
+		IPToUser:             sync.Map{},
 		Verbose:              map[string]bool{},
 	}
 

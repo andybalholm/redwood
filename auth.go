@@ -223,7 +223,7 @@ func (c *config) loadIPToUser(filename string) error {
 			continue
 		}
 
-		c.IPToUser[fields[0]] = fields[1]
+		c.IPToUser.Store(fields[0], fields[1])
 	}
 
 	return s.Err()
@@ -257,8 +257,8 @@ func (u *UserInfo) Authenticate(p *perUserProxy) {
 		} else {
 			logAuthEvent("proxy-auth-header", "invalid", u.Request.RemoteAddr, 0, "", "", "", "", u.Request, "Invalid auth header")
 		}
-	} else if user, ok := getConfig().IPToUser[u.ClientIP]; ok {
-		u.AuthenticatedUser = user
+	} else if user, ok := getConfig().IPToUser.Load(u.ClientIP); ok {
+		u.AuthenticatedUser = user.(string)
 	}
 
 	if p != nil && u.AuthenticatedUser == "" {
@@ -360,4 +360,45 @@ func (u *UserInfo) SetField(name string, val starlark.Value) error {
 	default:
 		return starlark.NoSuchAttrError(fmt.Sprintf("can't assign to .%s field of UserInfo", name))
 	}
+}
+
+type ipToUserResponse struct {
+	IP      string `json:"ip,omitempty"`
+	User    string `json:"user,omitempty"`
+	Changed bool   `json:"changed"`
+}
+
+// handleUpdateIpToUser points an IP address to a new username,
+// without requiring a Redwood reload. Since devices logins can occur
+// frequently, this saves the work of reloading the Redwood config.
+func handleUpdateIpToUser(w http.ResponseWriter, r *http.Request) {
+	ip := r.FormValue("ip")
+	if ip == "" || net.ParseIP(ip) == nil {
+		http.Error(w, "The IP to map to a Username must be a valid IP, supplied as an HTTP form parameter named 'ip'.", 400)
+		return
+	}
+
+	user := r.FormValue("user")
+	if user == "" {
+		http.Error(w, "The User target of an IP must be supplied as an HTTP form parameter named 'user'.", 400)
+		return
+	}
+
+	conf := getConfig()
+
+	currentValue, found := conf.IPToUser.Load(ip)
+	changed := false
+
+	if !found || currentValue.(string) != user {
+		changed = true
+		conf.IPToUser.Store(ip, user)
+	}
+
+	result := ipToUserResponse{
+		IP:      ip,
+		User:    user,
+		Changed: changed,
+	}
+
+	ServeJSON(w, r, result)
 }

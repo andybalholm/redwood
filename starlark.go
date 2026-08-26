@@ -553,8 +553,7 @@ func lookupAddrStarlark(thread *starlark.Thread, fn *starlark.Builtin, args star
 	if len(args) == 1 {
 		names, err := net.LookupAddr(addr)
 		if err != nil {
-			var dnsError *net.DNSError
-			if errors.As(err, &dnsError) {
+			if dnsError, ok := errors.AsType[*net.DNSError](err); ok {
 				if dnsError.IsNotFound {
 					return starlark.String(""), nil
 				}

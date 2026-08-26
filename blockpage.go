@@ -229,8 +229,7 @@ func showErrorPage(w http.ResponseWriter, r *http.Request, pageError error) {
 		"error": pageError.Error(),
 	}
 
-	var dnsError *net.DNSError
-	if errors.As(pageError, &dnsError) {
+	if dnsError, ok := errors.AsType[*net.DNSError](pageError); ok {
 		d["dns error"] = dnsError
 	}
 

@@ -171,7 +171,11 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 			return
 		}
 	}
-	clientHelloInfo, chi_err := parseClientHello(clientHello, conn)
+	clientHelloInfo, err := parseClientHello(clientHello, conn)
+	if err != nil {
+		log.Printf("Error reading client hello from %s: %v", user, err)
+		invalidSSL = true
+	}
 
 	host, port, err := net.SplitHostPort(serverAddr)
 	if err != nil {
@@ -225,9 +229,7 @@ func SSLBump(conn net.Conn, serverAddr, user, authUser string, r *http.Request) 
 	}
 
 	ja4Fingerprint := ""
-	if chi_err != nil {
-		log.Printf("Error generating JA4 TLS fingerprint for server %v: %v", serverName, chi_err)
-	} else {
+	if clientHelloInfo != nil {
 		ja4Fingerprint = ja4plus.JA4(clientHelloInfo)
 	}
 	session.ja4Fingerprint = ja4Fingerprint

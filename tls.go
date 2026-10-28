@@ -1054,26 +1054,34 @@ func fakeCertificate(sni string) (cert tls.Certificate, err error) {
 	return newCert, nil
 }
 
+// errorWillBeVisibleInGeneratedCertifcate returns whether err is a type of
+// error that we can expect clients to catch even if we generate a properly-
+// signed certificate.
+func errorWillBeVisibleInGeneratedCertificate(err error) bool {
+	switch err := err.(type) {
+	case x509.HostnameError:
+		return true
+
+	case x509.CertificateInvalidError:
+		switch err.Reason {
+		case x509.Expired:
+			return true
+		}
+	}
+	return false
+}
+
 func validCert(cert *x509.Certificate, intermediates []*x509.Certificate) bool {
 	conf := getConfig()
 	pool := certPoolWith(intermediates)
 	_, err := cert.Verify(x509.VerifyOptions{Intermediates: pool})
-	if err == nil {
-		return true
-	}
-	if _, ok := err.(x509.UnknownAuthorityError); !ok {
-		// There was an error, but not because the certificate wasn't signed
-		// by a recognized CA. So we go ahead and use the cert and let
-		// the client experience the same error.
+	if err == nil || errorWillBeVisibleInGeneratedCertificate(err) {
 		return true
 	}
 
 	if conf.ExtraRootCerts != nil {
 		_, err = cert.Verify(x509.VerifyOptions{Roots: conf.ExtraRootCerts, Intermediates: pool})
-		if err == nil {
-			return true
-		}
-		if _, ok := err.(x509.UnknownAuthorityError); !ok {
+		if err == nil || errorWillBeVisibleInGeneratedCertificate(err) {
 			return true
 		}
 	}
@@ -1134,13 +1142,7 @@ func validCert(cert *x509.Certificate, intermediates []*x509.Certificate) bool {
 	}
 
 	_, err = cert.Verify(x509.VerifyOptions{Intermediates: pool})
-	if err == nil {
-		return true
-	}
-	if _, ok := err.(x509.UnknownAuthorityError); !ok {
-		// There was an error, but not because the certificate wasn't signed
-		// by a recognized CA. So we go ahead and use the cert and let
-		// the client experience the same error.
+	if err == nil || errorWillBeVisibleInGeneratedCertificate(err) {
 		return true
 	}
 	return false

@@ -990,9 +990,9 @@ func imitateCertificate(serverCert *x509.Certificate, selfSigned bool, helloInfo
 			SignatureAlgorithm:          x509.UnknownSignatureAlgorithm,
 		}
 
-		// If sni is not blank, make a certificate that covers only that domain,
+		// If sni is a domain covered by the certificate, make a certificate that covers only that domain,
 		// instead of all the domains covered by the original certificate.
-		if sni != "" {
+		if sni != "" && serverCert.VerifyHostname(sni) == nil {
 			template.DNSNames = []string{sni}
 			template.Subject.CommonName = sni
 		}
